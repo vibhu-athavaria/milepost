@@ -1,0 +1,31 @@
+[project]
+name = "example"
+kb_dir = "kb"
+
+[modules.services]
+title = "Services"
+sources = ["backend/app/services/**/*.py"]
+related = ["ai"]
+
+[modules.ai]
+sources = ["backend/app/ai/**/*.py"]
+
+[structure]
+languages = ["python", "typescript"]
+ignore = ["**/node_modules/**"]
+roots = ["backend/app"]
+
+[index]
+backend = "sqlite"
+path = "kb/.index/index.sqlite"
+embedding_model = "BAAI/bge-small-en-v1.5"
+embedding_dim = 384
+
+[draft]
+provider_model = "${KBMAP_MODEL}"
+max_source_bytes = 100000
+exclude = [".env*"]
+
+[check]
+fail_on = "stale"
+max_detail_notes = 10

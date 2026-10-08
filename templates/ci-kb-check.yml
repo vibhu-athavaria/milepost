@@ -1,0 +1,35 @@
+# kbmap CI gate. Copy to .github/workflows/kbmap.yml in the target repository.
+name: kbmap
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+permissions:
+  contents: read
+
+jobs:
+  check:
+    if: github.event_name == 'pull_request'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: astral-sh/setup-uv@v3
+      - name: Install kbmap (pinned)
+        run: uv tool install "kbmap==0.1.0"
+      - name: Check knowledge base
+        run: kbmap check --ci --base "origin/${{ github.base_ref }}"
+
+  index:
+    if: github.event_name == 'push'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v3
+      - name: Install kbmap (pinned)
+        run: uv tool install "kbmap==0.1.0"
+      - name: Rebuild index
+        run: kbmap index

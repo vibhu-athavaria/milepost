@@ -1,0 +1,19 @@
+## Codebase knowledge base (kbmap)
+
+This repository has a knowledge base in `kb/`. Use it before searching the code. If the kbmap plugin is installed, its skill and hooks carry these rules and you do not need this snippet.
+
+Read path:
+1. Call `kb_overview` to see the module index.
+2. Call `kb_module` for the module that owns the task. Read its note.
+3. Open only the files the note names, or call `kb_file` for a path. Do not grep the whole repository first.
+
+Write path:
+1. Read the current source of each file you change before you edit it.
+2. After the change, call `kb_file` for the path and `kb_update` for every note it lists. Pass the `source_hash_now` from `kb_module` or `kb_file` as `read_hash`. Keep edits small. Do not change `sources` or `id`.
+3. Do not edit `source_hash` by hand. Call `kb_check` before committing; it must pass. Never write a `KB-Waive` trailer yourself.
+
+New module: add `[modules.<id>]` to `kbmap.toml`, call `kb_draft_module`, then ask a person to review the draft with `kbmap review <id>`.
+
+Write an L3 or L4 note only when a file or passage has something that does not fit in the module note.
+
+Notes with `status: draft` are unreviewed. Say so when a decision depends on one.

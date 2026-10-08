@@ -1,0 +1,37 @@
+---
+kb_schema: 1
+id: module/<module-id>
+level: L2
+title: <Human-readable title>
+status: draft
+sources:
+  - <glob relative to repo root, e.g. app/services/**/*.py>
+source_hash: <filled in by kbmap draft or kb_update; never write this by hand>
+related: []
+written_by: draft-command
+written_at: <UTC ISO-8601, e.g. 2026-10-07T09:12:00Z>
+---
+
+## Purpose
+
+One or two sentences: what this module is responsible for.
+
+## Entry points
+
+- Routes, public functions, or services a caller uses first, with paths.
+
+## Owned data
+
+- Tables, files, or external resources this module reads or writes, and the owning side.
+
+## Invariants
+
+- Rules that must hold. Cite the file and symbol where each is enforced.
+
+## Gotchas
+
+- Non-obvious behavior that has caused or would cause bugs. Be specific.
+
+## Related modules
+
+- `<module-id>`: why it matters to this one.

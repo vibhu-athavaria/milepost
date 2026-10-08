@@ -1,0 +1,9 @@
+{
+  "name": "kbmap",
+  "version": "0.1.0",
+  "description": "Agent-maintained codebase knowledge base: module notes, staleness checks, and hybrid search over MCP.",
+  "author": {
+    "name": "kbmap contributors"
+  },
+  "license": "Apache-2.0"
+}

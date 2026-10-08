@@ -1,0 +1,8 @@
+{
+  "mcpServers": {
+    "kbmap": {
+      "command": "uvx",
+      "args": ["kbmap==0.1.0", "serve"]
+    }
+  }
+}

@@ -1,0 +1,2 @@
+# Fixtures are byte-exact test data (the hash tests depend on them); never normalize line endings.
+tests/fixtures/** -text
