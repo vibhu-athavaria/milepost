@@ -170,15 +170,15 @@ Reminders do not depend on the agent remembering: each tool response says what t
 | `milepost check [--repo P] [--ci --base REF] [--format text\|json]` | Validate notes and detect staleness | Works |
 | `milepost index [--rebuild]` | Write `INDEX.md` and build or update the search index | Branch |
 | `milepost search QUERY [--level L] [--k N] [--json]` | Search the notes (keyword and vector) | Branch |
-| `milepost init [--dry-run] [--modules ID,...] [--yes]` | Scaffold the knowledge base and draft module notes | Planned |
-| `milepost draft ID [--force]` | Draft or redraft one module note | Planned |
+| `milepost init [--dry-run] [--modules ID,...] [--yes] [--force-config]` | Scaffold the knowledge base, declare the named modules, draft their notes, build the index | Works (git hooks are added in a later milestone) |
+| `milepost draft ID [--force]` | Draft or redraft one module note | Works |
 | `milepost review ID` | Mark a draft note as reviewed | Planned |
 | `milepost rehash ID` | Recompute a note's hash after review | Planned |
 | `milepost hooks install\|uninstall` | Manage git hooks and the merge driver | Planned |
 | `milepost merge-driver` | Git merge driver for note files | Planned |
 | `milepost serve` | Run the MCP server for agents | Planned |
 | `milepost hook post-edit\|stop` | Called by the Claude Code plugin hooks | Planned |
-| `milepost doctor` | Report the environment milepost needs | Planned |
+| `milepost doctor [--json]` | Report the environment milepost needs | Works |
 
 Commands marked Planned currently print "not implemented yet" and exit with status 1. Every command accepts `--repo`; the default is the nearest ancestor directory containing `milepost.toml`.
 
@@ -199,12 +199,14 @@ Module ids are lowercase letters, digits, `_` and `-`. Globs must be relative an
 
 ## Environment variables
 
-Needed only for drafting notes with a model (planned). Nothing is stored in the repository.
+Needed only for drafting notes with a model (`draft`, `init`). Nothing is stored in `milepost.toml` or any committed file.
 
 | Variable | Purpose |
 |---|---|
-| `MILEPOST_MODEL` | The model used to draft notes. Never put a model name in `milepost.toml`. |
-| The provider's own key variable | For example `ANTHROPIC_API_KEY` for an Anthropic model. |
+| `MILEPOST_MODEL` | The model used to draft notes, in LiteLLM's format. For OpenRouter: `openrouter/<OpenRouter model slug>`. |
+| The provider's own key variable | `OPENROUTER_API_KEY` for an `openrouter/...` model, `ANTHROPIC_API_KEY` for an Anthropic model. |
+
+Set them in your shell, or put them in a `.env` file at the repository root (see [templates/.env.example](templates/.env.example)). milepost loads `.env` for `draft`, `init` and `doctor`; a variable already set in the shell wins. `milepost init` adds `.env` to `.gitignore`, and `milepost doctor` warns if a `.env` file exists that git does not ignore. Run `milepost doctor` to see what is missing; a missing variable exits with status 3.
 
 Drafting sends the source of a module to the configured model provider. Files matching `draft.exclude` are never sent, a secret scan aborts a module if it finds credentials, and `init --dry-run` lists every file that would be sent before any network call.
 

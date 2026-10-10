@@ -220,9 +220,15 @@ Tests:
 - `test_doctor_when_provider_key_missing_then_exit_three_naming_variable`
 - `test_doctor_when_all_present_then_exit_zero`
 - `test_doctor_when_json_flag_then_output_parses`
+- `test_load_env_when_dotenv_present_then_values_available`
+- `test_load_env_when_shell_value_set_then_shell_wins`
+- `test_load_env_when_no_dotenv_then_nothing_changes`
+- `test_doctor_when_dotenv_not_ignored_then_warns`
+- `test_init_when_run_then_gitignore_lists_dotenv`
 
 Acceptance:
 - Provider calls are mocked in unit tests with a recorded response fixture. One integration test uses a real provider and is skipped unless `MILEPOST_MODEL` and the provider key are set.
+- `.env` at the repository root is loaded for `draft`, `init`, `doctor` and `serve`; the shell wins.
 - `milepost init --dry-run` on the fixture repo lists the files it would send and the estimated token count, with no network traffic (verified by a socket-blocking test).
 
 ---
@@ -245,6 +251,7 @@ Tests:
 - `test_post_merge_when_index_fails_then_hook_exits_zero_with_warning`
 
 Acceptance:
+- `init` also runs `milepost hooks install` (skipped by `--no-hooks`). M7 leaves that call out because hooks do not exist yet.
 - Integration test creates two branches in a temp repo, edits the same module note and source, merges, and asserts the documented outcome (`CONFLICT` sentinel or body markers, never a silently chosen hash).
 
 ---

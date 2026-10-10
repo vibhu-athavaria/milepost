@@ -28,11 +28,12 @@ embedding_dim = 384
 
 [draft]
 # Resolved from the MILEPOST_MODEL environment variable at run time. Never put a model name here.
-# Also set the provider's own key variable (for example ANTHROPIC_API_KEY) before using draft or init.
+# Also set the provider's own key variable (OPENROUTER_API_KEY, ANTHROPIC_API_KEY, ...).
+# Both can live in a git-ignored .env file at the repo root; see templates/.env.example.
 # `milepost doctor` reports what is missing.
 provider_model = "${MILEPOST_MODEL}"
 max_source_bytes = 200000
-exclude = [".env*", "**/*secret*", "**/*.pem", "**/*.key", "**/credentials*"]
+exclude = ["**/.env*", "**/*secret*", "**/*.pem", "**/*.key", "**/credentials*"]
 
 [check]
 # "stale" fails on stale notes (default). "none" reports only.

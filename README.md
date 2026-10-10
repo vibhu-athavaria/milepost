@@ -101,7 +101,7 @@ Through an MCP server (`milepost serve`) agents get a handful of tools: an overv
 
 The exact scenario-by-scenario playbook (starting a task, changing a file, renaming one, adding a module, hitting a conflict) is in [SPEC.md](SPEC.md) section 12.5.
 
-### 5. Searches the notes locally (on branch)
+### 5. Searches the notes locally (works today)
 
 `milepost search` runs a keyword search (SQLite FTS5) and a meaning-based search (local embeddings, no API key) over the notes and merges the two rankings, so both an exact term and a paraphrase find the right note. It covers the notes only, not your source code. Common filler words are kept out of the keyword half so they can't drown real matches. On a 20-note test knowledge base, 10 paraphrased questions each found their note in the top three.
 
@@ -111,11 +111,13 @@ Notes are one file per module, so changes to different modules never conflict. W
 
 ### 7. Sets up with one command (planned)
 
+The `milepost init` command underneath (scaffold, declare modules, draft, index) is built on the `m7-draft-and-init` branch; the single `/kb-init` plugin command that wraps it is planned.
+
 In the Claude Code plugin there is a single command, `/kb-init`. It checks the environment, shows you the candidate modules and the exact files that would be sent to the drafting model, and asks once. Then it writes the config, installs the git hooks and merge driver, adds the CI workflow, drafts one note per module, and builds the index. The only step left for a person is reading each draft and approving it with `milepost review <id>`. Drafts are marked `draft`, and agents are told to treat `draft` notes as unverified until then.
 
-### 8. Handles your code carefully (planned)
+### 8. Handles your code carefully (on branch)
 
-Drafting is the only step that sends source to a model, and only the model you configure. Files that look like secrets (`.env*`, keys, credentials) are never read for drafting, a scan aborts a module if it finds credentials in what it was about to send, and `milepost init --dry-run` lists every file before any network call. Model names and keys come from environment variables, never from the repository.
+Drafting is the only step that sends source to a model, and only the model you configure. Files that look like secrets (`.env*`, keys, credentials) are never read for drafting, a scan aborts a module if it finds credentials in what it was about to send, and `milepost init --dry-run` lists every file before any network call. Model names and keys come from environment variables or a git-ignored `.env` file, never from committed files.
 
 ## A walkthrough
 
@@ -208,7 +210,7 @@ In short: code-graph and retrieval tools tell an agent *what the code is*. Milep
 
 ## FAQ
 
-**Does it send my code to a model?** Only when drafting a module note, and only to the model you configure. See [item 8](#8-handles-your-code-carefully-planned). Checking, indexing and searching run entirely on your machine.
+**Does it send my code to a model?** Only when drafting a module note, and only to the model you configure. See [item 8](#8-handles-your-code-carefully-on-branch). Checking, indexing and searching run entirely on your machine.
 
 **What if a note is wrong?** Treat it like documentation: correct it in a pull request. Agents are told to treat `draft` notes as unverified, to read the source before trusting a claim that matters, and never to edit the hash by hand.
 
@@ -232,9 +234,9 @@ Built test-first. Milestones are defined in [TASKS.md](TASKS.md).
 | M3 | Source hash (identical across machines, checked against an independently computed value) | Done, on `main` |
 | M4 | Python and TypeScript/JavaScript import scanners, module candidates, `milepost scan` | Done, on `main` |
 | M5 | `milepost check`, including CI mode, waivers, and uncovered-directory detection | Done, on `main` |
-| M5a | Baseline measurement on a real repository | Recorded, on the `m6-search-and-pilot` branch |
-| M6 | `milepost index` and `milepost search` | Built, on the `m6-search-and-pilot` branch |
-| M7 | Model drafting of module notes and `milepost init` | Not started |
+| M5a | Baseline measurement on a real repository | Recorded, on `main` |
+| M6 | `milepost index` and `milepost search` | Done, on `main` |
+| M7 | Model drafting, `milepost init`, `milepost doctor`, `.env` support | Built, on the `m7-draft-and-init` branch (hooks step waits for M8) |
 | M8 | Review and rehash commands, git hooks, merge driver | Not started |
 | M9 | MCP server for agents | Not started |
 | M10 | Claude Code plugin: one `/kb-init` command, hooks, usage skill | Not started |

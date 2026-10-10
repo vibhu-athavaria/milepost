@@ -18,7 +18,7 @@ from pydantic import (
     model_validator,
 )
 
-from milepost.errors import ConfigNotFound, InvalidConfig
+from milepost.errors import ConfigNotFound, EnvironmentProblem, InvalidConfig
 
 ModuleId = Annotated[str, StringConstraints(pattern=r"^[a-z0-9][a-z0-9_-]*$")]
 
@@ -65,7 +65,7 @@ class Index(_Model):
 class Draft(_Model):
     provider_model: str = "${MILEPOST_MODEL}"
     max_source_bytes: PositiveInt = 200000
-    exclude: list[str] = [".env*", "**/*secret*", "**/*.pem", "**/*.key", "**/credentials*"]
+    exclude: list[str] = ["**/.env*", "**/*secret*", "**/*.pem", "**/*.key", "**/credentials*"]
 
 
 class Check(_Model):
@@ -118,7 +118,9 @@ def resolve_model(config: Config, env: Mapping[str, str]) -> str:
     def substitute(match: re.Match[str]) -> str:
         name = match.group(1)
         if not env.get(name):
-            raise InvalidConfig("draft.provider_model", f"environment variable {name} is not set")
+            raise EnvironmentProblem(
+                f"environment variable {name} is not set (set it in the shell or in .env)"
+            )
         return env[name]
 
     return _ENV_REFERENCE.sub(substitute, config.draft.provider_model)

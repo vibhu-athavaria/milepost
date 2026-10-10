@@ -10,3 +10,6 @@ kb/.progress.json
 
 # Pilot prompts contain private Kaihle plans; keep them local.
 pilot/prompts/
+
+# Local credentials (see templates/.env.example)
+.env

@@ -65,7 +65,7 @@ Levels:
   .github/workflows/milepost.yml # CI gate (committed)
 ```
 
-`kb/.index/` and `kb/.progress.json` are git-ignored. `init` appends them to `.gitignore`.
+`kb/.index/`, `kb/.progress.json` and `.env` are git-ignored. `init` appends them to `.gitignore`.
 
 ---
 
@@ -97,7 +97,7 @@ embedding_dim = 384                    # must match the model
 [draft]
 provider_model = "${MILEPOST_MODEL}"      # resolved from env var at run time; required for draft
 max_source_bytes = 200000              # per module; larger modules are sampled, see 9.3
-exclude = [".env*", "**/*secret*", "**/*.pem", "**/*.key", "**/credentials*"]
+exclude = ["**/.env*", "**/*secret*", "**/*.pem", "**/*.key", "**/credentials*"]
 
 [check]
 fail_on = "stale"                      # "stale" (default) or "none" (report only)
@@ -114,7 +114,9 @@ Validation rules (fail fast, exit code 2):
 - If `draft` is run and `MILEPOST_MODEL` is unset, fail with a message naming the variable.
 - `max_detail_notes` is a non-negative integer.
 
-Credentials and model choice are never stored in the repo. The developer sets `MILEPOST_MODEL` and the provider's own environment variable (for example `ANTHROPIC_API_KEY`) before using `draft` or `init`. `milepost doctor` reports what is missing.
+Credentials and model choice are never stored in `milepost.toml` or any committed file. The developer sets `MILEPOST_MODEL` and the provider's own environment variable (for example `OPENROUTER_API_KEY` for a model named `openrouter/...`, or `ANTHROPIC_API_KEY`) before using `draft` or `init`. `milepost doctor` reports what is missing.
+
+**`.env` file.** The variables may live in a `.env` file at the repository root instead of the shell. Every command that needs them (`draft`, `init`, `doctor`, `serve`) loads that file at startup with `python-dotenv`. A variable already set in the shell wins over the file. `.env` is git-ignored: `init` appends it to `.gitignore`, and `doctor` warns when a `.env` file exists that git does not ignore. A missing `MILEPOST_MODEL` exits 3 (environment error), not 2.
 
 ---
 
@@ -275,7 +277,7 @@ All commands accept `--repo <path>` (default: nearest ancestor with `milepost.to
 | `milepost hooks install \| uninstall` | Manage git hooks and merge driver config | Section 10 |
 | `milepost merge-driver %O %A %B %P` | Invoked by git for `kb/**/*.md` | Section 10.3 |
 | `milepost serve` | Run the MCP server on stdio | Section 11 |
-| `milepost doctor` | Print environment: Python, git, SQLite FTS5 available, fastembed model cached, `MILEPOST_MODEL` set, and the provider key variables for that model present (via LiteLLM's environment validation; that API is not verified) | Read-only; exit 3 when a variable needed for drafting is missing |
+| `milepost doctor` | Print environment: Python, git, SQLite FTS5 available, fastembed model cached, `MILEPOST_MODEL` set, the provider key variables for that model present (via `litellm.validate_environment`, verified to name `OPENROUTER_API_KEY` and `ANTHROPIC_API_KEY`), and whether a `.env` file is git-ignored | Read-only; exit 3 when a variable needed for drafting is missing |
 | `milepost scan [--json]` | List candidate modules under `structure.roots` that no declared module covers (same scan as init step 3) | Read-only; never edits config |
 | `milepost hook post-edit` | Read Claude Code hook JSON on stdin, find the edited path, print the notes that cover it | Used by the plugin hook, section 12.4; always exits 0 |
 | `milepost hook stop` | Run `milepost check`, print findings in hook format | Used by the plugin hook, section 12.4 |
@@ -305,7 +307,7 @@ Rows are sorted by module id. Renders from config titles and note frontmatter on
 ### 9.1 Steps
 
 1. **Preflight:** confirm a git repository exists. Refuse if `milepost.toml` exists unless `--force-config` or `--modules` is given (never overwrites notes).
-2. **Scaffold:** write `milepost.toml` from the template with the detected Python and TypeScript roots filled in as commented suggestions; create `kb/`; append ignore lines to `.gitignore`; write `.gitattributes` line if absent; write `.github/workflows/milepost.yml` from `templates/ci-kb-check.yml` if absent, with the installed milepost version pinned.
+2. **Scaffold:** write `milepost.toml` from the template with the detected Python and TypeScript roots filled in as commented suggestions; create `kb/`; append ignore lines (`kb/.index/`, `kb/.progress.json`, `.env`) to `.gitignore`; write `.gitattributes` line if absent; write `.github/workflows/milepost.yml` from `milepost/resources/ci-kb-check.yml` if absent, with the installed milepost version pinned.
 3. **Structure scan:** build the module proposal. Top-level directories under the `structure.roots` entries become candidate modules. Without `--modules`, candidates are written as commented entries; the user uncomments and confirms. The scan never activates a module on its own. With `--modules a,b`, the named candidates are written as active `[modules.<id>]` tables; naming an id that is not a current candidate is a usage error (exit 2). The explicit flag is the confirmation.
 4. **Hooks:** if `--no-hooks` is absent, run `milepost hooks install`.
 5. **Draft:** for each declared module without a note, call `milepost draft`. Skipped with `--dry-run`, which prints module count and estimated tokens (file bytes / 4 as a rough estimate).
@@ -364,7 +366,7 @@ Hooks installed by milepost are marked with a comment line `# managed-by: milepo
 
 ### 10.2 CI workflow
 
-`templates/ci-kb-check.yml` runs on `pull_request` and on `push` to `main`:
+`milepost/resources/ci-kb-check.yml` runs on `pull_request` and on `push` to `main`:
 - `pull_request`: `milepost check --ci --base ${{ github.base_ref }}`. Fails the job on exit 1.
 - `push` to `main`: `milepost index` writes the shared index if a shared backend is configured; otherwise a no-op.
 
@@ -508,6 +510,7 @@ Runtime:
 - `litellm` (drafting only; imported lazily so other commands do not need it)
 - `fastembed`
 - `numpy`
+- `python-dotenv` (loads `.env`, section 3)
 - `tree-sitter`, `tree-sitter-typescript`, `tree-sitter-javascript`
 
 Development:
