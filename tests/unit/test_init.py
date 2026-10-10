@@ -269,3 +269,22 @@ def test_init_when_force_config_then_config_rewritten_from_scratch(tmp_path: Pat
 
     assert list(load_config(repo.root / "milepost.toml").modules) == ["accounts"]
     assert (repo.root / "kb/modules/billing.md").is_file()
+
+
+def test_init_when_dry_run_and_module_over_budget_then_reports_outline_only_files(
+    tmp_path: Path,
+) -> None:
+    repo = make_repo(tmp_path)
+    init(repo, modules=["billing"])
+    config_text = (
+        (repo.root / "milepost.toml")
+        .read_text()
+        .replace("max_source_bytes = 200000", "max_source_bytes = 40")
+    )
+    repo.write("milepost.toml", config_text)
+    repo.write("app/billing/more.py", "def more():\n    return 1\n")
+    (repo.root / "kb/modules/billing.md").unlink()
+
+    report = init(repo, dry_run=True)
+
+    assert report.outline_only == {"billing": ["app/billing/more.py"]}

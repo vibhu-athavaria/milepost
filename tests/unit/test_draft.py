@@ -194,14 +194,19 @@ def test_draft_when_run_then_frontmatter_written_by_milepost_not_model(tmp_path:
     assert "sha256:fake" not in note.body
 
 
-def test_draft_when_sources_truncated_then_body_states_it(tmp_path: Path) -> None:
+def test_draft_when_sources_truncated_then_notice_is_first_and_names_outline_only_files(
+    tmp_path: Path,
+) -> None:
     repo, _ = make_repo(tmp_path, extra="\n[draft]\nmax_source_bytes = 30\n")
     repo.write("app/billing/b.py", "def second():\n    return 2\n" * 5)
     config = load_config(repo.root / "milepost.toml")
 
     draft_modules(repo.root, config, ["billing"], FakeClient(), "m", False, NOW, no_sleep)
 
-    assert "truncated" in read_note(repo.root / "kb/modules/billing.md").body.lower()
+    body = read_note(repo.root / "kb/modules/billing.md").body.strip()
+    assert body.startswith("> **Truncated draft.**")
+    assert "`app/billing/b.py`" in body.split("\n\n")[0]
+    assert "max_source_bytes" in body.split("\n\n")[0]
 
 
 def test_draft_when_model_reply_empty_then_provider_error(tmp_path: Path) -> None:

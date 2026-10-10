@@ -30,6 +30,7 @@ class InitReport:
     declared: list[str] = field(default_factory=list)
     drafted: list[str] = field(default_factory=list)
     planned_files: dict[str, list[str]] = field(default_factory=dict)
+    outline_only: dict[str, list[str]] = field(default_factory=dict)
     estimated_tokens: int = 0
     indexed: int = 0
 
@@ -155,6 +156,8 @@ def run_init(
         for module_id in to_draft:
             collected = collect_sources(root, config, module_id)
             report.planned_files[module_id] = collected.sent
+            if collected.outline_only:
+                report.outline_only[module_id] = collected.outline_only
             report.estimated_tokens += collected.estimated_tokens
         return report
 

@@ -156,6 +156,11 @@ def init(
             typer.echo(f"{module_id}: would send {len(files)} file(s)")
             for path in files:
                 typer.echo(f"  {path}")
+        for module_id, outlined in plan.outline_only.items():
+            typer.echo(
+                f"warning: {module_id}: {len(outlined)} file(s) exceed draft.max_source_bytes and "
+                "would be sent as outline only; raise it in milepost.toml to cover them"
+            )
         typer.echo(f"estimated tokens: {plan.estimated_tokens}")
         if dry_run:
             return

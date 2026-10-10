@@ -29,10 +29,15 @@ _SECRET_PATTERNS = [
         r"""(?i)\b\w*(?:password|passwd|secret|token|api_?key)\w*\s*[=:]\s*['"][^'"\s]{12,}['"]"""
     ),
 ]
-TRUNCATION_NOTE = (
-    "\n> Note: the sources for this draft were truncated to fit the size limit. "
-    "Files listed as outline only were not read in full.\n"
-)
+
+
+def truncation_note(outline_only: list[str]) -> str:
+    listed = ", ".join(f"`{path}`" for path in outline_only)
+    return (
+        "> **Truncated draft.** The sources exceeded `draft.max_source_bytes`, so these files "
+        f"were summarized from their outline only and are not described here: {listed}. "
+        "Raise `draft.max_source_bytes` and redraft to cover them.\n"
+    )
 
 
 @dataclass
@@ -42,6 +47,7 @@ class Collected:
     excluded: list[str] = field(default_factory=list)
     truncated: bool = False
     contents: dict[str, str] = field(default_factory=dict)
+    outline_only: list[str] = field(default_factory=list)
 
     @property
     def estimated_tokens(self) -> int:
@@ -62,6 +68,7 @@ def collect_sources(root: Path, config: Config, module_id: str) -> Collected:
     parts: list[str] = []
     contents: dict[str, str] = {}
     truncated = False
+    outline_only: list[str] = []
     for path in kept:
         data = (root / path).read_bytes()
         if b"\x00" in data:
@@ -73,10 +80,11 @@ def collect_sources(root: Path, config: Config, module_id: str) -> Collected:
             contents[path] = text
         else:
             truncated = True
+            outline_only.append(path)
             outline = _outline(text)
             parts.append(f"=== {path} (outline only) ===\n{outline}")
             contents[path] = outline
-    return Collected("".join(parts), sorted(contents), excluded, truncated, contents)
+    return Collected("".join(parts), sorted(contents), excluded, truncated, contents, outline_only)
 
 
 def scan_for_secrets(contents: dict[str, str]) -> str | None:
@@ -140,7 +148,7 @@ def draft_modules(
         if not body:
             raise ProviderError(f"module '{module_id}': the model returned an empty note")
         if collected.truncated:
-            body += "\n" + TRUNCATION_NOTE
+            body = truncation_note(collected.outline_only) + "\n" + body
         note = Note(
             meta={
                 "kb_schema": 1,
