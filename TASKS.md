@@ -179,6 +179,12 @@ Tests:
 - `test_search_when_paraphrase_then_vector_match_returns_note`
 - `test_search_when_level_filter_then_only_that_level_returned`
 - `test_search_when_index_missing_then_exit_three_with_hint`
+- `test_index_when_note_deleted_then_removed_from_index`
+- `test_index_when_note_invalid_then_skipped_and_reported`
+- `test_index_when_index_md_stale_then_rewritten_so_check_has_no_drift`
+- `test_search_keyword_when_stopwords_shared_with_irrelevant_chunk_then_only_content_match`
+- `test_search_keyword_when_query_has_only_stopwords_then_no_hits`
+- `test_search_when_query_has_punctuation_then_no_syntax_error`
 
 Acceptance:
 - Index of the fixture KB (20 notes) builds in under 30 seconds on a laptop.

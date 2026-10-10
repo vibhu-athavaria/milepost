@@ -1,0 +1,102 @@
+[
+  {
+    "module": "auth",
+    "purpose": "Signs users in and keeps their sessions alive.",
+    "gotcha": "A session ends after fifteen minutes without activity, so long forms must save drafts."
+  },
+  {
+    "module": "billing",
+    "purpose": "Charges payment cards and emails receipts for every purchase.",
+    "gotcha": "Amounts are stored as integer cents; a failed charge is retried twice before the account is flagged."
+  },
+  {
+    "module": "notifications",
+    "purpose": "Sends emails and push messages to learners, such as reminders before deadlines.",
+    "gotcha": "Messages are queued and sent in batches every five minutes, never inline with a request."
+  },
+  {
+    "module": "search",
+    "purpose": "Finds courses and lessons by keyword for the catalogue page.",
+    "gotcha": "The index is rebuilt nightly, so a lesson published today may not appear until tomorrow."
+  },
+  {
+    "module": "uploads",
+    "purpose": "Accepts files from teachers and stores them in object storage.",
+    "gotcha": "Files above fifty megabytes are rejected; virus scanning happens after the upload finishes."
+  },
+  {
+    "module": "scheduler",
+    "purpose": "Runs recurring background jobs on a timetable.",
+    "gotcha": "Jobs must be idempotent because a crash can cause the same job to run twice."
+  },
+  {
+    "module": "analytics",
+    "purpose": "Collects usage events to show how learners progress.",
+    "gotcha": "Events arrive out of order, so dashboards are only consistent after a one hour delay."
+  },
+  {
+    "module": "quizzes",
+    "purpose": "Builds tests for students out of a bank of questions and presents them in order.",
+    "gotcha": "Question order is shuffled per attempt but fixed once an attempt has started."
+  },
+  {
+    "module": "grading",
+    "purpose": "Turns raw scores into letter marks and percentages for report cards.",
+    "gotcha": "Rounding happens only once at the end, never between intermediate steps."
+  },
+  {
+    "module": "reports",
+    "purpose": "Produces progress summaries for parents and school leaders.",
+    "gotcha": "Reports are generated from a snapshot taken at midnight, not live data."
+  },
+  {
+    "module": "users",
+    "purpose": "Stores profiles, roles, and contact details of everyone on the platform.",
+    "gotcha": "Email addresses are unique after lowercasing; deleting a user anonymises rather than removes rows."
+  },
+  {
+    "module": "courses",
+    "purpose": "Defines courses, units, and the lessons inside them.",
+    "gotcha": "A published course cannot be edited in place; changes go into a new draft version."
+  },
+  {
+    "module": "enrollments",
+    "purpose": "Records which students belong to which classes and when they joined.",
+    "gotcha": "Withdrawing a student keeps their history but hides them from rosters."
+  },
+  {
+    "module": "messaging",
+    "purpose": "Lets teachers and parents exchange direct messages inside the app.",
+    "gotcha": "Messages are retained for one year and cannot be edited after sending."
+  },
+  {
+    "module": "permissions",
+    "purpose": "Decides who may open or change a given page or record.",
+    "gotcha": "Checks are deny by default; a missing rule means access is refused."
+  },
+  {
+    "module": "audit",
+    "purpose": "Writes a permanent trail of sensitive actions for compliance reviews.",
+    "gotcha": "Entries are append only and must never be updated or deleted by application code."
+  },
+  {
+    "module": "exports",
+    "purpose": "Creates bulk downloads of data as spreadsheets for administrators.",
+    "gotcha": "Large exports run in the background and the user is emailed a link that expires in a day."
+  },
+  {
+    "module": "imports",
+    "purpose": "Loads rosters and question banks from uploaded spreadsheets.",
+    "gotcha": "Rows are validated first; one bad row rejects the whole file so nothing is half imported."
+  },
+  {
+    "module": "caching",
+    "purpose": "Keeps results of expensive calculations in memory so they are not repeated.",
+    "gotcha": "Entries expire after ten minutes and are not shared between server instances."
+  },
+  {
+    "module": "webhooks",
+    "purpose": "Calls partner systems when something changes, such as a finished course.",
+    "gotcha": "Delivery is retried with growing delays when the partner endpoint is down, up to a day."
+  }
+]

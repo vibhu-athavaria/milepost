@@ -235,8 +235,9 @@ Each chunk stores: `chunk_id`, `note_id`, `level`, `heading`, `text`, `source_ha
 
 ```sql
 CREATE TABLE notes (note_id TEXT PRIMARY KEY, level TEXT, status TEXT, source_hash TEXT, content_sha TEXT, indexed_at TEXT);
-CREATE TABLE chunks (chunk_id INTEGER PRIMARY KEY, note_id TEXT REFERENCES notes(note_id) ON DELETE CASCADE, heading TEXT, text TEXT);
-CREATE VIRTUAL TABLE chunks_fts USING fts5(text, heading, content='chunks', content_rowid='chunk_id');
+CREATE TABLE chunks (chunk_id INTEGER PRIMARY KEY, note_id TEXT, heading TEXT, text TEXT);
+CREATE VIRTUAL TABLE chunks_fts USING fts5(text, heading);   -- rowid = chunk_id, kept in step by the store
+CREATE TABLE meta (key TEXT PRIMARY KEY, value TEXT);          -- embedding_model, embedding_dim
 CREATE VIRTUAL TABLE chunks_vec USING vec0(embedding float[384]);   -- dim from config
 ```
 
@@ -251,6 +252,8 @@ CREATE VIRTUAL TABLE chunks_vec USING vec0(embedding float[384]);   -- dim from 
 
 `milepost search <query> [--level L2] [--k 5]`: hybrid. Run FTS5 BM25 and vector KNN (k = 20 each), merge with reciprocal rank fusion (k = 60), return the top `k`. Each result: `note_id`, `heading`, `score`, `snippet` (max 300 characters), `status`.
 
+The keyword query drops common English filler words (a fixed list in the store) and ORs the remaining terms, so that words like "how" and "the" do not outrank real matches; the vector search sees the whole query. Without this, a query whose keyword hits were all filler pushed the right note out of the fused top results (found with the 20-note fixture KB).
+
 ---
 
 ## 8. Commands
@@ -261,7 +264,7 @@ All commands accept `--repo <path>` (default: nearest ancestor with `milepost.to
 |---|---|---|
 | `milepost init [--dry-run] [--backend sqlite] [--seed-docs PATH ...] [--modules ID,...] [--yes]` | Scaffold and draft (section 9) | Never overwrites existing files; `--modules` and `--yes` are what the plugin's `/kb-init` uses |
 | `milepost check [--ci --base REF] [--format text\|json]` | Validate and detect staleness (section 6) | Exit codes in section 6 |
-| `milepost index [--rebuild]` | Rebuild or update the search index (section 7) | Safe to run from git hooks |
+| `milepost index [--rebuild]` | Write `kb/INDEX.md`, then rebuild or update the search index (section 7) | Safe to run from git hooks |
 | `milepost draft <module-id> [--force]` | (Re)draft one L2 note with `status: draft` | Refuses to overwrite `reviewed` unless `--force` |
 | `milepost draft --file <path>` | Draft an L3 note for one file | Writes `kb/files/<path>.md` |
 | `milepost review <note-id>` | Set `status: reviewed` after human sign-off | Does not change `source_hash` |

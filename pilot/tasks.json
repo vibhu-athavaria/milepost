@@ -1,0 +1,52 @@
+[
+  {
+    "agent_id": "af58bbb4741919e29",
+    "label": "T9 DeepEval harness slice 1",
+    "started": "2026-10-09T03:30:04.978000+00:00",
+    "base_commit": "b5879dd642f9b3df16cab4b9826415013664b715",
+    "base_source": "branch reflog (creation)",
+    "prompt_file": "pilot/prompts/af58bbb4741919e29.md",
+    "prompt_sha256": "d658008965b0cdffdc1e53c81cf734a0d34733af138b9f56355c9edbcd685ff4",
+    "prompt_chars": 3732
+  },
+  {
+    "agent_id": "a4723f09b606357ea",
+    "label": "T15 quiz context fix slice 1",
+    "started": "2026-10-09T03:30:04.982000+00:00",
+    "base_commit": "b5879dd642f9b3df16cab4b9826415013664b715",
+    "base_source": "branch reflog (creation)",
+    "prompt_file": "pilot/prompts/a4723f09b606357ea.md",
+    "prompt_sha256": "4edabe313fde9e02b3e480ea62e90a5e132e39364861ecd9dd3d3b679539bf5e",
+    "prompt_chars": 4337
+  },
+  {
+    "agent_id": "a05242747d2ea4f9d",
+    "label": "T9 slice 3 judge adapter",
+    "started": "2026-10-09T05:29:24.862000+00:00",
+    "base_commit": "4d44e0d6970cdc829330bf5dd8364f1edc2e5822",
+    "base_source": "branch reflog (creation)",
+    "prompt_file": "pilot/prompts/a05242747d2ea4f9d.md",
+    "prompt_sha256": "a4edf4e204d53af7143074a280073d9a9ce6dcd73a551c0fd616b7d432a80bce",
+    "prompt_chars": 6567
+  },
+  {
+    "agent_id": "a1c42b1b65338df16",
+    "label": "T15 slice 2 quiz wiring",
+    "started": "2026-10-09T05:29:24.867000+00:00",
+    "base_commit": "4d44e0d6970cdc829330bf5dd8364f1edc2e5822",
+    "base_source": "branch reflog (creation)",
+    "prompt_file": "pilot/prompts/a1c42b1b65338df16.md",
+    "prompt_sha256": "dfdffc76fc1e5a57afd115c3e60b005ceb783f538eaff87826bc86abb9c1f162",
+    "prompt_chars": 6102
+  },
+  {
+    "agent_id": "a01d65a75a85816d6",
+    "label": "Fix quiz task CRITICAL log error",
+    "started": "2026-10-09T12:06:28.935000+00:00",
+    "base_commit": "4d44e0d6970cdc829330bf5dd8364f1edc2e5822",
+    "base_source": "best effort: no worktree, history of the current branch before the start time",
+    "prompt_file": "pilot/prompts/a01d65a75a85816d6.md",
+    "prompt_sha256": "c226c6372cf761ef236f521c40a319a45d4fce7da0c63fde52777a42845eb688",
+    "prompt_chars": 4799
+  }
+]

@@ -1,0 +1,113 @@
+[
+  {
+    "path": "/Users/vibhu/.claude/projects/-Users-vibhu-Projects-kaihle/7b0cd903-fb29-4281-989e-d2f39116dac8/subagents/agent-af58bbb4741919e29.jsonl",
+    "label": "T9 DeepEval harness slice 1",
+    "started": "2026-10-09T03:30:04.978000+00:00",
+    "models": [
+      "claude-sonnet-5-5"
+    ],
+    "turns": 39,
+    "first_turn_context": 57972,
+    "fresh_input": 253261,
+    "fresh_after_first_turn": 195289,
+    "cache_read": 4098435,
+    "output_tokens_logged": 833,
+    "tool_calls": 48,
+    "tools": {
+      "Bash": 44,
+      "Read": 2,
+      "Write": 2
+    },
+    "active_seconds": 732,
+    "wall_seconds": 2948
+  },
+  {
+    "path": "/Users/vibhu/.claude/projects/-Users-vibhu-Projects-kaihle/7b0cd903-fb29-4281-989e-d2f39116dac8/subagents/agent-a4723f09b606357ea.jsonl",
+    "label": "T15 quiz context fix slice 1",
+    "started": "2026-10-09T03:30:04.982000+00:00",
+    "models": [
+      "claude-sonnet-5-5"
+    ],
+    "turns": 15,
+    "first_turn_context": 58223,
+    "fresh_input": 86791,
+    "fresh_after_first_turn": 28568,
+    "cache_read": 1068901,
+    "output_tokens_logged": 470,
+    "tool_calls": 20,
+    "tools": {
+      "Bash": 15,
+      "Edit": 4,
+      "Read": 1
+    },
+    "active_seconds": 228,
+    "wall_seconds": 228
+  },
+  {
+    "path": "/Users/vibhu/.claude/projects/-Users-vibhu-Projects-kaihle/7b0cd903-fb29-4281-989e-d2f39116dac8/subagents/agent-a05242747d2ea4f9d.jsonl",
+    "label": "T9 slice 3 judge adapter",
+    "started": "2026-10-09T05:29:24.862000+00:00",
+    "models": [
+      "claude-sonnet-5-5"
+    ],
+    "turns": 26,
+    "first_turn_context": 59306,
+    "fresh_input": 237811,
+    "fresh_after_first_turn": 178505,
+    "cache_read": 2518415,
+    "output_tokens_logged": 1204,
+    "tool_calls": 31,
+    "tools": {
+      "Bash": 23,
+      "Edit": 1,
+      "Monitor": 1,
+      "Read": 3,
+      "Write": 3
+    },
+    "active_seconds": 374,
+    "wall_seconds": 73833
+  },
+  {
+    "path": "/Users/vibhu/.claude/projects/-Users-vibhu-Projects-kaihle/7b0cd903-fb29-4281-989e-d2f39116dac8/subagents/agent-a1c42b1b65338df16.jsonl",
+    "label": "T15 slice 2 quiz wiring",
+    "started": "2026-10-09T05:29:24.867000+00:00",
+    "models": [
+      "claude-sonnet-5-5"
+    ],
+    "turns": 33,
+    "first_turn_context": 59031,
+    "fresh_input": 232320,
+    "fresh_after_first_turn": 173289,
+    "cache_read": 3360065,
+    "output_tokens_logged": 700,
+    "tool_calls": 49,
+    "tools": {
+      "Bash": 36,
+      "Edit": 7,
+      "Read": 3,
+      "Write": 3
+    },
+    "active_seconds": 592,
+    "wall_seconds": 73875
+  },
+  {
+    "path": "/Users/vibhu/.claude/projects/-Users-vibhu-Projects-kaihle/7b0cd903-fb29-4281-989e-d2f39116dac8/subagents/agent-a01d65a75a85816d6.jsonl",
+    "label": "Fix quiz task CRITICAL log error",
+    "started": "2026-10-09T12:06:28.935000+00:00",
+    "models": [
+      "claude-sonnet-5-5"
+    ],
+    "turns": 6,
+    "first_turn_context": 58464,
+    "fresh_input": 65191,
+    "fresh_after_first_turn": 6727,
+    "cache_read": 311797,
+    "output_tokens_logged": 50,
+    "tool_calls": 5,
+    "tools": {
+      "Bash": 5
+    },
+    "active_seconds": 43,
+    "wall_seconds": 43
+  }
+]
