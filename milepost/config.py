@@ -1,4 +1,4 @@
-"""Configuration loaded from kbmap.toml (SPEC section 3)."""
+"""Configuration loaded from milepost.toml (SPEC section 3)."""
 
 import re
 import tomllib
@@ -18,7 +18,7 @@ from pydantic import (
     model_validator,
 )
 
-from kbmap.errors import ConfigNotFound, InvalidConfig
+from milepost.errors import ConfigNotFound, InvalidConfig
 
 ModuleId = Annotated[str, StringConstraints(pattern=r"^[a-z0-9][a-z0-9_-]*$")]
 
@@ -63,7 +63,7 @@ class Index(_Model):
 
 
 class Draft(_Model):
-    provider_model: str = "${KBMAP_MODEL}"
+    provider_model: str = "${MILEPOST_MODEL}"
     max_source_bytes: PositiveInt = 200000
     exclude: list[str] = [".env*", "**/*secret*", "**/*.pem", "**/*.key", "**/credentials*"]
 

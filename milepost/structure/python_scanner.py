@@ -4,7 +4,7 @@ import ast
 from pathlib import Path, PurePosixPath
 from typing import Literal
 
-from kbmap.structure.base import Edge, ScanResult
+from milepost.structure.base import Edge, ScanResult
 
 
 def _module_file(root: Path, base: str, dotted: str) -> str | None:

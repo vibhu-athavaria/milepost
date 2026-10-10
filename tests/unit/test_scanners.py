@@ -1,10 +1,10 @@
 from pathlib import Path
 
-from kbmap.config import Structure
-from kbmap.structure.base import ScanResult
-from kbmap.structure.candidates import scan_candidates
-from kbmap.structure.python_scanner import scan_python
-from kbmap.structure.tree_sitter_scanner import scan_typescript
+from milepost.config import Structure
+from milepost.structure.base import ScanResult
+from milepost.structure.candidates import scan_candidates
+from milepost.structure.python_scanner import scan_python
+from milepost.structure.tree_sitter_scanner import scan_typescript
 
 SAMPLE_REPO = Path(__file__).parent.parent / "fixtures" / "sample_repo"
 

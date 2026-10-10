@@ -5,7 +5,7 @@ import subprocess
 from dataclasses import dataclass, field
 from pathlib import Path
 
-from kbmap.errors import UsageError
+from milepost.errors import UsageError
 
 _WAIVER = re.compile(r"^KB-Waive:[ \t]*(\S+)(?:[ \t]+(\S.*?))?[ \t]*$", re.MULTILINE)
 

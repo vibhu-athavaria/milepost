@@ -1,4 +1,4 @@
-# kbmap Build Plan
+# milepost Build Plan
 
 Companion to SPEC.md. Each milestone lists the work, the test functions to write first (TDD), and acceptance criteria. Test names follow `test_<what>_when_<condition>_then_<expected>`.
 
@@ -15,7 +15,7 @@ Test file paths are under `tests/`. Fixtures are under `tests/fixtures/`.
 ## M0. Project skeleton
 
 Work:
-- `pyproject.toml` with `[project.scripts] kbmap = "kbmap.cli:app"`, Python `>=3.12`, dependencies from SPEC section 13.
+- `pyproject.toml` with `[project.scripts] milepost = "milepost.cli:app"`, Python `>=3.12`, dependencies from SPEC section 13.
 - Empty package layout from SPEC section 15.
 - `ruff`, `mypy --strict`, `pytest` configured. CI workflow runs all three.
 - `LICENSE` (Apache-2.0), `README.md` stub.
@@ -25,14 +25,14 @@ Tests (`tests/unit/test_cli_smoke.py`):
 - `test_cli_version_when_invoked_then_prints_package_version`
 
 Acceptance:
-- `uv run kbmap --help` lists every command in SPEC section 8 (stubs allowed).
-- `uv run pytest`, `uv run ruff check`, `uv run mypy kbmap` all pass.
+- `uv run milepost --help` lists every command in SPEC section 8 (stubs allowed).
+- `uv run pytest`, `uv run ruff check`, `uv run mypy milepost` all pass.
 
 ---
 
 ## M1. Config and validation
 
-Files: `kbmap/config.py`, `tests/unit/test_config.py`, `tests/fixtures/config/*.toml`.
+Files: `milepost/config.py`, `tests/unit/test_config.py`, `tests/fixtures/config/*.toml`.
 
 Tests:
 - `test_load_config_when_valid_file_then_returns_models`
@@ -56,7 +56,7 @@ Acceptance:
 
 ## M2. Notes: parse, validate, write
 
-Files: `kbmap/core/notes.py`, `tests/unit/test_notes.py`.
+Files: `milepost/core/notes.py`, `tests/unit/test_notes.py`.
 
 Tests:
 - `test_parse_note_when_valid_frontmatter_then_returns_note`
@@ -76,7 +76,7 @@ Acceptance:
 
 ## M3. Source hash
 
-Files: `kbmap/core/hashing.py`, `kbmap/core/glob.py`, `tests/unit/test_hashing.py`, `tests/integration/test_hash_stability.py`.
+Files: `milepost/core/hashing.py`, `milepost/core/glob.py`, `tests/unit/test_hashing.py`, `tests/integration/test_hash_stability.py`.
 
 Tests:
 - `test_source_hash_when_same_content_then_same_hash_on_repeat_runs`
@@ -97,7 +97,7 @@ Acceptance:
 
 ## M4. Structure scanner
 
-Files: `kbmap/structure/python_scanner.py`, `kbmap/structure/tree_sitter_scanner.py`, `tests/unit/test_scanners.py`.
+Files: `milepost/structure/python_scanner.py`, `milepost/structure/tree_sitter_scanner.py`, `tests/unit/test_scanners.py`.
 
 Tests:
 - `test_python_scanner_when_import_statements_then_returns_module_edges`
@@ -117,7 +117,7 @@ Acceptance:
 
 ## M5. Check command
 
-Files: `kbmap/services/check.py`, `kbmap/services/render.py`, `kbmap/services/coverage.py`, `kbmap/cli.py` (wiring), `tests/unit/test_check.py`, `tests/unit/test_coverage.py`, `tests/integration/test_check_cli.py`.
+Files: `milepost/services/check.py`, `milepost/services/render.py`, `milepost/services/coverage.py`, `milepost/cli.py` (wiring), `tests/unit/test_check.py`, `tests/unit/test_coverage.py`, `tests/integration/test_check_cli.py`.
 
 Tests:
 - `test_check_when_note_hash_matches_then_no_findings`
@@ -143,29 +143,29 @@ Tests:
 - `test_check_when_l3_and_l4_count_at_max_then_no_warning`
 
 Acceptance:
-- Running `kbmap check` twice on an unchanged repo gives identical output.
+- Running `milepost check` twice on an unchanged repo gives identical output.
 - Integration test runs against a real git repo created in a temp directory, with real commits and trailers.
 
 ---
 
 ## M5a. Baseline measurement (go/no-go gate)
 
-This milestone needs no kbmap code and can start at any time. M6 does not start until it is done, because everything from M6 on is only worth building if the measurement later shows an improvement.
+This milestone needs no milepost code and can start at any time. M6 does not start until it is done, because everything from M6 on is only worth building if the measurement later shows an improvement.
 
 Work:
 - Pilot repository: Kaihle.
 - Pick five representative tasks (a feature, a bugfix, a cross-module change, a question about existing behavior, a refactor). Write each as a fixed prompt in `PILOT.md`.
-- Run each with the coding agent and no kbmap. Record files read, tokens used, and whether the task outcome was acceptable.
+- Run each with the coding agent and no milepost. Record files read, tokens used, and whether the task outcome was acceptable.
 
 Acceptance:
-- `PILOT.md` in the kbmap repository holds the five prompts and the baseline numbers, committed before any M6 work.
+- `PILOT.md` in the milepost repository holds the five prompts and the baseline numbers, committed before any M6 work.
 - The prompts are frozen: M11 reruns exactly these.
 
 ---
 
 ## M6. Index and search
 
-Files: `kbmap/store/base.py`, `kbmap/store/sqlite_store.py`, `kbmap/services/index.py`, `kbmap/services/search.py`, `tests/unit/test_chunking.py`, `tests/integration/test_index_search.py`.
+Files: `milepost/store/base.py`, `milepost/store/sqlite_store.py`, `milepost/services/index.py`, `milepost/services/search.py`, `tests/unit/test_chunking.py`, `tests/integration/test_index_search.py`.
 
 Tests:
 - `test_chunk_note_when_split_on_headings_then_one_chunk_per_section`
@@ -182,13 +182,13 @@ Tests:
 
 Acceptance:
 - Index of the fixture KB (20 notes) builds in under 30 seconds on a laptop.
-- `kbmap search` returns the expected note for each of 10 fixture queries (queries committed in `tests/fixtures/search_queries.json`).
+- `milepost search` returns the expected note for each of 10 fixture queries (queries committed in `tests/fixtures/search_queries.json`).
 
 ---
 
 ## M7. Drafting and init
 
-Files: `kbmap/services/draft.py`, `kbmap/services/init.py`, `kbmap/services/doctor.py`, `kbmap/llm/client.py`, `kbmap/prompts/*.md`, `tests/unit/test_draft.py`, `tests/unit/test_init.py`, `tests/integration/test_init_cli.py`.
+Files: `milepost/services/draft.py`, `milepost/services/init.py`, `milepost/services/doctor.py`, `milepost/llm/client.py`, `milepost/prompts/*.md`, `tests/unit/test_draft.py`, `tests/unit/test_init.py`, `tests/integration/test_init_cli.py`.
 
 Tests:
 - `test_collect_sources_when_exclude_matches_env_file_then_file_not_sent`
@@ -197,7 +197,7 @@ Tests:
 - `test_draft_when_provider_fails_twice_then_retries_and_succeeds`
 - `test_draft_when_provider_fails_three_times_then_exit_four_and_progress_saved`
 - `test_draft_when_note_reviewed_and_no_force_then_refuses`
-- `test_draft_when_run_then_frontmatter_written_by_kbmap_not_model`
+- `test_draft_when_run_then_frontmatter_written_by_milepost_not_model`
 - `test_init_when_run_twice_then_second_run_creates_nothing`
 - `test_init_when_kb_note_exists_then_not_overwritten`
 - `test_init_when_dry_run_then_no_files_written_and_no_network_calls`
@@ -216,14 +216,14 @@ Tests:
 - `test_doctor_when_json_flag_then_output_parses`
 
 Acceptance:
-- Provider calls are mocked in unit tests with a recorded response fixture. One integration test uses a real provider and is skipped unless `KBMAP_MODEL` and the provider key are set.
-- `kbmap init --dry-run` on the fixture repo lists the files it would send and the estimated token count, with no network traffic (verified by a socket-blocking test).
+- Provider calls are mocked in unit tests with a recorded response fixture. One integration test uses a real provider and is skipped unless `MILEPOST_MODEL` and the provider key are set.
+- `milepost init --dry-run` on the fixture repo lists the files it would send and the estimated token count, with no network traffic (verified by a socket-blocking test).
 
 ---
 
 ## M8. Review, rehash, and git integration
 
-Files: `kbmap/services/review.py`, `kbmap/services/hooks.py`, `kbmap/services/merge_driver.py`, `tests/unit/test_review.py`, `tests/unit/test_merge_driver.py`, `tests/integration/test_hooks.py`, `tests/integration/test_merge_conflict.py`.
+Files: `milepost/services/review.py`, `milepost/services/hooks.py`, `milepost/services/merge_driver.py`, `tests/unit/test_review.py`, `tests/unit/test_merge_driver.py`, `tests/integration/test_hooks.py`, `tests/integration/test_merge_conflict.py`.
 
 Tests:
 - `test_review_when_draft_then_status_reviewed_and_hash_unchanged`
@@ -245,7 +245,7 @@ Acceptance:
 
 ## M9. MCP server
 
-Files: `kbmap/mcp_server.py`, `tests/unit/test_mcp_tools.py`, `tests/integration/test_mcp_stdio.py`.
+Files: `milepost/mcp_server.py`, `tests/unit/test_mcp_tools.py`, `tests/integration/test_mcp_stdio.py`.
 
 Tests:
 - `test_kb_overview_when_called_then_returns_index_and_stale_count`
@@ -267,23 +267,23 @@ Tests:
 - `test_kb_draft_module_when_note_exists_then_conflict`
 - `test_kb_draft_module_when_model_env_unset_then_environment_error_naming_variable`
 - `test_kb_draft_module_when_secret_in_sources_then_aborts_with_file_name_only`
-- `test_kb_draft_module_when_written_then_frontmatter_set_by_kbmap_and_status_draft`
+- `test_kb_draft_module_when_written_then_frontmatter_set_by_milepost_and_status_draft`
 - `test_tool_response_when_any_tool_called_then_next_steps_present_and_deterministic`
 - `test_kb_file_when_notes_cover_path_then_next_steps_names_each_note_to_update`
 - `test_mcp_stdio_when_client_lists_tools_then_seven_tools_returned`
 
 Acceptance:
-- A stdio integration test starts `kbmap serve` as a subprocess, calls each tool, and checks responses against the schema in SPEC section 11.
+- A stdio integration test starts `milepost serve` as a subprocess, calls each tool, and checks responses against the schema in SPEC section 11.
 
 ---
 
 ## M10. Claude Code plugin
 
-Files: `plugin/` (from `templates/plugin/`), `kbmap/services/hook.py`, `tests/integration/test_plugin_manifest.py`, `tests/unit/test_hook.py`, `tests/unit/test_playbook.py`.
+Files: `plugin/` (from `templates/plugin/`), `milepost/services/hook.py`, `tests/integration/test_plugin_manifest.py`, `tests/unit/test_hook.py`, `tests/unit/test_playbook.py`.
 
 Tests:
 - `test_plugin_manifest_when_parsed_then_has_name_version_and_description`
-- `test_plugin_mcp_config_when_parsed_then_pins_kbmap_version_matching_package`
+- `test_plugin_mcp_config_when_parsed_then_pins_milepost_version_matching_package`
 - `test_plugin_skill_when_present_then_frontmatter_has_name_and_description`
 - `test_plugin_commands_when_present_then_each_maps_to_existing_cli_command`
 - `test_plugin_commands_when_listed_then_only_kb_init_present`
@@ -294,17 +294,17 @@ Tests:
 - `test_hook_post_edit_when_path_covered_then_returns_covering_notes_and_update_instruction`
 - `test_hook_post_edit_when_path_under_kb_dir_then_prints_nothing`
 - `test_hook_post_edit_when_path_in_uncovered_dir_then_names_uncovered_dir`
-- `test_hook_post_edit_when_kbmap_errors_then_exits_zero_with_stderr_warning`
+- `test_hook_post_edit_when_milepost_errors_then_exits_zero_with_stderr_warning`
 - `test_hook_stop_when_check_fails_then_returns_block_with_findings`
 - `test_hook_stop_when_stop_hook_already_active_then_exits_zero`
 - `test_hook_stop_when_check_passes_then_no_block`
 
 Acceptance:
 - Hook JSON field names, matcher syntax, and plugin hook file location are verified against the current Claude Code hooks documentation, and any difference from SPEC section 12.4 is fixed in the spec first.
-- Manual test: in a fresh fixture repo with the environment variables set, `/kb-init` alone, with one confirmation, ends with draft notes ready for `kbmap review` and no other command needed.
+- Manual test: in a fresh fixture repo with the environment variables set, `/kb-init` alone, with one confirmation, ends with draft notes ready for `milepost review` and no other command needed.
 - Manual test: in a Claude Code session on a fixture repo, editing a covered file surfaces the covering notes, and ending the turn with a stale note is blocked once.
 - Before release, the plugin layout is verified against the current Claude Code plugin documentation (not done in this spec).
-- Manual test: install the plugin in a Claude Code session on a fixture repo; `kb_overview` returns the index; `kb_update` writes a note that passes `kbmap check`.
+- Manual test: install the plugin in a Claude Code session on a fixture repo; `kb_overview` returns the index; `kb_update` writes a note that passes `milepost check`.
 
 ---
 
@@ -315,5 +315,5 @@ Work:
 - Publish `0.1.0` to PyPI only if the measurement passes. Otherwise stop and record the result.
 
 Acceptance:
-- Baseline (from M5a) and post-kbmap numbers recorded side by side. Go/no-go decision written into `PILOT.md` in the kbmap repository.
+- Baseline (from M5a) and post-milepost numbers recorded side by side. Go/no-go decision written into `PILOT.md` in the milepost repository.
 - README includes quickstart, the decision record, and the known limitations from SPEC section 16.

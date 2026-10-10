@@ -1,12 +1,12 @@
-"""Builds throwaway git repositories with a kbmap.toml, sources, and correct notes."""
+"""Builds throwaway git repositories with a milepost.toml, sources, and correct notes."""
 
 import subprocess
 from pathlib import Path
 
-from kbmap.config import Structure, load_config
-from kbmap.core.hashing import compute_source_hash
-from kbmap.core.notes import Note, read_note, write_note
-from kbmap.services.render import render_index
+from milepost.config import Structure, load_config
+from milepost.core.hashing import compute_source_hash
+from milepost.core.notes import Note, read_note, write_note
+from milepost.services.render import render_index
 
 GIT = [
     "git",
@@ -50,10 +50,10 @@ class KbRepo:
         for module_id, sources in self.modules.items():
             quoted = ", ".join(f'"{source}"' for source in sources)
             lines += [f"[modules.{module_id}]", f"sources = [{quoted}]", ""]
-        self.write("kbmap.toml", "\n".join(lines) + "\n" + self.extra_config)
+        self.write("milepost.toml", "\n".join(lines) + "\n" + self.extra_config)
 
     def refresh_index(self) -> None:
-        config = load_config(self.root / "kbmap.toml")
+        config = load_config(self.root / "milepost.toml")
         self.write("kb/INDEX.md", render_index(self.root, config))
 
     def hash_of(self, sources: list[str]) -> str:

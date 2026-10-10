@@ -4,7 +4,7 @@ from pathlib import Path
 from support.kb_repo import KbRepo
 from typer.testing import CliRunner
 
-from kbmap.cli import app
+from milepost.cli import app
 
 runner = CliRunner()
 
@@ -55,7 +55,7 @@ def test_check_cli_when_json_format_then_output_parses_and_matches_findings(
 
 def test_check_cli_when_config_invalid_then_exit_two(tmp_path: Path) -> None:
     repo = make_repo(tmp_path)
-    config = repo.root / "kbmap.toml"
+    config = repo.root / "milepost.toml"
     config.write_text(config.read_text().replace("modules.services", "modules.Services"))
 
     result = runner.invoke(app, ["check", "--repo", str(repo.root)])

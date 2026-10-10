@@ -2,8 +2,8 @@ from pathlib import Path
 
 import pytest
 
-from kbmap.core.notes import Note, parse_note, read_note, render_note, validate_note, write_note
-from kbmap.errors import NoteInvalid
+from milepost.core.notes import Note, parse_note, read_note, render_note, validate_note, write_note
+from milepost.errors import NoteInvalid
 
 VALID = """\
 ---
@@ -104,7 +104,7 @@ def test_validate_note_when_source_hash_conflict_then_reports_conflict_code() ->
 
     conflict = [f for f in findings if f.code == "SOURCE_HASH_CONFLICT"]
     assert len(conflict) == 1
-    assert "kbmap rehash module/services" in conflict[0].message
+    assert "milepost rehash module/services" in conflict[0].message
 
 
 def test_validate_note_when_body_empty_then_reports_error() -> None:

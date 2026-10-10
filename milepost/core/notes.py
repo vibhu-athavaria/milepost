@@ -7,8 +7,8 @@ from typing import Any
 
 import yaml
 
-from kbmap.core.findings import Finding
-from kbmap.errors import NoteInvalid
+from milepost.core.findings import Finding
+from milepost.errors import NoteInvalid
 
 KEY_ORDER = [
     "kb_schema",
@@ -121,7 +121,7 @@ def validate_note(note: Note, rel_path: str) -> list[Finding]:
         findings.append(
             failure(
                 "SOURCE_HASH_CONFLICT",
-                f"source_hash is CONFLICT; run `kbmap rehash {meta.get('id', '<note-id>')}` "
+                f"source_hash is CONFLICT; run `milepost rehash {meta.get('id', '<note-id>')}` "
                 "after reviewing the prose",
             )
         )

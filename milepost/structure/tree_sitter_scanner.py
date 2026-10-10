@@ -7,7 +7,7 @@ import tree_sitter_javascript
 import tree_sitter_typescript
 from tree_sitter import Language, Node, Parser
 
-from kbmap.structure.base import Edge, ScanResult
+from milepost.structure.base import Edge, ScanResult
 
 _JAVASCRIPT = Language(tree_sitter_javascript.language())
 _LANGUAGES = {

@@ -1,5 +1,5 @@
-# kbmap CI gate. Copy to .github/workflows/kbmap.yml in the target repository.
-name: kbmap
+# milepost CI gate. Copy to .github/workflows/milepost.yml in the target repository.
+name: milepost
 
 on:
   pull_request:
@@ -18,10 +18,10 @@ jobs:
         with:
           fetch-depth: 0
       - uses: astral-sh/setup-uv@v3
-      - name: Install kbmap (pinned)
-        run: uv tool install "kbmap==0.1.0"
+      - name: Install milepost (pinned)
+        run: uv tool install "milepost==0.1.0"
       - name: Check knowledge base
-        run: kbmap check --ci --base "origin/${{ github.base_ref }}"
+        run: milepost check --ci --base "origin/${{ github.base_ref }}"
 
   index:
     if: github.event_name == 'push'
@@ -29,7 +29,7 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - uses: astral-sh/setup-uv@v3
-      - name: Install kbmap (pinned)
-        run: uv tool install "kbmap==0.1.0"
+      - name: Install milepost (pinned)
+        run: uv tool install "milepost==0.1.0"
       - name: Rebuild index
-        run: kbmap index
+        run: milepost index

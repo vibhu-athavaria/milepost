@@ -4,8 +4,8 @@ import re
 from dataclasses import dataclass
 from pathlib import Path
 
-from kbmap.config import Structure
-from kbmap.core.glob import expand_sources
+from milepost.config import Structure
+from milepost.core.glob import expand_sources
 
 EXTENSIONS_BY_LANGUAGE = {
     "python": [".py"],

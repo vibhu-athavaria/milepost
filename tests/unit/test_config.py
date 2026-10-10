@@ -2,8 +2,8 @@ from pathlib import Path
 
 import pytest
 
-from kbmap.config import Config, load_config, resolve_model
-from kbmap.errors import ConfigNotFound, InvalidConfig
+from milepost.config import Config, load_config, resolve_model
+from milepost.errors import ConfigNotFound, InvalidConfig
 
 FIXTURES = Path(__file__).parent.parent / "fixtures" / "config"
 
@@ -17,7 +17,7 @@ sources = ["app/services/**/*.py"]
 
 
 def write_config(tmp_path: Path, text: str) -> Path:
-    path = tmp_path / "kbmap.toml"
+    path = tmp_path / "milepost.toml"
     path.write_text(text)
     return path
 
@@ -39,7 +39,7 @@ def test_load_config_when_minimal_file_then_defaults_applied(tmp_path: Path) -> 
 
     assert config.project.kb_dir == "kb"
     assert config.index.path == "kb/.index/index.sqlite"
-    assert config.draft.provider_model == "${KBMAP_MODEL}"
+    assert config.draft.provider_model == "${MILEPOST_MODEL}"
     assert config.check.fail_on == "stale"
     assert config.structure.languages == ["python"]
 
@@ -142,7 +142,7 @@ def test_load_config_when_max_detail_notes_negative_then_raises_invalid_config(
 
 def test_load_config_when_missing_file_then_raises_config_not_found(tmp_path: Path) -> None:
     with pytest.raises(ConfigNotFound):
-        load_config(tmp_path / "kbmap.toml")
+        load_config(tmp_path / "milepost.toml")
 
 
 def test_resolve_model_when_env_unset_then_raises_with_variable_name(tmp_path: Path) -> None:
@@ -151,10 +151,10 @@ def test_resolve_model_when_env_unset_then_raises_with_variable_name(tmp_path: P
     with pytest.raises(InvalidConfig) as error:
         resolve_model(config, {})
 
-    assert "KBMAP_MODEL" in str(error.value)
+    assert "MILEPOST_MODEL" in str(error.value)
 
 
 def test_resolve_model_when_env_set_then_returns_value(tmp_path: Path) -> None:
     config = load_config(write_config(tmp_path, MINIMAL))
 
-    assert resolve_model(config, {"KBMAP_MODEL": "some-model"}) == "some-model"
+    assert resolve_model(config, {"MILEPOST_MODEL": "some-model"}) == "some-model"

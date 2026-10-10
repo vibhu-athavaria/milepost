@@ -1,9 +1,9 @@
 {
-  "name": "kbmap",
+  "name": "milepost",
   "version": "0.1.0",
   "description": "Agent-maintained codebase knowledge base: module notes, staleness checks, and hybrid search over MCP.",
   "author": {
-    "name": "kbmap contributors"
+    "name": "milepost contributors"
   },
   "license": "Apache-2.0"
 }

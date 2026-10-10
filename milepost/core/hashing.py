@@ -4,7 +4,7 @@ import hashlib
 from dataclasses import dataclass, field
 from pathlib import Path
 
-from kbmap.core.glob import expand_sources
+from milepost.core.glob import expand_sources
 
 
 @dataclass

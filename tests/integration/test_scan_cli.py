@@ -3,7 +3,7 @@ from pathlib import Path
 
 from typer.testing import CliRunner
 
-from kbmap.cli import app
+from milepost.cli import app
 
 runner = CliRunner()
 
@@ -22,7 +22,7 @@ def make_repo(root: Path, config: str | None = CONFIG) -> Path:
         path.parent.mkdir(parents=True, exist_ok=True)
         path.write_text("")
     if config is not None:
-        (root / "kbmap.toml").write_text(config)
+        (root / "milepost.toml").write_text(config)
     return root
 
 
@@ -51,11 +51,11 @@ def test_scan_command_when_no_config_then_lists_all_candidates(tmp_path: Path) -
 
 def test_scan_command_when_run_then_config_file_unchanged(tmp_path: Path) -> None:
     make_repo(tmp_path)
-    before = (tmp_path / "kbmap.toml").read_bytes()
+    before = (tmp_path / "milepost.toml").read_bytes()
 
     runner.invoke(app, ["scan", "--repo", str(tmp_path)])
 
-    assert (tmp_path / "kbmap.toml").read_bytes() == before
+    assert (tmp_path / "milepost.toml").read_bytes() == before
 
 
 def test_scan_command_when_text_output_then_prints_one_line_per_candidate(tmp_path: Path) -> None:

@@ -1,4 +1,4 @@
-"""A single check result, shared by note validation and `kbmap check`."""
+"""A single check result, shared by note validation and `milepost check`."""
 
 from dataclasses import dataclass
 from typing import Literal

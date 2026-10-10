@@ -1,8 +1,8 @@
 {
   "mcpServers": {
-    "kbmap": {
+    "milepost": {
       "command": "uvx",
-      "args": ["kbmap==0.1.0", "serve"]
+      "args": ["milepost==0.1.0", "serve"]
     }
   }
 }

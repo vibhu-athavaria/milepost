@@ -2,7 +2,7 @@ from importlib.metadata import version
 
 from typer.testing import CliRunner
 
-from kbmap.cli import app
+from milepost.cli import app
 
 runner = CliRunner()
 
@@ -36,4 +36,4 @@ def test_cli_version_when_invoked_then_prints_package_version() -> None:
     result = runner.invoke(app, ["--version"])
 
     assert result.exit_code == 0
-    assert version("kbmap") in result.output
+    assert version("milepost") in result.output

@@ -9,10 +9,10 @@ from typing import Annotated, NoReturn
 
 import typer
 
-from kbmap.config import load_config
-from kbmap.errors import KbmapError, UsageError
-from kbmap.services.check import run_check
-from kbmap.services.coverage import CONFIG_NAME, undeclared_candidates
+from milepost.config import load_config
+from milepost.errors import MilepostError, UsageError
+from milepost.services.check import run_check
+from milepost.services.coverage import CONFIG_NAME, undeclared_candidates
 
 app = typer.Typer(
     help="Git-native, drift-checked codebase memory for coding agents.",
@@ -29,19 +29,19 @@ app.add_typer(hook_app, name="hook")
 
 RepoOption = Annotated[
     Path | None,
-    typer.Option("--repo", help="Repository root (default: nearest ancestor with kbmap.toml)."),
+    typer.Option("--repo", help="Repository root (default: nearest ancestor with milepost.toml)."),
 ]
 JsonOption = Annotated[bool, typer.Option("--json", help="Print machine-readable JSON.")]
 
 
 def handle_errors[**P](func: Callable[P, None]) -> Callable[P, None]:
-    """Turn a KbmapError into a message on stderr and the error's exit code."""
+    """Turn a MilepostError into a message on stderr and the error's exit code."""
 
     @functools.wraps(func)
     def wrapper(*args: P.args, **kwargs: P.kwargs) -> None:
         try:
             func(*args, **kwargs)
-        except KbmapError as error:
+        except MilepostError as error:
             typer.echo(f"error: {error}", err=True)
             raise typer.Exit(code=error.exit_code) from error
 
@@ -59,13 +59,13 @@ def _repo_root(repo: Path | None) -> Path:
 
 
 def _not_implemented(command: str) -> NoReturn:
-    typer.echo(f"kbmap {command} is not implemented yet.", err=True)
+    typer.echo(f"milepost {command} is not implemented yet.", err=True)
     raise typer.Exit(code=1)
 
 
 def _print_version(show: bool) -> None:
     if show:
-        typer.echo(version("kbmap"))
+        typer.echo(version("milepost"))
         raise typer.Exit()
 
 
@@ -120,8 +120,8 @@ def check(
         typer.echo(f"{failures} failure(s), {warnings} warning(s)")
         if result.exit_code:
             typer.echo(
-                "Next: update each stale note (kb_update, or `kbmap rehash <id>` after review), "
-                "then rerun `kbmap check`."
+                "Next: update each stale note (kb_update, or `milepost rehash <id>` after review), "
+                "then rerun `milepost check`."
             )
     if result.exit_code:
         raise typer.Exit(code=result.exit_code)
@@ -171,7 +171,7 @@ def serve() -> None:
 
 @app.command()
 def doctor() -> None:
-    """Report the environment kbmap needs."""
+    """Report the environment milepost needs."""
     _not_implemented("doctor")
 
 
@@ -196,7 +196,7 @@ def hooks_install() -> None:
 
 @hooks_app.command("uninstall")
 def hooks_uninstall() -> None:
-    """Remove hooks installed by kbmap."""
+    """Remove hooks installed by milepost."""
     _not_implemented("hooks uninstall")
 
 

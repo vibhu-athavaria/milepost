@@ -1,4 +1,4 @@
-# Proposal: Agent-Driven Codebase Knowledge Base (working name: `kbmap`)
+# Proposal: Agent-Driven Codebase Knowledge Base (Milepost)
 
 Written for: maintainers and engineers who would decide whether to fund and build this.
 
@@ -63,7 +63,7 @@ It is not worth it for small repos. A good `CLAUDE.md` plus a short architecture
 
 **Agent write path:** after a task, the agent updates each note whose source files it changed or whose behavior it learned. The write goes in the same commit as the code change.
 
-**Interfaces:** MCP tools `kb_overview`, `kb_module`, `kb_file`, `kb_search`, `kb_update`, `kb_check`, `kb_draft_module`. Plus a CLI: `kbmap check` (staleness), `kbmap index` (rebuild local search index), `kbmap init` (section 11), `kbmap scan` (undeclared module candidates). Tool responses carry the next step, and plugin hooks remind the agent of covering notes when it edits a file and run the check before it finishes, so the read and write paths do not depend on the agent remembering them. SPEC section 12.5 holds the scenario-by-scenario steps.
+**Interfaces:** MCP tools `kb_overview`, `kb_module`, `kb_file`, `kb_search`, `kb_update`, `kb_check`, `kb_draft_module`. Plus a CLI: `milepost check` (staleness), `milepost index` (rebuild local search index), `milepost init` (section 11), `milepost scan` (undeclared module candidates). Tool responses carry the next step, and plugin hooks remind the agent of covering notes when it edits a file and run the check before it finishes, so the read and write paths do not depend on the agent remembering them. SPEC section 12.5 holds the scenario-by-scenario steps.
 
 **Language and tooling:** repository-agnostic. Hashing and frontmatter are language-neutral. Structure comes from an adapter, so any language with a structural graph works.
 
@@ -77,7 +77,7 @@ This is the hardest part and the reason the design uses git as the transport.
 
 **Local refresh.** Two sources need refreshing after a pull or branch switch:
 - the structural graph: codebase-memory-mcp auto-syncs on file change, so this is automatic per machine;
-- the local search index: a `post-merge` and `post-checkout` git hook runs `kbmap index`. It is a cache, so a missed run only makes search stale, never wrong about structure.
+- the local search index: a `post-merge` and `post-checkout` git hook runs `milepost index`. It is a cache, so a missed run only makes search stale, never wrong about structure.
 
 **Staleness is branch-local.** The hash check compares notes against the files in the working tree. A developer on a feature branch sees notes that match their branch's code, and sees a warning where their branch changed a file without updating its note.
 
@@ -96,7 +96,7 @@ This is the hardest part and the reason the design uses git as the transport.
 1. **Baseline (go/no-go gate).** On a real repository, pick five representative tasks. Record files read and tokens used with no knowledge base. Done when recorded.
 2. **Structural layer.** Install and verify the structural graph on the target repo, including auto-sync.
 3. **Notes for the main modules.** Write L1 and L2 notes for the largest modules. Human review each.
-4. **Staleness check.** Implement `kbmap check`, run in pre-commit and CI.
+4. **Staleness check.** Implement `milepost check`, run in pre-commit and CI.
 5. **Agent integration.** MCP tools and a CLAUDE.md rule describing the read and write paths.
 6. **Measurement.** Repeat the five baseline tasks. Success: fewer files read and fewer tokens, with no regression in task outcome. If not met, stop.
 7. **Multi-developer pilot.** Run with two or three developers for two weeks. Measure merge conflicts on notes, stale-note warnings per PR, and whether agents on pulled main act on current notes.
@@ -112,9 +112,9 @@ Out of scope for v1: L4 notes everywhere, a hosted service, cross-repo search, a
 - **Self-hosted:** Postgres with pgvector, shared by a team.
 - **Cloud:** managed Postgres with pgvector, or a hosted vector store, using the same adapter contract.
 
-**Configuration:** `kbmap.toml` names the backend. Connection strings come from environment variables or a secrets manager, never from the repo.
+**Configuration:** `milepost.toml` names the backend. Connection strings come from environment variables or a secrets manager, never from the repo.
 
-**Updating on merge to main:** a GitHub Actions workflow triggered on `push` to `main` runs `kbmap index` and writes to the configured backend. Trigger it directly on `push`, not by chaining off another workflow's completion. A shared database is then a cache that CI keeps current; each developer's local index is refreshed by a git hook after `pull`.
+**Updating on merge to main:** a GitHub Actions workflow triggered on `push` to `main` runs `milepost index` and writes to the configured backend. Trigger it directly on `push`, not by chaining off another workflow's completion. A shared database is then a cache that CI keeps current; each developer's local index is refreshed by a git hook after `pull`.
 
 **Timing estimates (to be measured in the pilot):**
 
@@ -148,17 +148,17 @@ Publish only after step 6 succeeds on a real repo. Until then the value is unpro
 
 ## 11. Initializing an existing codebase
 
-`kbmap init` adds the knowledge base to a repo that already has code. It never overwrites existing files.
+`milepost init` adds the knowledge base to a repo that already has code. It never overwrites existing files.
 
 **1. Scaffold (no LLM, no network)**
-- Creates `kbmap.toml` with the local backend.
+- Creates `milepost.toml` with the local backend.
 - Creates `kb/` and git-ignores the index path.
 - Installs `post-merge` and `post-checkout` hooks.
 - Adds a CI workflow template and prints a CLAUDE.md snippet for the team to paste. It does not edit CLAUDE.md itself.
 
 **2. Structural scan (deterministic)**
 - Runs the structural graph index: imports, routes, symbols.
-- Proposes module boundaries from top-level directories and import clusters, written to `kbmap.toml` as explicit entries. The proposal is a starting point; the config, not inference, defines what a module is.
+- Proposes module boundaries from top-level directories and import clusters, written to `milepost.toml` as explicit entries. The proposal is a starting point; the config, not inference, defines what a module is.
 
 **3. Draft notes (LLM, the only costly step)**
 - For each configured module, generates an L2 note from the structure and a read of the source, with `status: draft`.
@@ -171,11 +171,11 @@ Publish only after step 6 succeeds on a real repo. Until then the value is unpro
 
 **5. Baseline and verify**
 - Writes source hashes into each note's frontmatter so the staleness check starts clean.
-- Runs `kbmap check` and `kbmap index`, then a sample search, and reports the result.
+- Runs `milepost check` and `milepost index`, then a sample search, and reports the result.
 
 **Safety properties**
 - **Idempotent:** re-running `init` skips existing notes and never overwrites a reviewed one.
 - **Resumable:** on large repos, generation writes a progress file and continues from where it stopped.
-- **Explicit:** modules can be declared by hand in `kbmap.toml` for monorepos or unusual layouts, overriding the scan.
+- **Explicit:** modules can be declared by hand in `milepost.toml` for monorepos or unusual layouts, overriding the scan.
 
 **Plugin entry point.** For plugin users, `/kb-init` is the one command. It checks the environment, shows the candidate modules and the cost once for confirmation, then runs the scaffold, drafting, hooks, CI workflow and index itself. The only step left to a person is reviewing the drafts. SPEC section 9.4 has the flow.

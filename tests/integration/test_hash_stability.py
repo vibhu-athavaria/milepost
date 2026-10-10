@@ -1,10 +1,10 @@
 from pathlib import Path
 
-from kbmap.core.hashing import compute_source_hash
+from milepost.core.hashing import compute_source_hash
 
 FIXTURE = Path(__file__).parent.parent / "fixtures" / "hash_repo"
 
-# Computed by an independent reference script written from SPEC section 5, not by kbmap.
+# Computed by an independent reference script written from SPEC section 5, not by milepost.
 # Regenerate only deliberately, with a commit note explaining why the algorithm changed.
 EXPECTED = "sha256:2226ee030923b45eebf6c15f110e815d7ff112f885f56451ed89bb00fa0a5cbb"
 

@@ -22,7 +22,7 @@ embedding_model = "BAAI/bge-small-en-v1.5"
 embedding_dim = 384
 
 [draft]
-provider_model = "${KBMAP_MODEL}"
+provider_model = "${MILEPOST_MODEL}"
 max_source_bytes = 100000
 exclude = [".env*"]
 

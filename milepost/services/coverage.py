@@ -2,11 +2,11 @@
 
 from pathlib import Path
 
-from kbmap.config import Module, Structure, load_config
-from kbmap.core.glob import expand_sources
-from kbmap.structure.candidates import Candidate, scan_candidates
+from milepost.config import Module, Structure, load_config
+from milepost.core.glob import expand_sources
+from milepost.structure.candidates import Candidate, scan_candidates
 
-CONFIG_NAME = "kbmap.toml"
+CONFIG_NAME = "milepost.toml"
 
 
 def uncovered_candidates(
@@ -24,7 +24,7 @@ def uncovered_candidates(
 
 
 def undeclared_candidates(root: Path) -> list[Candidate]:
-    """Uncovered candidates for a repository, using defaults when it has no kbmap.toml yet."""
+    """Uncovered candidates for a repository, using defaults when it has no milepost.toml yet."""
     config_path = root / CONFIG_NAME
     if config_path.is_file():
         config = load_config(config_path)

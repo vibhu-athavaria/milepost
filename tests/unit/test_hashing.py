@@ -4,7 +4,7 @@ from pathlib import Path
 
 import pytest
 
-from kbmap.core.hashing import compute_source_hash
+from milepost.core.hashing import compute_source_hash
 
 EMPTY = "sha256:" + hashlib.sha256(b"").hexdigest()
 

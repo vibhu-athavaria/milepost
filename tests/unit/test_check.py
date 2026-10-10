@@ -2,9 +2,9 @@ from pathlib import Path
 
 from support.kb_repo import KbRepo
 
-from kbmap.config import load_config
-from kbmap.core.findings import Finding
-from kbmap.services.check import CheckResult, run_check
+from milepost.config import load_config
+from milepost.core.findings import Finding
+from milepost.services.check import CheckResult, run_check
 
 SERVICES = ["app/services/**/*.py"]
 
@@ -16,7 +16,7 @@ def make_repo(tmp_path: Path, extra_config: str = "") -> KbRepo:
 
 
 def check(repo: KbRepo) -> CheckResult:
-    return run_check(repo.root, load_config(repo.root / "kbmap.toml"))
+    return run_check(repo.root, load_config(repo.root / "milepost.toml"))
 
 
 def codes(findings: list[Finding], severity: str | None = None) -> list[str]:
@@ -74,7 +74,7 @@ def test_check_when_source_hash_conflict_then_reports_failure_with_rehash_hint(
 
     conflict = [f for f in findings if f.code == "SOURCE_HASH_CONFLICT"]
     assert len(conflict) == 1
-    assert "kbmap rehash module/services" in conflict[0].message
+    assert "milepost rehash module/services" in conflict[0].message
     assert "STALE_NOTE" not in codes(findings)
 
 

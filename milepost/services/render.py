@@ -2,9 +2,9 @@
 
 from pathlib import Path
 
-from kbmap.config import Config
-from kbmap.core.notes import read_note
-from kbmap.errors import NoteInvalid
+from milepost.config import Config
+from milepost.core.notes import read_note
+from milepost.errors import NoteInvalid
 
 
 def _module_status(note_path: Path) -> str:

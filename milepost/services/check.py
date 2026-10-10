@@ -1,20 +1,20 @@
-"""`kbmap check`: validate notes and detect staleness (SPEC section 6)."""
+"""`milepost check`: validate notes and detect staleness (SPEC section 6)."""
 
 from dataclasses import dataclass, replace
 from pathlib import Path
 
 from wcmatch import glob
 
-from kbmap.config import Config
-from kbmap.core.findings import Finding
-from kbmap.core.glob import FLAGS
-from kbmap.core.hashing import compute_source_hash
-from kbmap.core.notes import Note, parse_note, validate_note
-from kbmap.errors import NoteInvalid
-from kbmap.services.coverage import uncovered_candidates
-from kbmap.services.gitinfo import Changes, changed_files, files_at, read_waivers
-from kbmap.services.render import render_index
-from kbmap.structure.candidates import Candidate
+from milepost.config import Config
+from milepost.core.findings import Finding
+from milepost.core.glob import FLAGS
+from milepost.core.hashing import compute_source_hash
+from milepost.core.notes import Note, parse_note, validate_note
+from milepost.errors import NoteInvalid
+from milepost.services.coverage import uncovered_candidates
+from milepost.services.gitinfo import Changes, changed_files, files_at, read_waivers
+from milepost.services.render import render_index
+from milepost.structure.candidates import Candidate
 
 NOTE_DIRS = ("modules", "files", "passages")
 WAIVABLE = {"STALE_NOTE", "ORPHAN_NOTE", "UNCOVERED_DIR"}
@@ -81,7 +81,7 @@ def _check_staleness(
                     "STALE_NOTE",
                     loaded.rel_path,
                     "source files changed since the note was written; re-read them and call "
-                    f"kb_update, or run `kbmap rehash {note_id}` after review",
+                    f"kb_update, or run `milepost rehash {note_id}` after review",
                     note_id,
                 )
             )
@@ -114,7 +114,7 @@ def _check_modules_and_index(root: Path, config: Config, findings: list[Finding]
                     "warning",
                     "MISSING_NOTE",
                     rel,
-                    f"module '{module_id}' has no note; run `kbmap draft {module_id}`",
+                    f"module '{module_id}' has no note; run `milepost draft {module_id}`",
                     f"module/{module_id}",
                 )
             )
@@ -123,7 +123,9 @@ def _check_modules_and_index(root: Path, config: Config, findings: list[Finding]
     fresh = render_index(root, config)
     if not index_path.is_file():
         findings.append(
-            Finding("failure", "INDEX_DRIFT", index_rel, "INDEX.md is missing; run `kbmap index`")
+            Finding(
+                "failure", "INDEX_DRIFT", index_rel, "INDEX.md is missing; run `milepost index`"
+            )
         )
     elif index_path.read_text(encoding="utf-8") != fresh:
         findings.append(
@@ -131,7 +133,7 @@ def _check_modules_and_index(root: Path, config: Config, findings: list[Finding]
                 "failure",
                 "INDEX_DRIFT",
                 index_rel,
-                "INDEX.md differs from a fresh render; run `kbmap index`",
+                "INDEX.md differs from a fresh render; run `milepost index`",
             )
         )
 
@@ -145,7 +147,7 @@ def _check_coverage(root: Path, config: Config, findings: list[Finding]) -> list
                 "UNCOVERED_DIR",
                 candidate.path,
                 f"{candidate.path} is under a source root but no module covers it; "
-                "see `kbmap scan` to declare one",
+                "see `milepost scan` to declare one",
                 f"dir:{candidate.path}",
             )
         )

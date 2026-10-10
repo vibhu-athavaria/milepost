@@ -4,7 +4,7 @@ from pathlib import Path
 from support.kb_repo import KbRepo
 from typer.testing import CliRunner
 
-from kbmap.cli import app
+from milepost.cli import app
 
 runner = CliRunner()
 SERVICES = ["app/services/**/*.py"]

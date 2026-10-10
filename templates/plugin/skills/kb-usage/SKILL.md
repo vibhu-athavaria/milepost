@@ -1,11 +1,11 @@
 ---
 name: kb-usage
-description: Use the kbmap knowledge base to find the right modules and files before searching code, and to write back what was learned after a task. Follow the scenario steps so the right kb tool is called at the right time.
+description: Use the milepost knowledge base to find the right modules and files before searching code, and to write back what was learned after a task. Follow the scenario steps so the right kb tool is called at the right time.
 ---
 
 # Using the codebase knowledge base
 
-Use this skill when a repository has a `kb/` folder and `kbmap` tools are available.
+Use this skill when a repository has a `kb/` folder and `milepost` tools are available.
 
 Notes are levels: L1 index, L2 module note, L3 file note, L4 passage note. Only L2 and L3 notes carry `sources` and a `source_hash`, so only they can go stale.
 
@@ -59,10 +59,10 @@ Find the scenario that matches what you are doing and follow its steps in order.
 
 `kb_update` cannot create an L2 note. Do not try.
 
-1. Add `[modules.<id>]` with `sources` to `kbmap.toml`.
+1. Add `[modules.<id>]` with `sources` to `milepost.toml`.
 2. Call `kb_draft_module` with the id. It writes the note as `draft`. If it returns `ENVIRONMENT`, tell the user which variable to set.
 3. Call `kb_check`.
-4. Tell the user to read the note and run `kbmap review <id>`. The note stays `draft` until they do.
+4. Tell the user to read the note and run `milepost review <id>`. The note stays `draft` until they do.
 
 ### Code that no note covers
 
@@ -70,7 +70,7 @@ If `kb_check` reports `UNCOVERED_DIR`, or you find source that no module's `sour
 
 ### A `CONFLICT` hash
 
-Stop. Do not edit the note and do not run `kbmap rehash`. Tell the user the note needs review and a `kbmap rehash <id>` run.
+Stop. Do not edit the note and do not run `milepost rehash`. Tell the user the note needs review and a `milepost rehash <id>` run.
 
 ### Before you commit
 

@@ -1,5 +1,5 @@
 [project]
-name = "kbmap"
+name = "milepost"
 version = "0.1.0"
 description = "Git-native, drift-checked codebase memory for coding agents."
 readme = "README.md"
@@ -20,7 +20,7 @@ dependencies = [
 ]
 
 [project.scripts]
-kbmap = "kbmap.cli:app"
+milepost = "milepost.cli:app"
 
 [dependency-groups]
 dev = [
@@ -42,7 +42,7 @@ required-environments = ["sys_platform == 'darwin' and platform_machine == 'x86_
 
 [tool.uv.build-backend]
 module-root = ""
-module-name = "kbmap"
+module-name = "milepost"
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
@@ -60,4 +60,4 @@ select = ["E", "F", "I", "UP", "B", "SIM"]
 
 [tool.mypy]
 strict = true
-files = ["kbmap"]
+files = ["milepost"]
