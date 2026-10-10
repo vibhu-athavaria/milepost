@@ -16,7 +16,7 @@ Audience: the developer implementing milepost, and reviewers checking it against
 | CLI framework | Typer | Typed CLI, generates help text |
 | Config | Pydantic v2 models loaded from `milepost.toml` | Validation with clear errors |
 | Note format | Markdown + YAML frontmatter | Readable in PRs, diffable, merge-friendly |
-| Index backend v1 | SQLite (stdlib `sqlite3`) + sqlite-vec | Zero infrastructure |
+| Index backend v1 | SQLite (stdlib `sqlite3`): FTS5 for keywords; vectors stored as float32 blobs and searched by exact cosine similarity in numpy | Zero infrastructure, and no loadable SQLite extension: many Python builds, including CI's, cannot load one (found when CI failed with `no attribute 'enable_load_extension'`). Exact search over a few thousand chunks takes milliseconds |
 | Embeddings v1 | fastembed, model named in config | Local, no API key |
 | Structure source v1 | Built-in scanner: Python `ast` + tree-sitter for TypeScript/JavaScript | No dependency on an external binary's API |
 | Structure source v2 | Adapter for codebase-memory-mcp | Added once its query API is verified |
@@ -238,7 +238,7 @@ CREATE TABLE notes (note_id TEXT PRIMARY KEY, level TEXT, status TEXT, source_ha
 CREATE TABLE chunks (chunk_id INTEGER PRIMARY KEY, note_id TEXT, heading TEXT, text TEXT);
 CREATE VIRTUAL TABLE chunks_fts USING fts5(text, heading);   -- rowid = chunk_id, kept in step by the store
 CREATE TABLE meta (key TEXT PRIMARY KEY, value TEXT);          -- embedding_model, embedding_dim
-CREATE VIRTUAL TABLE chunks_vec USING vec0(embedding float[384]);   -- dim from config
+CREATE TABLE chunk_vectors (chunk_id INTEGER PRIMARY KEY, embedding BLOB NOT NULL);   -- float32 x dim from config
 ```
 
 ### 7.3 Rebuild rules
@@ -251,6 +251,8 @@ CREATE VIRTUAL TABLE chunks_vec USING vec0(embedding float[384]);   -- dim from 
 ### 7.4 Search
 
 `milepost search <query> [--level L2] [--k 5]`: hybrid. Run FTS5 BM25 and vector KNN (k = 20 each), merge with reciprocal rank fusion (k = 60), return the top `k`. Each result: `note_id`, `heading`, `score`, `snippet` (max 300 characters), `status`.
+
+The vector half is an exact scan: it loads the candidate vectors, computes cosine similarity against the query, and keeps the top results. That is milliseconds at the intended scale (a few hundred notes, a few thousand chunks). It is not meant for hundreds of thousands of chunks; a larger deployment would use the Postgres backend (pgvector) deferred in section 16.
 
 The keyword query drops common English filler words (a fixed list in the store) and ORs the remaining terms, so that words like "how" and "the" do not outrank real matches; the vector search sees the whole query. Without this, a query whose keyword hits were all filler pushed the right note out of the fused top results (found with the 20-note fixture KB).
 
@@ -273,7 +275,7 @@ All commands accept `--repo <path>` (default: nearest ancestor with `milepost.to
 | `milepost hooks install \| uninstall` | Manage git hooks and merge driver config | Section 10 |
 | `milepost merge-driver %O %A %B %P` | Invoked by git for `kb/**/*.md` | Section 10.3 |
 | `milepost serve` | Run the MCP server on stdio | Section 11 |
-| `milepost doctor` | Print environment: Python, git, sqlite-vec loadable, fastembed model cached, `MILEPOST_MODEL` set, and the provider key variables for that model present (via LiteLLM's environment validation; that API is not verified) | Read-only; exit 3 when a variable needed for drafting is missing |
+| `milepost doctor` | Print environment: Python, git, SQLite FTS5 available, fastembed model cached, `MILEPOST_MODEL` set, and the provider key variables for that model present (via LiteLLM's environment validation; that API is not verified) | Read-only; exit 3 when a variable needed for drafting is missing |
 | `milepost scan [--json]` | List candidate modules under `structure.roots` that no declared module covers (same scan as init step 3) | Read-only; never edits config |
 | `milepost hook post-edit` | Read Claude Code hook JSON on stdin, find the edited path, print the notes that cover it | Used by the plugin hook, section 12.4; always exits 0 |
 | `milepost hook stop` | Run `milepost check`, print findings in hook format | Used by the plugin hook, section 12.4 |
@@ -436,7 +438,7 @@ Lets an agent create the L2 note for a new module in the same change as the code
 
 Yes. Claude Code plugins can bundle an MCP server, skills, and slash commands. The MCP server runs as a separate process over stdio, so the server language is independent of Claude Code. The plugin manifest and skills are JSON and Markdown.
 
-Python is the right language. The MCP server is the only code the plugin runs; it needs a Python runtime, and the Python ecosystem already provides the SDK, fastembed, and sqlite-vec. A TypeScript rewrite would add a second toolchain for no gain. Users run the server with `uvx milepost serve`, so they do not install anything globally first.
+Python is the right language. The MCP server is the only code the plugin runs; it needs a Python runtime, and the Python ecosystem already provides the SDK, and fastembed. A TypeScript rewrite would add a second toolchain for no gain. Users run the server with `uvx milepost serve`, so they do not install anything globally first.
 
 Verify the plugin file layout (`.claude-plugin/plugin.json`, `.mcp.json`, `skills/`, `commands/`) against the current Claude Code plugin documentation before publishing. This spec was written without fetching those docs.
 
@@ -505,7 +507,7 @@ Runtime:
 - `mcp` (FastMCP)
 - `litellm` (drafting only; imported lazily so other commands do not need it)
 - `fastembed`
-- `sqlite-vec`
+- `numpy`
 - `tree-sitter`, `tree-sitter-typescript`, `tree-sitter-javascript`
 
 Development:

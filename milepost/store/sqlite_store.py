@@ -1,16 +1,20 @@
-"""SQLite index: notes, chunks, FTS5 keyword search, sqlite-vec neighbours (SPEC 7.2)."""
+"""SQLite index: notes, chunks, FTS5 keyword search, and exact vector search (SPEC 7.2).
+
+Vectors are stored as float32 blobs and searched by cosine similarity in numpy. That needs no
+loadable SQLite extension, which many Python builds do not support, and is fast at this scale.
+"""
 
 import re
 import sqlite3
 from datetime import UTC, datetime
 from pathlib import Path
 
-import sqlite_vec
+import numpy as np
 
 from milepost.store.base import ChunkRecord, Hit, NoteRecord
 
 _HIT_COLUMNS = "c.chunk_id, c.note_id, n.level, n.status, c.heading, c.text"
-_TABLES = ("chunks_vec", "chunks_fts", "chunks", "notes", "meta")
+_TABLES = ("chunk_vectors", "chunks_fts", "chunks", "notes", "meta")
 # Filler words match almost every chunk and drown out the keyword ranking, so they are dropped
 # from keyword queries. The vector search still sees the whole query.
 _STOPWORDS = frozenset(
@@ -93,14 +97,11 @@ class SqliteStore:
         path.parent.mkdir(parents=True, exist_ok=True)
         self.dim = dim
         self.conn = sqlite3.connect(path)
-        self.conn.enable_load_extension(True)
-        sqlite_vec.load(self.conn)
-        self.conn.enable_load_extension(False)
         self._create_tables()
 
     def _create_tables(self) -> None:
         self.conn.executescript(
-            f"""
+            """
             CREATE TABLE IF NOT EXISTS meta (key TEXT PRIMARY KEY, value TEXT);
             CREATE TABLE IF NOT EXISTS notes (
                 note_id TEXT PRIMARY KEY, level TEXT, status TEXT,
@@ -110,7 +111,9 @@ class SqliteStore:
                 chunk_id INTEGER PRIMARY KEY, note_id TEXT, heading TEXT, text TEXT
             );
             CREATE VIRTUAL TABLE IF NOT EXISTS chunks_fts USING fts5(text, heading);
-            CREATE VIRTUAL TABLE IF NOT EXISTS chunks_vec USING vec0(embedding float[{self.dim}]);
+            CREATE TABLE IF NOT EXISTS chunk_vectors (
+                chunk_id INTEGER PRIMARY KEY, embedding BLOB NOT NULL
+            );
             """
         )
         self.conn.commit()
@@ -147,7 +150,7 @@ class SqliteStore:
         ]
         for chunk_id in chunk_ids:
             self.conn.execute("DELETE FROM chunks_fts WHERE rowid = ?", (chunk_id,))
-            self.conn.execute("DELETE FROM chunks_vec WHERE rowid = ?", (chunk_id,))
+            self.conn.execute("DELETE FROM chunk_vectors WHERE chunk_id = ?", (chunk_id,))
         self.conn.execute("DELETE FROM chunks WHERE note_id = ?", (note_id,))
         self.conn.execute("DELETE FROM notes WHERE note_id = ?", (note_id,))
 
@@ -155,7 +158,13 @@ class SqliteStore:
         self._delete_note(note_id)
         self.conn.commit()
 
+    def _check_dimension(self, embedding: list[float]) -> None:
+        if len(embedding) != self.dim:
+            raise ValueError(f"embedding has dimension {len(embedding)}, expected {self.dim}")
+
     def replace_note(self, record: NoteRecord, chunks: list[ChunkRecord]) -> None:
+        for chunk in chunks:
+            self._check_dimension(chunk.embedding)
         self._delete_note(record.note_id)
         self.conn.execute(
             "INSERT INTO notes(note_id, level, status, source_hash, content_sha, indexed_at) "
@@ -180,8 +189,8 @@ class SqliteStore:
                 (chunk_id, chunk.text, chunk.heading),
             )
             self.conn.execute(
-                "INSERT INTO chunks_vec(rowid, embedding) VALUES (?, ?)",
-                (chunk_id, sqlite_vec.serialize_float32(chunk.embedding)),
+                "INSERT INTO chunk_vectors(chunk_id, embedding) VALUES (?, ?)",
+                (chunk_id, np.asarray(chunk.embedding, dtype=np.float32).tobytes()),
             )
         self.conn.commit()
 
@@ -204,21 +213,26 @@ class SqliteStore:
         return [Hit(*row) for row in self.conn.execute(sql, params)]
 
     def search_vector(self, embedding: list[float], k: int, level: str | None) -> list[Hit]:
-        fetch = k if level is None else max(k * 10, 100)
-        neighbours = self.conn.execute(
-            "SELECT rowid FROM chunks_vec WHERE embedding MATCH ? AND k = ? ORDER BY distance",
-            (sqlite_vec.serialize_float32(embedding), fetch),
-        ).fetchall()
-        hits: list[Hit] = []
-        for (chunk_id,) in neighbours:
-            row = self.conn.execute(
-                f"SELECT {_HIT_COLUMNS} FROM chunks c JOIN notes n ON n.note_id = c.note_id "
-                "WHERE c.chunk_id = ?",
-                (chunk_id,),
-            ).fetchone()
-            if row is not None and (level is None or row[2] == level):
-                hits.append(Hit(*row))
-        return hits[:k]
+        self._check_dimension(embedding)
+        sql = (
+            f"SELECT {_HIT_COLUMNS}, v.embedding FROM chunk_vectors v "
+            "JOIN chunks c ON c.chunk_id = v.chunk_id JOIN notes n ON n.note_id = c.note_id"
+        )
+        params: list[object] = []
+        if level:
+            sql += " WHERE n.level = ?"
+            params.append(level)
+        rows = self.conn.execute(sql + " ORDER BY c.chunk_id", params).fetchall()
+        if not rows:
+            return []
+        matrix = np.vstack([np.frombuffer(row[6], dtype=np.float32) for row in rows])
+        query = np.asarray(embedding, dtype=np.float32)
+        norms = np.linalg.norm(matrix, axis=1) * np.linalg.norm(query)
+        similarity = np.divide(
+            matrix @ query, norms, out=np.zeros(len(rows), dtype=np.float32), where=norms > 0
+        )
+        order = np.argsort(-similarity, kind="stable")[:k]
+        return [Hit(*rows[int(i)][:6]) for i in order]
 
     def close(self) -> None:
         self.conn.close()

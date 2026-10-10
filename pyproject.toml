@@ -13,7 +13,7 @@ dependencies = [
     "mcp",
     "litellm",
     "fastembed",
-    "sqlite-vec",
+    "numpy",
     "tree-sitter",
     "tree-sitter-typescript",
     "tree-sitter-javascript",
@@ -63,5 +63,5 @@ strict = true
 files = ["milepost", "scripts"]
 
 [[tool.mypy.overrides]]
-module = ["sqlite_vec", "fastembed", "fastembed.*"]
+module = ["fastembed", "fastembed.*"]
 ignore_missing_imports = true
