@@ -13,7 +13,7 @@ dependencies = [
     "mcp",
     "litellm",
     "fastembed",
-    "sqlite-vec",
+    "numpy",
     "tree-sitter",
     "tree-sitter-typescript",
     "tree-sitter-javascript",
@@ -46,7 +46,7 @@ module-name = "milepost"
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
-pythonpath = ["tests"]
+pythonpath = ["tests", "scripts"]
 addopts = "--import-mode=importlib"
 
 [tool.ruff]
@@ -60,4 +60,8 @@ select = ["E", "F", "I", "UP", "B", "SIM"]
 
 [tool.mypy]
 strict = true
-files = ["milepost"]
+files = ["milepost", "scripts"]
+
+[[tool.mypy.overrides]]
+module = ["fastembed", "fastembed.*"]
+ignore_missing_imports = true

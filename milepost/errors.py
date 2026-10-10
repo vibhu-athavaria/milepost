@@ -30,3 +30,15 @@ class ConfigNotFound(MilepostError):
     def __init__(self, path: str) -> None:
         self.path = path
         super().__init__(f"config file not found: {path}")
+
+
+class IndexRebuildRequired(MilepostError):
+    """The index was built with a different embedding model or dimension."""
+
+    exit_code = 1
+
+
+class IndexMissing(MilepostError):
+    """There is no search index yet."""
+
+    exit_code = 3

@@ -1,0 +1,42 @@
+[
+  {
+    "query": "why does a person get signed out after a short idle period",
+    "expect": "module/auth"
+  },
+  {
+    "query": "how do we take money from a card and send a confirmation",
+    "expect": "module/billing"
+  },
+  {
+    "query": "which part decides whether someone is allowed to see a page",
+    "expect": "module/permissions"
+  },
+  {
+    "query": "where do we keep an unchangeable history of risky actions",
+    "expect": "module/audit"
+  },
+  {
+    "query": "how do learners get reminded about due dates by email",
+    "expect": "module/notifications"
+  },
+  {
+    "query": "turning a pool of questions into a test for pupils",
+    "expect": "module/quizzes"
+  },
+  {
+    "query": "converting numeric results into letter marks",
+    "expect": "module/grading"
+  },
+  {
+    "query": "downloading lots of records as a spreadsheet",
+    "expect": "module/exports"
+  },
+  {
+    "query": "what happens when a partner server is unreachable",
+    "expect": "module/webhooks"
+  },
+  {
+    "query": "how do we avoid recalculating slow results",
+    "expect": "module/caching"
+  }
+]

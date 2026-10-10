@@ -3,16 +3,20 @@
 import functools
 import json
 from collections.abc import Callable
+from dataclasses import asdict
 from importlib.metadata import version
 from pathlib import Path
 from typing import Annotated, NoReturn
 
 import typer
 
-from milepost.config import load_config
+from milepost.config import Config, load_config
+from milepost.embeddings import FastembedEmbedder
 from milepost.errors import MilepostError, UsageError
 from milepost.services.check import run_check
 from milepost.services.coverage import CONFIG_NAME, undeclared_candidates
+from milepost.services.index import run_index
+from milepost.services.search import search as run_search
 
 app = typer.Typer(
     help="Git-native, drift-checked codebase memory for coding agents.",
@@ -46,6 +50,10 @@ def handle_errors[**P](func: Callable[P, None]) -> Callable[P, None]:
             raise typer.Exit(code=error.exit_code) from error
 
     return wrapper
+
+
+def _embedder(config: Config) -> FastembedEmbedder:
+    return FastembedEmbedder(config.index.embedding_model, config.index.embedding_dim)
 
 
 def _repo_root(repo: Path | None) -> Path:
@@ -128,9 +136,20 @@ def check(
 
 
 @app.command()
-def index() -> None:
-    """Build or update the local search index."""
-    _not_implemented("index")
+@handle_errors
+def index(
+    repo: RepoOption = None,
+    rebuild: Annotated[
+        bool, typer.Option("--rebuild", help="Drop and rebuild everything.")
+    ] = False,
+) -> None:
+    """Write INDEX.md and build or update the local search index."""
+    root = _repo_root(repo)
+    config = load_config(root / CONFIG_NAME)
+    report = run_index(root, config, _embedder(config), rebuild=rebuild)
+    for path in report.skipped_invalid:
+        typer.echo(f"warning: skipped invalid note {path}", err=True)
+    typer.echo(f"indexed {report.indexed}, skipped {report.skipped}, removed {report.removed}")
 
 
 @app.command()
@@ -152,9 +171,24 @@ def rehash() -> None:
 
 
 @app.command()
-def search() -> None:
+@handle_errors
+def search(
+    query: Annotated[str, typer.Argument(help="What to look for.")],
+    repo: RepoOption = None,
+    level: Annotated[str | None, typer.Option("--level", help="Only L1, L2, L3 or L4.")] = None,
+    k: Annotated[int, typer.Option("--k", help="Number of results.")] = 5,
+    json_output: JsonOption = False,
+) -> None:
     """Search the notes."""
-    _not_implemented("search")
+    root = _repo_root(repo)
+    config = load_config(root / CONFIG_NAME)
+    results = run_search(root, config, _embedder(config), query, level=level, k=k)
+    if json_output:
+        typer.echo(json.dumps([asdict(result) for result in results], indent=2))
+        return
+    for result in results:
+        snippet = " ".join(result.snippet.split())[:100]
+        typer.echo(f"{result.score:.4f}  {result.note_id}  [{result.heading}]  {snippet}")
 
 
 @app.command(name="merge-driver")

@@ -108,7 +108,7 @@ Out of scope for v1: L4 notes everywhere, a hosted service, cross-repo search, a
 **The notes are always in git.** They are the source of truth. Only the search index can live elsewhere, so storage is a deployment choice rather than a data-model choice.
 
 **Index backends**, behind one storage interface:
-- **Local:** SQLite with sqlite-vec, per developer, git-ignored. Default, no setup.
+- **Local:** SQLite (FTS5 keyword search plus exact vector search), per developer, git-ignored. Default, no setup.
 - **Self-hosted:** Postgres with pgvector, shared by a team.
 - **Cloud:** managed Postgres with pgvector, or a hosted vector store, using the same adapter contract.
 

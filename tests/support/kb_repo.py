@@ -60,7 +60,13 @@ class KbRepo:
         return compute_source_hash(self.root, sources, Structure().ignore).value
 
     def write_note_file(
-        self, rel: str, note_id: str, level: str, sources: list[str], status: str = "reviewed"
+        self,
+        rel: str,
+        note_id: str,
+        level: str,
+        sources: list[str],
+        status: str = "reviewed",
+        body: str = "\n## Purpose\n\nDescribes the thing.\n",
     ) -> None:
         note = Note(
             meta={
@@ -74,7 +80,7 @@ class KbRepo:
                 "written_by": "agent",
                 "written_at": "2026-10-07T09:12:00Z",
             },
-            body="\n## Purpose\n\nDescribes the thing.\n",
+            body=body,
         )
         write_note(note, self.root / rel)
 
@@ -85,6 +91,7 @@ class KbRepo:
         files: dict[str, str],
         with_note: bool = True,
         status: str = "reviewed",
+        body: str = "\n## Purpose\n\nDescribes the thing.\n",
     ) -> None:
         for rel, text in files.items():
             self.write(rel, text)
@@ -92,7 +99,7 @@ class KbRepo:
         self.write_config()
         if with_note:
             self.write_note_file(
-                f"kb/modules/{module_id}.md", f"module/{module_id}", "L2", sources, status
+                f"kb/modules/{module_id}.md", f"module/{module_id}", "L2", sources, status, body
             )
         self.refresh_index()
 
