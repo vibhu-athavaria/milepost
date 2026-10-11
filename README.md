@@ -2,7 +2,7 @@
 
 **Git-native, drift-checked codebase memory for coding agents.**
 
-Milepost keeps a small set of reviewed markdown notes about your code inside your own git repository. Each note records a fingerprint of the source files it describes, so when the code changes and the note doesn't, Milepost notices. Coding agents read the notes to find the right code quickly, and write back what they learn, so the next session, and the next teammate, doesn't start from zero.
+Milepost keeps a small set of reviewed markdown notes about your code inside your own git repository. Each note records a fingerprint of the source files it describes, so when the code changes and the note doesn't, Milepost notices. Coding agents read the notes to find the right code quickly, and write back what they learn, so the next session, and the next teammate, doesn't start from zero. And because agents now change more code than any one person reads, the same notes, kept in pull requests, are how a developer still sees what changed in each module and which parts no person has reviewed.
 
 > **Early development, unproven.** About half of the build plan is done (see [Status](#status)). The central claim, that agents using these notes read fewer files and spend fewer tokens, has **not been measured yet**. A pilot on a real repository decides whether this gets released. Features marked **(planned)** below are specified but not built.
 
@@ -28,6 +28,7 @@ Coding agents learn a repository by searching it. Every session they grep, open 
 - **Missed code.** Keyword search misses the file that owns a behavior but doesn't share its name.
 - **No continuity.** What an agent worked out about *why* a module behaves as it does is gone when the session ends. The next session rediscovers it.
 - **No shared memory.** Each developer's agent builds its own understanding, and none of it reaches the team.
+- **Lost grip.** With every developer using an agent on a big repository, no one reads all the code that changes. Mistakes an agent makes can pass through because no person had the context to spot them.
 
 Tools that store this knowledge exist (see [How it is different](#how-it-is-different)). But a knowledge base that silently goes out of date is **worse than none**, because agents trust what they read. The hard part is not writing the notes. It is keeping them honest.
 
@@ -53,10 +54,12 @@ Notes come in four levels, like the index of a book:
 
 | Level | File | What it holds | Who writes it |
 |---|---|---|---|
-| L1 | `kb/INDEX.md` | One row per module | Generated from the module list |
-| L2 | `kb/modules/<module>.md` | Purpose, entry points, owned data, invariants, gotchas | A model drafts it; a human reviews it; agents keep it current |
-| L3 | `kb/files/<path>.md` | One file's details (optional) | An agent, only when a file has something a module note can't hold |
-| L4 | `kb/passages/<slug>.md` | One passage (optional) | An agent, on demand |
+| L1 | `kb/INDEX.md` | One row per module, with a one-line purpose | Generated from the module notes |
+| L2 | `kb/modules/<module>.md` | Purpose, entry points, a file map, owned data, invariants, gotchas | A model or the agent drafts it; a human reviews it; agents keep it current |
+| L3 | `kb/files/<path>.md` | One file's gotchas (rare, exceptions only) | An agent or a person, only when a file has something a module note can't hold |
+| L4 | `kb/passages/<slug>.md` | One passage (rare, exceptions only) | An agent or a person, on demand |
+
+A note stores only what code can't tell you: purpose, contracts, rules, traps. **Per-file detail is not a note.** The functions in a file, their signatures and line ranges are read from the file when asked (`outline`), and who imports a file and which tests cover it are worked out from the code (`impact`). Facts that can be computed are never stored, so they can't go stale or add review work.
 
 Most repositories need only L1 and L2. A module is declared in `milepost.toml` as a set of file globs, so *you* define what a module is. Milepost never infers it silently.
 
@@ -93,10 +96,10 @@ KB-Waive: dir:app/payments scratch code, a module comes later
 
 ### 4. Gives agents a read path and a write path (planned)
 
-Through an MCP server (`milepost serve`) agents get a handful of tools: an overview of the index, a module's note, the notes covering a given file, search, a note update, a check, and drafting a note for a new module.
+Through an MCP server (`milepost serve`) agents get ten tools: an overview of the index, a module's note, the notes covering a given file, search, a note update, a check, drafting a note for a new module, and three that compute from the code as it is now: a file's **outline** (symbols with line ranges), a file's **impact** (importers and likely tests), and a **sync** (what changed and which notes to update).
 
-- **Read path.** Index first, then the note for the module that owns the task, then only the files that note names. The agent does not grep the whole repository first.
-- **Write path.** After changing a file the agent asks which notes cover it, re-reads the source, and updates each note. The update tool refuses a write unless the agent presents the hash it read, so a note can't be written against code the agent never fetched.
+- **Read path.** Index first, then the note for the module that owns the task, then the outline of the files it names so the agent reads only the lines it needs, and the impact of any file it will change. The agent does not grep the whole repository first.
+- **Write path.** After the change the agent asks `sync` which notes need updating and how, re-reads the source, and updates each note. The update tool refuses a write unless the agent presents the hash it read, so a note can't be written against code the agent never fetched. Every agent edit leaves the note as `draft`, so a person has to review it again.
 - **It doesn't rely on memory.** Every tool response says what to do next. In the Claude Code plugin, a hook lists the covering notes the moment the agent edits a file, and another runs the check before the agent is allowed to finish.
 
 The exact scenario-by-scenario playbook (starting a task, changing a file, renaming one, adding a module, hitting a conflict) is in [SPEC.md](SPEC.md) section 12.5.
@@ -118,6 +121,17 @@ In the Claude Code plugin there is a single command, `/kb-init`. It checks the e
 ### 8. Handles your code carefully (on branch)
 
 Drafting is the only step that sends source to a model, and only the model you configure. Files that look like secrets (`.env*`, keys, credentials) are never read for drafting, a scan aborts a module if it finds credentials in what it was about to send, and `milepost init --dry-run` lists every file before any network call. Model names and keys come from environment variables or a git-ignored `.env` file, never from committed files.
+
+### 9. Keeps people in the loop (planned)
+
+The aim is that a developer who did not write a change can still see what it did. Notes are in the pull request, so a reviewer reads a few lines of prose about each module instead of a long diff. On top of that:
+
+- **Agent edits don't count as reviewed.** Only `milepost review`, run by a person, marks a note reviewed. An agent's edit flips it back to `draft`, and the flip shows in the diff.
+- **`milepost status`** ranks modules by how much their code has changed since a person last reviewed their note, and how many of those commits look agent-authored.
+- **`milepost report`** summarises a pull request: which notes changed, which are stale, which changed files nothing covers, and which changed files a note cites as an invariant or a gotcha. CI writes it to the job summary.
+- **A named owner.** A one-line `CODEOWNERS` entry makes a person or team the required reviewer for `kb/`.
+
+This shows people where to look. It doesn't find bugs or check that a note is true, and it can't make anyone read it.
 
 ## A walkthrough
 
@@ -154,7 +168,12 @@ written_at: 2026-10-07T09:12:00Z
 Generates hints and explanations for students and decides when to escalate to a teacher.
 
 ## Entry points
-- `backend/app/ai/tutor.py: answer_question()`: called by the chat route.
+- `backend/app/ai/tutor.py::answer_question`: called by the chat route.
+
+## File map
+- `tutor.py`: answers questions and decides when to escalate.
+- `client.py`: the only place a model provider is called.
+- `cache.py`: the hint cache.
 
 ## Owned data
 - The `hint_cache` table: written only by this module.
@@ -201,7 +220,8 @@ In short: code-graph and retrieval tools tell an agent *what the code is*. Milep
 
 ## What it does not do
 
-- **It doesn't understand your code.** It doesn't parse it to answer questions, search source, or build a call graph for agents. Its scanners only find import relationships to suggest module boundaries.
+- **It doesn't understand your code.** It doesn't answer questions about it, search source, or build a call graph. It parses files only to list their symbols, to find import relationships (for suggesting modules and for `impact`), and nothing deeper. `impact` is a static import graph and misses dynamic imports and framework wiring.
+- **It doesn't find bugs.** It helps a person see where an agent changed things. A wrong change still has to be caught by review and tests.
 - **It can't prove a note is true.** The hash shows a note was written against the current code (or that it wasn't). Whether the prose is *correct* depends on the review of the first draft and on the agents' later edits being reviewed in pull requests.
 - **It can't catch drift outside a note's file set.** If a rule in a note depends on a file the note doesn't list, a change there won't flag the note. Keeping `sources` honest is part of the review.
 - **Changes to covered files make a note stale, even trivial ones.** The fix is a re-read and a one-line update, but it is friction, and a fast-moving team may find the CI gate noisy. (Waivers and the "only fails if you touched covered files" rule exist for this.)
@@ -238,9 +258,11 @@ Built test-first. Milestones are defined in [TASKS.md](TASKS.md).
 | M6 | `milepost index` and `milepost search` | Done, on `main` |
 | M7 | Model drafting, `milepost init`, `milepost doctor`, `.env` support | Built, on the `m7-draft-and-init` branch (hooks step waits for M8) |
 | M8 | Review and rehash commands, git hooks, merge driver | Not started |
-| M9 | MCP server for agents | Not started |
+| M8a | Computed context: `outline`, `impact`, `sync`, the one-line purpose in the index | Specified, not started |
+| M8b | Human visibility: `status`, `report`, unreviewed-churn warning, CODEOWNERS | Specified, not started |
+| M9 | MCP server for agents (ten tools, model or agent drafting) | Not started |
 | M10 | Claude Code plugin: one `/kb-init` command, hooks, usage skill | Not started |
-| M11 | Pilot measurement and release decision | Not started |
+| M11 | Pilot: token cost, review effort, and the release decision | Not started |
 
 **Not usable end to end yet.** Today you can run `milepost scan` and `milepost check`. The commands that create and maintain notes (`init`, `draft`, `review`, `rehash`) and the agent integration are still ahead. **[USAGE.md](USAGE.md)** covers installation, what works now, the intended workflow, and a command reference.
 

@@ -220,6 +220,7 @@ Tests:
 - `test_doctor_when_provider_key_missing_then_exit_three_naming_variable`
 - `test_doctor_when_all_present_then_exit_zero`
 - `test_doctor_when_json_flag_then_output_parses`
+- `test_draft_prompt_when_loaded_then_has_l2_sections_in_order_including_file_map`
 - `test_load_env_when_dotenv_present_then_values_available`
 - `test_load_env_when_shell_value_set_then_shell_wins`
 - `test_load_env_when_no_dotenv_then_nothing_changes`
@@ -239,6 +240,8 @@ Files: `milepost/services/review.py`, `milepost/services/hooks.py`, `milepost/se
 
 Tests:
 - `test_review_when_draft_then_status_reviewed_and_hash_unchanged`
+- `test_review_when_run_then_records_reviewer_and_time_from_git_identity`
+- `test_review_when_git_identity_missing_then_exit_three`
 - `test_rehash_when_conflict_then_sets_hash_and_prints_manifest_diff`
 - `test_rehash_when_non_interactive_and_no_yes_then_exit_two`
 - `test_hooks_install_when_fresh_repo_then_hooks_written_with_marker`
@@ -253,6 +256,88 @@ Tests:
 Acceptance:
 - `init` also runs `milepost hooks install` (skipped by `--no-hooks`). M7 leaves that call out because hooks do not exist yet.
 - Integration test creates two branches in a temp repo, edits the same module note and source, merges, and asserts the documented outcome (`CONFLICT` sentinel or body markers, never a silently chosen hash).
+
+---
+
+## M8a. Computed context: outline, impact, sync, L1 purpose
+
+Revision of the design (SPEC sections 0, 8.2, 8.3). Per-file detail is computed from source on demand instead of stored in L3 notes. No MCP and no model: pure services plus thin CLI commands, so they can be tested and used before the server exists.
+
+Files: `milepost/services/outline.py`, `milepost/services/impact.py`, `milepost/services/sync.py`, changes to `milepost/services/render.py`, `milepost/config.py` (`verify`, `draft.mode`, `visibility`), `milepost/structure/*`, `tests/unit/test_outline.py`, `tests/unit/test_impact.py`, `tests/unit/test_sync.py`, `tests/unit/test_render.py`.
+
+Tests:
+- `test_outline_when_python_file_then_symbols_with_line_ranges`
+- `test_outline_when_class_with_methods_then_methods_listed_with_qualified_names`
+- `test_outline_when_typescript_file_then_functions_classes_and_exported_consts_listed`
+- `test_outline_when_file_edited_then_new_line_ranges_returned`
+- `test_outline_when_over_200_symbols_then_truncated_flag_set`
+- `test_outline_when_unsupported_extension_then_usage_error_with_line_count`
+- `test_outline_when_path_outside_repo_then_usage_error`
+- `test_impact_when_file_imported_then_importers_listed`
+- `test_impact_when_test_file_imports_target_then_listed_as_test_via_import`
+- `test_impact_when_test_name_contains_stem_then_listed_as_test_via_name`
+- `test_impact_when_over_50_importers_then_truncated_flag_set`
+- `test_impact_when_path_unknown_then_not_found`
+- `test_impact_when_module_has_verify_commands_then_returned`
+- `test_sync_when_file_modified_in_module_then_routes_to_l2_with_stale_flag`
+- `test_sync_when_file_added_then_routes_to_l2_file_map`
+- `test_sync_when_file_deleted_then_routes_to_l2_and_flags_orphan_l3`
+- `test_sync_when_file_covered_by_l3_then_l3_also_listed`
+- `test_sync_when_path_uncovered_then_uncovered_dir_guidance`
+- `test_sync_when_invariant_cites_changed_file_then_bullet_named`
+- `test_sync_when_citation_ambiguous_then_skipped`
+- `test_sync_when_nothing_changed_then_empty_and_says_so`
+- `test_sync_when_base_given_then_uses_range_not_working_tree`
+- `test_sync_when_module_has_verify_then_commands_included`
+- `test_render_index_when_note_has_purpose_then_row_has_first_sentence_cut_to_160`
+- `test_render_index_when_note_missing_then_row_says_no_note_yet`
+- `test_render_index_when_no_purpose_section_then_row_says_so`
+- `test_check_when_purpose_edited_and_index_not_rewritten_then_index_drift`
+- `test_config_when_module_verify_list_then_parsed`
+- `test_config_when_draft_mode_invalid_then_exit_two`
+- `test_config_when_agent_trailer_not_valid_regex_then_exit_two`
+- `test_cli_outline_impact_sync_when_json_flag_then_output_parses`
+
+Acceptance:
+- On the Kaihle checkout, `milepost outline` on the largest route file returns in under 200 ms and its symbol list matches `grep -nE "^(async )?def |^class "` for that file.
+- `milepost impact` on a Kaihle service file lists a known importer and a known test, checked by hand once and recorded in `PILOT.md`.
+- The existing INDEX fixtures and `milepost index` regenerate with the Purpose column and `check` passes.
+
+---
+
+## M8b. Human visibility: status, report, churn
+
+Revision of the design (SPEC sections 4.1, 6 step 9, 8.4, 10.2). Everything here is derived from git and the notes, read-only, and never fails a build.
+
+Files: `milepost/services/status.py`, `milepost/services/report.py`, changes to `milepost/services/check.py` and `milepost/core/notes.py` (`reviewed_by`, `reviewed_at`), `milepost/resources/ci-kb-check.yml`, `templates/CODEOWNERS.snippet`, `tests/unit/test_status.py`, `tests/unit/test_report.py`, `tests/integration/test_status_git.py`.
+
+Tests:
+- `test_status_when_note_reviewed_then_counts_lines_changed_since_baseline_commit`
+- `test_status_when_note_never_reviewed_then_marked_never_reviewed_and_listed_first`
+- `test_status_when_reviewed_note_later_edited_by_agent_then_baseline_is_last_reviewed_commit`
+- `test_status_when_history_squashed_then_baseline_still_found`
+- `test_status_when_commits_carry_agent_trailer_then_counted_as_agent_commits`
+- `test_status_when_trailer_configured_then_custom_pattern_used`
+- `test_status_when_json_flag_then_output_parses`
+- `test_check_when_reviewed_note_churn_over_threshold_then_warns_unreviewed_churn`
+- `test_check_when_note_never_reviewed_then_no_unreviewed_churn_warning`
+- `test_check_when_churn_over_threshold_then_still_exit_zero`
+- `test_notes_when_reviewed_by_and_at_present_then_round_trip_and_validate`
+- `test_report_when_note_changed_then_lists_it_with_status_before_and_after`
+- `test_report_when_reviewed_note_flipped_to_draft_then_flip_shown`
+- `test_report_when_changed_file_has_stale_note_then_listed`
+- `test_report_when_changed_file_uncovered_then_listed`
+- `test_report_when_invariant_cites_changed_file_then_bullet_quoted_with_note_id`
+- `test_report_when_nothing_needs_attention_then_says_so`
+- `test_report_when_format_json_then_parses`
+- `test_report_when_run_then_exit_zero_even_with_findings`
+- `test_ci_workflow_when_written_then_report_step_writes_to_step_summary`
+- `test_codeowners_snippet_when_present_then_names_kb_directory`
+
+Acceptance:
+- On the Kaihle pilot branch, `milepost status` runs in under 2 seconds and ranks the `api` module by unreviewed lines after a deliberate edit to one route file.
+- `milepost report --base main` on a branch where an agent edited `routes/db_tools.py` quotes the `db_tools.py` invariant or gotcha bullet if one cites it, and says so plainly if none does.
+- The CI template renders the report into the job summary on a pull request in a scratch repository.
 
 ---
 
@@ -283,16 +368,29 @@ Tests:
 - `test_kb_draft_module_when_written_then_frontmatter_set_by_milepost_and_status_draft`
 - `test_tool_response_when_any_tool_called_then_next_steps_present_and_deterministic`
 - `test_kb_file_when_notes_cover_path_then_next_steps_names_each_note_to_update`
-- `test_mcp_stdio_when_client_lists_tools_then_seven_tools_returned`
+- `test_kb_update_when_reviewed_note_updated_then_status_draft_and_review_fields_removed`
+- `test_kb_update_when_status_reviewed_requested_then_ignored_stays_draft`
+- `test_kb_module_when_called_then_includes_verify_commands`
+- `test_kb_outline_when_called_then_matches_outline_service`
+- `test_kb_impact_when_called_then_matches_impact_service`
+- `test_kb_sync_when_called_then_matches_sync_service_and_next_steps_present`
+- `test_kb_outline_when_over_cap_then_truncated_and_response_under_token_budget`
+- `test_kb_draft_module_when_mode_agent_then_returns_packet_and_calls_no_model`
+- `test_kb_draft_module_when_mode_agent_and_secret_in_sources_then_packet_refused_naming_file`
+- `test_kb_update_when_mode_agent_and_declared_module_has_no_note_then_creates_draft_l2`
+- `test_kb_update_when_mode_agent_and_module_not_declared_then_rejects`
+- `test_init_when_mode_agent_then_scaffolds_and_skips_drafting_with_instruction`
+- `test_mcp_stdio_when_client_lists_tools_then_ten_tools_returned`
 
 Acceptance:
-- A stdio integration test starts `milepost serve` as a subprocess, calls each tool, and checks responses against the schema in SPEC section 11.
+- A stdio integration test starts `milepost serve` as a subprocess, calls each of the ten tools, and checks responses against the schema in SPEC section 11.
+- Each tool's response, on the fixture KB, is under its token budget in SPEC section 14 (characters divided by 4).
 
 ---
 
 ## M10. Claude Code plugin
 
-Files: `plugin/` (from `templates/plugin/`), `milepost/services/hook.py`, `tests/integration/test_plugin_manifest.py`, `tests/unit/test_hook.py`, `tests/unit/test_playbook.py`.
+Files: `plugin/` (from `templates/plugin/`), `templates/AGENTS.md.snippet`, `milepost/services/hook.py`, `tests/integration/test_plugin_manifest.py`, `tests/unit/test_hook.py`, `tests/unit/test_playbook.py`.
 
 Tests:
 - `test_plugin_manifest_when_parsed_then_has_name_version_and_description`
@@ -301,9 +399,14 @@ Tests:
 - `test_plugin_commands_when_present_then_each_maps_to_existing_cli_command`
 - `test_plugin_commands_when_listed_then_only_kb_init_present`
 - `test_plugin_kb_init_command_when_parsed_then_names_doctor_scan_and_init_steps_in_order`
-- `test_plugin_hooks_when_parsed_then_post_edit_and_stop_hooks_pin_matching_version`
+- `test_plugin_hooks_when_parsed_then_session_start_post_edit_and_stop_hooks_pin_matching_version`
 - `test_playbook_when_skill_names_kb_tools_then_every_name_exists_in_mcp_server`
 - `test_playbook_when_spec_scenarios_listed_then_each_has_a_section_in_skill`
+- `test_hook_session_start_when_kb_present_then_returns_index_cut_to_3000_chars_and_playbook_reminder`
+- `test_hook_session_start_when_no_kb_then_prints_nothing`
+- `test_hook_session_start_when_milepost_errors_then_exits_zero_with_stderr_warning`
+- `test_agents_snippet_when_names_kb_tools_then_every_name_exists_in_mcp_server`
+- `test_playbook_when_skill_scenarios_listed_then_all_twelve_present`
 - `test_hook_post_edit_when_path_covered_then_returns_covering_notes_and_update_instruction`
 - `test_hook_post_edit_when_path_under_kb_dir_then_prints_nothing`
 - `test_hook_post_edit_when_path_in_uncovered_dir_then_names_uncovered_dir`
@@ -315,7 +418,7 @@ Tests:
 Acceptance:
 - Hook JSON field names, matcher syntax, and plugin hook file location are verified against the current Claude Code hooks documentation, and any difference from SPEC section 12.4 is fixed in the spec first.
 - Manual test: in a fresh fixture repo with the environment variables set, `/kb-init` alone, with one confirmation, ends with draft notes ready for `milepost review` and no other command needed.
-- Manual test: in a Claude Code session on a fixture repo, editing a covered file surfaces the covering notes, and ending the turn with a stale note is blocked once.
+- Manual test: in a Claude Code session on a fixture repo, the index appears at session start, editing a covered file surfaces the covering notes, and ending the turn with a stale note is blocked once.
 - Before release, the plugin layout is verified against the current Claude Code plugin documentation (not done in this spec).
 - Manual test: install the plugin in a Claude Code session on a fixture repo; `kb_overview` returns the index; `kb_update` writes a note that passes `milepost check`.
 
@@ -325,8 +428,11 @@ Acceptance:
 
 Work:
 - Repeat the measurement (PROPOSAL.md section 7 step 6) on the same Kaihle repository and the same five frozen prompts as the M5a baseline.
+- Measure review effort, the second goal (SPEC 0.1). Proposed method, not yet agreed: take three agent-written pull requests from the pilot. Someone who did not write them writes five factual questions each from the code diff (what behavior changed, which module, what invariant is touched). A reviewer answers using only the note diff and `milepost report`, timed; another answers from the code diff alone. Compare correct answers and time.
+- Record which tools agents actually called per run (from the logs), since a tool never called saves nothing.
 - Publish `0.1.0` to PyPI only if the measurement passes. Otherwise stop and record the result.
 
 Acceptance:
-- Baseline (from M5a) and post-milepost numbers recorded side by side. Go/no-go decision written into `PILOT.md` in the milepost repository.
+- Baseline (from M5a) and post-milepost numbers recorded side by side, plus the review-effort comparison and the per-run tool-call counts. Go/no-go decision written into `PILOT.md` in the milepost repository.
+- Pass rule: agreed with the maintainer before the run and written in `PILOT.md` first. A proposal to start from: at least 30% fewer total fresh tokens after the first turn, and the review-effort comparison at least 80% as many correct answers in at most half the time. Neither number is agreed yet.
 - README includes quickstart, the decision record, and the known limitations from SPEC section 16.

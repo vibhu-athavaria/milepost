@@ -1,0 +1,21 @@
+## Codebase knowledge base (milepost)
+
+This repository has a knowledge base in `kb/`. Use it before searching the code. Your agent must be able to start the milepost MCP server (`uvx milepost serve`) for the `kb_*` tools; otherwise use the `milepost` commands (`outline`, `impact`, `sync`, `check`) from a terminal.
+
+Before a task:
+1. Call `kb_overview` to see the module index.
+2. Call `kb_module` for the module that owns the task. Read Invariants and Gotchas, and note its `verify` commands.
+3. Call `kb_outline` for each file you need and read only the line ranges you need. Call `kb_impact` for each file you will change (who imports it, which tests cover it). Do not grep the whole repository first.
+
+After a task:
+1. Run the module's `verify` commands.
+2. Call `kb_sync`. It lists every note to update and how. Call `kb_update` for each, passing the `source_hash_now` from `kb_module` or `kb_file` as `read_hash`. Keep edits small. Do not change `sources` or `id`.
+3. Call `kb_check`; it must pass. Never edit `source_hash` by hand. Never write a `KB-Waive` trailer yourself.
+
+Your note edits are saved as `status: draft`. Tell the user which notes changed and that a person must run `milepost review <id>`. Only a person marks a note reviewed.
+
+New module: add `[modules.<id>]` to `milepost.toml`, call `kb_draft_module` (in agent mode, write the note from the packet it returns and submit it with `kb_update`), then ask a person to review it.
+
+Write an L3 or L4 note only when a file or passage has something that does not fit in the module note. Cite file paths in backticks in Invariants and Gotchas.
+
+Notes with `status: draft` are unreviewed. Say so when a decision depends on one.

@@ -172,7 +172,12 @@ Reminders do not depend on the agent remembering: each tool response says what t
 | `milepost search QUERY [--level L] [--k N] [--json]` | Search the notes (keyword and vector) | Branch |
 | `milepost init [--dry-run] [--modules ID,...] [--yes] [--force-config]` | Scaffold the knowledge base, declare the named modules, draft their notes, build the index | Works (git hooks are added in a later milestone) |
 | `milepost draft ID [--force]` | Draft or redraft one module note | Works |
-| `milepost review ID` | Mark a draft note as reviewed | Planned |
+| `milepost review ID` | Mark a draft note as reviewed (records who and when) | Planned |
+| `milepost outline PATH` | Symbols and line ranges of one file, computed now | Planned |
+| `milepost impact PATH` | Importers and likely tests of one file, computed now | Planned |
+| `milepost sync [--base REF]` | What changed and which notes to update, and how | Planned |
+| `milepost status` | Per module: review state and unreviewed churn | Planned |
+| `milepost report --base REF` | Review aid for a pull request | Planned |
 | `milepost rehash ID` | Recompute a note's hash after review | Planned |
 | `milepost hooks install\|uninstall` | Manage git hooks and the merge driver | Planned |
 | `milepost merge-driver` | Git merge driver for note files | Planned |

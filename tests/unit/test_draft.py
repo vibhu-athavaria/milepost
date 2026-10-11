@@ -8,7 +8,12 @@ from milepost.config import Config, load_config
 from milepost.core.notes import read_note
 from milepost.errors import ProviderError, SecretDetected, UsageError
 from milepost.llm.client import complete_with_retries
-from milepost.services.draft import collect_sources, draft_modules, scan_for_secrets
+from milepost.services.draft import (
+    PROMPT_PATH,
+    collect_sources,
+    draft_modules,
+    scan_for_secrets,
+)
 
 BODY = "## Purpose\n\nBills customers.\n\n## Entry points\n\n- app/billing/api.py\n"
 NOW = "2026-10-10T09:00:00Z"
@@ -244,3 +249,18 @@ def test_draft_when_prompt_built_then_includes_related_and_source_text(tmp_path:
     _, system, user = client.calls[0]
     assert "Related modules" in system and "accounts" in system
     assert "def charge(card)" in user
+
+
+def test_draft_prompt_when_loaded_then_has_l2_sections_in_order_including_file_map() -> None:
+    text = PROMPT_PATH.read_text(encoding="utf-8")
+    headings = [line for line in text.splitlines() if line.startswith("## ")]
+
+    assert headings == [
+        "## Purpose",
+        "## Entry points",
+        "## File map",
+        "## Owned data",
+        "## Invariants",
+        "## Gotchas",
+        "## Related modules",
+    ]
