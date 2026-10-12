@@ -1,0 +1,9 @@
+# Make a named person or team the required reviewer for the knowledge base.
+# Add to .github/CODEOWNERS (or CODEOWNERS) and turn on "Require review from Code Owners"
+# in branch protection. milepost cannot know your team names, so `milepost init` does not write this.
+#
+# An agent edit to a note sets it back to `status: draft`; only a person running
+# `milepost review` sets `reviewed`. This line makes that person a required approver.
+
+/kb/            @your-org/code-owners
+/milepost.toml  @your-org/code-owners

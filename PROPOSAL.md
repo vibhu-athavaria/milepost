@@ -1,5 +1,7 @@
 # Proposal: Agent-Driven Codebase Knowledge Base (Milepost)
 
+> **Revision (October 2026).** The design now has two stated goals: cheaper, better agent context, and human visibility of agent-written changes. Per-file detail is computed on demand rather than stored as L3 notes, and visibility features (`status`, `report`, review rules) were added. The current design is in SPEC.md sections 0, 0.1, 8.3 and 8.4. Where this document and SPEC.md differ, SPEC.md wins.
+
 Written for: maintainers and engineers who would decide whether to fund and build this.
 
 ## 1. Problem

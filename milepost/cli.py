@@ -2,20 +2,29 @@
 
 import functools
 import json
+import os
+import sys
+import time
 from collections.abc import Callable
 from dataclasses import asdict
+from datetime import UTC, datetime
 from importlib.metadata import version
 from pathlib import Path
 from typing import Annotated, NoReturn
 
 import typer
 
-from milepost.config import Config, load_config
+from milepost.config import Config, Index, load_config, resolve_model
 from milepost.embeddings import FastembedEmbedder
+from milepost.env import load_env
 from milepost.errors import MilepostError, UsageError
+from milepost.llm.client import LiteLlmClient, LlmClient
 from milepost.services.check import run_check
 from milepost.services.coverage import CONFIG_NAME, undeclared_candidates
+from milepost.services.doctor import run_doctor
+from milepost.services.draft import draft_modules
 from milepost.services.index import run_index
+from milepost.services.init import InitReport, run_init
 from milepost.services.search import search as run_search
 
 app = typer.Typer(
@@ -56,6 +65,21 @@ def _embedder(config: Config) -> FastembedEmbedder:
     return FastembedEmbedder(config.index.embedding_model, config.index.embedding_dim)
 
 
+def _embedder_for(root: Path) -> FastembedEmbedder:
+    """Embedder for init, which may run before milepost.toml exists: use the default model."""
+    config_path = root / CONFIG_NAME
+    index = load_config(config_path).index if config_path.is_file() else Index()
+    return FastembedEmbedder(index.embedding_model, index.embedding_dim)
+
+
+def _llm_client() -> LlmClient:
+    return LiteLlmClient()
+
+
+def _now() -> str:
+    return datetime.now(UTC).strftime("%Y-%m-%dT%H:%M:%SZ")
+
+
 def _repo_root(repo: Path | None) -> Path:
     if repo is not None:
         return repo
@@ -93,9 +117,71 @@ def main(
 
 
 @app.command()
-def init() -> None:
-    """Scaffold the knowledge base and draft module notes."""
-    _not_implemented("init")
+@handle_errors
+def init(
+    repo: RepoOption = None,
+    modules: Annotated[
+        str | None, typer.Option("--modules", help="Comma-separated candidate ids to declare.")
+    ] = None,
+    dry_run: Annotated[
+        bool, typer.Option("--dry-run", help="List what would be sent; write nothing.")
+    ] = False,
+    yes: Annotated[bool, typer.Option("--yes", help="Do not ask for confirmation.")] = False,
+    force_config: Annotated[
+        bool, typer.Option("--force-config", help="Replace an existing milepost.toml.")
+    ] = False,
+    no_hooks: Annotated[bool, typer.Option("--no-hooks", help="Do not install git hooks.")] = False,
+) -> None:
+    """Scaffold the knowledge base, declare modules, and draft their notes."""
+    root = _repo_root(repo)
+    load_env(root)
+    wanted = [m.strip() for m in modules.split(",") if m.strip()] if modules else None
+
+    def run(dry: bool) -> InitReport:
+        return run_init(
+            root,
+            modules=wanted,
+            dry_run=dry,
+            force_config=force_config,
+            client=_llm_client(),
+            embedder=_embedder_for(root),
+            environ=os.environ,
+            now=_now(),
+            sleep=time.sleep,
+        )
+
+    if dry_run or not yes:
+        plan = run(True)
+        for module_id, files in plan.planned_files.items():
+            typer.echo(f"{module_id}: would send {len(files)} file(s)")
+            for path in files:
+                typer.echo(f"  {path}")
+        for module_id, outlined in plan.outline_only.items():
+            typer.echo(
+                f"warning: {module_id}: {len(outlined)} file(s) exceed draft.max_source_bytes and "
+                "would be sent as outline only; raise it in milepost.toml to cover them"
+            )
+        typer.echo(f"estimated tokens: {plan.estimated_tokens}")
+        if dry_run:
+            return
+        if not sys.stdin.isatty():
+            raise UsageError("not an interactive shell; rerun with --yes to confirm")
+        if not typer.confirm("Send these files to the configured model and write the notes?"):
+            raise typer.Exit(code=1)
+    report = run(False)
+    for path in report.created:
+        typer.echo(f"created {path}")
+    for module_id in report.drafted:
+        typer.echo(f"drafted kb/modules/{module_id}.md (status: draft)")
+    if report.drafted:
+        typer.echo(
+            "Next: read each draft, run `milepost review <id>` for each one that is right, "
+            "then commit milepost.toml, kb/, .gitattributes and the CI workflow."
+        )
+    elif not report.declared:
+        typer.echo(
+            "No modules declared. Run `milepost scan`, then `milepost init --modules <ids>`."
+        )
 
 
 @app.command()
@@ -153,9 +239,20 @@ def index(
 
 
 @app.command()
-def draft() -> None:
-    """Draft a module or file note."""
-    _not_implemented("draft")
+@handle_errors
+def draft(
+    module_id: Annotated[str, typer.Argument(help="Module id to draft.")],
+    repo: RepoOption = None,
+    force: Annotated[bool, typer.Option("--force", help="Overwrite a reviewed note.")] = False,
+) -> None:
+    """Draft one module's L2 note (status: draft)."""
+    root = _repo_root(repo)
+    load_env(root)
+    config = load_config(root / CONFIG_NAME)
+    model = resolve_model(config, os.environ)
+    draft_modules(root, config, [module_id], _llm_client(), model, force, _now(), time.sleep)
+    typer.echo(f"drafted kb/modules/{module_id}.md (status: draft)")
+    typer.echo(f"Next: read it, then run `milepost review {module_id}` if it is right.")
 
 
 @app.command()
@@ -204,9 +301,19 @@ def serve() -> None:
 
 
 @app.command()
-def doctor() -> None:
+def doctor(repo: RepoOption = None, json_output: JsonOption = False) -> None:
     """Report the environment milepost needs."""
-    _not_implemented("doctor")
+    root = _repo_root(repo)
+    load_env(root)
+    report = run_doctor(root, os.environ)
+    if json_output:
+        payload = [{"name": c.name, "status": c.status, "detail": c.detail} for c in report.checks]
+        typer.echo(json.dumps({"ok": report.exit_code == 0, "checks": payload}, indent=2))
+    else:
+        for check in report.checks:
+            typer.echo(f"{check.status:<4} {check.name}: {check.detail}")
+    if report.exit_code:
+        raise typer.Exit(code=report.exit_code)
 
 
 @app.command()

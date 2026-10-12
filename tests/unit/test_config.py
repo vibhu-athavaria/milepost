@@ -3,7 +3,7 @@ from pathlib import Path
 import pytest
 
 from milepost.config import Config, load_config, resolve_model
-from milepost.errors import ConfigNotFound, InvalidConfig
+from milepost.errors import ConfigNotFound, EnvironmentProblem, InvalidConfig
 
 FIXTURES = Path(__file__).parent.parent / "fixtures" / "config"
 
@@ -148,7 +148,7 @@ def test_load_config_when_missing_file_then_raises_config_not_found(tmp_path: Pa
 def test_resolve_model_when_env_unset_then_raises_with_variable_name(tmp_path: Path) -> None:
     config: Config = load_config(write_config(tmp_path, MINIMAL))
 
-    with pytest.raises(InvalidConfig) as error:
+    with pytest.raises(EnvironmentProblem) as error:
         resolve_model(config, {})
 
     assert "MILEPOST_MODEL" in str(error.value)
