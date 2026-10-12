@@ -47,6 +47,7 @@ class Module(_Model):
     sources: Annotated[list[RelativeGlob], Field(min_length=1)]
     related: list[str] = []
     title: str | None = None
+    verify: list[str] = []
 
 
 class Structure(_Model):
@@ -63,6 +64,7 @@ class Index(_Model):
 
 
 class Draft(_Model):
+    mode: Literal["model", "agent"] = "model"
     provider_model: str = "${MILEPOST_MODEL}"
     max_source_bytes: PositiveInt = 200000
     exclude: list[str] = ["**/.env*", "**/*secret*", "**/*.pem", "**/*.key", "**/credentials*"]
@@ -73,6 +75,22 @@ class Check(_Model):
     max_detail_notes: NonNegativeInt = 50
 
 
+def _valid_regex(value: str) -> str:
+    try:
+        re.compile(value)
+    except re.error as error:
+        raise ValueError(f"not a valid regular expression: {error}") from error
+    return value
+
+
+class Visibility(_Model):
+    agent_trailers: list[Annotated[str, AfterValidator(_valid_regex)]] = [
+        "Co-Authored-By: Claude",
+        "Generated with",
+    ]
+    churn_warn_lines: NonNegativeInt = 1000
+
+
 class Config(_Model):
     project: Project
     modules: dict[ModuleId, Module] = {}
@@ -80,6 +98,7 @@ class Config(_Model):
     index: Index = Index()
     draft: Draft = Draft()
     check: Check = Check()
+    visibility: Visibility = Visibility()
 
     @model_validator(mode="after")
     def _default_titles(self) -> "Config":

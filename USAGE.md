@@ -173,9 +173,9 @@ Reminders do not depend on the agent remembering: each tool response says what t
 | `milepost init [--dry-run] [--modules ID,...] [--yes] [--force-config]` | Scaffold the knowledge base, declare the named modules, draft their notes, build the index | Works (also installs the git hooks unless `--no-hooks`) |
 | `milepost draft ID [--force]` | Draft or redraft one module note | Works |
 | `milepost review ID` | Mark a note as reviewed by you (records who and when) | Works |
-| `milepost outline PATH` | Symbols and line ranges of one file, computed now | Planned |
-| `milepost impact PATH` | Importers and likely tests of one file, computed now | Planned |
-| `milepost sync [--base REF]` | What changed and which notes to update, and how | Planned |
+| `milepost outline PATH [--json]` | Symbols and line ranges of one file, computed now | Works |
+| `milepost impact PATH [--json]` | Importers and likely tests of one file, computed now | Works |
+| `milepost sync [--base REF] [--json]` | What changed and which notes to update, and how | Works |
 | `milepost status` | Per module: review state and unreviewed churn | Planned |
 | `milepost report --base REF` | Review aid for a pull request | Planned |
 | `milepost rehash ID [--yes]` | Record the current source hash on a note whose prose you have read | Works |

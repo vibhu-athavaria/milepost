@@ -307,8 +307,8 @@ Tests:
 - `test_cli_outline_impact_sync_when_json_flag_then_output_parses`
 
 Acceptance:
-- On the Kaihle checkout, `milepost outline` on the largest route file returns in under 200 ms and its symbol list matches `grep -nE "^(async )?def |^class "` for that file.
-- `milepost impact` on a Kaihle service file lists a known importer and a known test, checked by hand once and recorded in `PILOT.md`.
+- On the Kaihle checkout, `milepost outline` on the largest route file (1,779 lines) lists the same 31 top-level definitions as `grep -nE "^(async )?def |^class "`. Whole-command time including `uv` startup was 1.1 s; the parse itself is not separately timed, so the 200 ms target in SPEC section 14 is not yet shown.
+- `milepost impact` on a Kaihle service file lists its importers and test, checked by hand against `grep` (done for `analytics_service.py`: 2 route importers and 1 test; two other grep hits were docstring mentions, correctly not listed).
 - The existing INDEX fixtures and `milepost index` regenerate with the Purpose column and `check` passes.
 
 ---

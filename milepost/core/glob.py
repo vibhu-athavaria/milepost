@@ -18,3 +18,8 @@ def expand_sources(root: Path, sources: list[str], ignore: list[str]) -> list[st
     if ignore:
         matched = {path for path in matched if not glob.globmatch(path, ignore, flags=FLAGS)}
     return sorted(matched)
+
+
+def matches_any(path: str, patterns: list[str]) -> bool:
+    """True when `path` (a string, which need not exist) matches any of the glob patterns."""
+    return bool(patterns) and bool(glob.globmatch(path, patterns, flags=FLAGS))

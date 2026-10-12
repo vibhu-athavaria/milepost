@@ -139,3 +139,30 @@ def validate_note(note: Note, rel_path: str) -> list[Finding]:
     if not note.body.strip():
         findings.append(failure("EMPTY_BODY", "note body is empty"))
     return findings
+
+
+_HEADING = re.compile(r"^##[ \t]+(.+?)[ \t]*$", re.MULTILINE)
+PURPOSE_MAX = 160
+
+
+def section(body: str, heading: str) -> str | None:
+    """Text of the `## heading` section (up to the next `##` heading), or None if absent."""
+    matches = list(_HEADING.finditer(body))
+    for index, match in enumerate(matches):
+        if match.group(1).strip().lower() == heading.lower():
+            end = matches[index + 1].start() if index + 1 < len(matches) else len(body)
+            return body[match.end() : end]
+    return None
+
+
+def purpose_line(body: str) -> str | None:
+    """First sentence of the Purpose section, whitespace collapsed, cut to PURPOSE_MAX."""
+    text = section(body, "Purpose")
+    if text is None:
+        return None
+    flat = " ".join(text.split()).replace("|", "/")
+    if not flat:
+        return None
+    sentence = re.match(r".+?[.!?](?=\s|$)", flat)
+    result = sentence.group(0) if sentence else flat
+    return result if len(result) <= PURPOSE_MAX else result[: PURPOSE_MAX - 3].rstrip() + "..."

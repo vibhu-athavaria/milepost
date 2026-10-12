@@ -21,6 +21,9 @@ EXPECTED_COMMANDS = [
     "doctor",
     "scan",
     "hook",
+    "outline",
+    "impact",
+    "sync",
 ]
 
 

@@ -158,3 +158,49 @@ def test_resolve_model_when_env_set_then_returns_value(tmp_path: Path) -> None:
     config = load_config(write_config(tmp_path, MINIMAL))
 
     assert resolve_model(config, {"MILEPOST_MODEL": "some-model"}) == "some-model"
+
+
+def test_config_when_module_verify_list_then_parsed(tmp_path: Path) -> None:
+    text = MINIMAL + 'verify = ["pytest app/tests/services", "ruff check app/services"]\n'
+
+    config = load_config(write_config(tmp_path, text))
+
+    assert config.modules["services"].verify == [
+        "pytest app/tests/services",
+        "ruff check app/services",
+    ]
+
+
+def test_config_when_no_verify_then_empty_list(tmp_path: Path) -> None:
+    assert load_config(write_config(tmp_path, MINIMAL)).modules["services"].verify == []
+
+
+def test_config_when_draft_mode_invalid_then_exit_two(tmp_path: Path) -> None:
+    with pytest.raises(InvalidConfig) as error:
+        load_config(write_config(tmp_path, MINIMAL + '\n[draft]\nmode = "robot"\n'))
+
+    assert error.value.exit_code == 2
+    assert error.value.field_path == "draft.mode"
+
+
+def test_config_when_draft_mode_agent_then_accepted(tmp_path: Path) -> None:
+    config = load_config(write_config(tmp_path, MINIMAL + '\n[draft]\nmode = "agent"\n'))
+
+    assert config.draft.mode == "agent"
+
+
+def test_config_when_agent_trailer_not_valid_regex_then_exit_two(tmp_path: Path) -> None:
+    text = MINIMAL + '\n[visibility]\nagent_trailers = ["Co-Authored-By: (Claude"]\n'
+
+    with pytest.raises(InvalidConfig) as error:
+        load_config(write_config(tmp_path, text))
+
+    assert error.value.exit_code == 2
+    assert error.value.field_path.startswith("visibility.agent_trailers")
+
+
+def test_config_when_visibility_defaults_then_trailers_and_threshold_set(tmp_path: Path) -> None:
+    config = load_config(write_config(tmp_path, MINIMAL))
+
+    assert config.visibility.churn_warn_lines == 1000
+    assert "Co-Authored-By: Claude" in config.visibility.agent_trailers

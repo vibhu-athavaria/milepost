@@ -60,3 +60,24 @@ def files_at(root: Path, ref: str, directory: str) -> list[str]:
         for line in _git(root, "ls-tree", "-r", "--name-only", ref, "--", directory).splitlines()
         if line
     ]
+
+
+def working_tree_changes(root: Path) -> Changes:
+    """Files changed against HEAD (staged or not) plus untracked files that are not ignored."""
+    changes = Changes()
+    output = _git(root, "diff", "--name-status", "--no-renames", "-z", "HEAD")
+    tokens = output.split("\x00")
+    for status, path in zip(tokens[0::2], tokens[1::2], strict=False):
+        bucket = {"A": changes.added, "D": changes.deleted}.get(status[:1], changes.modified)
+        bucket.add(path)
+    untracked = _git(root, "ls-files", "--others", "--exclude-standard", "-z")
+    changes.added.update(path for path in untracked.split("\x00") if path)
+    return changes
+
+
+def repo_files(root: Path) -> list[str]:
+    """Tracked files plus untracked files that git does not ignore, sorted, existing on disk."""
+    tracked = _git(root, "ls-files", "-z")
+    untracked = _git(root, "ls-files", "--others", "--exclude-standard", "-z")
+    names = {name for name in (tracked + "\x00" + untracked).split("\x00") if name}
+    return sorted(name for name in names if (root / name).is_file())
