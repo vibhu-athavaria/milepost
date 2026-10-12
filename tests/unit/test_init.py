@@ -288,3 +288,32 @@ def test_init_when_dry_run_and_module_over_budget_then_reports_outline_only_file
     report = init(repo, dry_run=True)
 
     assert report.outline_only == {"billing": ["app/billing/more.py"]}
+
+
+def test_init_when_hooks_requested_then_hooks_installed(tmp_path: Path) -> None:
+    repo = make_repo(tmp_path)
+
+    report = run_init(
+        repo.root,
+        modules=None,
+        dry_run=False,
+        force_config=False,
+        client=FakeClient(),
+        embedder=HashEmbedder(),
+        environ=ENV,
+        now="2026-10-12T09:00:00Z",
+        sleep=no_sleep,
+        install_hooks_flag=True,
+    )
+
+    assert report.hooks is not None and "pre-commit" in report.hooks.written
+    assert (repo.root / ".git/hooks/pre-commit").is_file()
+
+
+def test_init_when_hooks_not_requested_then_no_hooks_written(tmp_path: Path) -> None:
+    repo = make_repo(tmp_path)
+
+    report = init(repo)
+
+    assert report.hooks is None
+    assert not (repo.root / ".git/hooks/pre-commit").exists()

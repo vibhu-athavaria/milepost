@@ -170,17 +170,17 @@ Reminders do not depend on the agent remembering: each tool response says what t
 | `milepost check [--repo P] [--ci --base REF] [--format text\|json]` | Validate notes and detect staleness | Works |
 | `milepost index [--rebuild]` | Write `INDEX.md` and build or update the search index | Branch |
 | `milepost search QUERY [--level L] [--k N] [--json]` | Search the notes (keyword and vector) | Branch |
-| `milepost init [--dry-run] [--modules ID,...] [--yes] [--force-config]` | Scaffold the knowledge base, declare the named modules, draft their notes, build the index | Works (git hooks are added in a later milestone) |
+| `milepost init [--dry-run] [--modules ID,...] [--yes] [--force-config]` | Scaffold the knowledge base, declare the named modules, draft their notes, build the index | Works (also installs the git hooks unless `--no-hooks`) |
 | `milepost draft ID [--force]` | Draft or redraft one module note | Works |
-| `milepost review ID` | Mark a draft note as reviewed (records who and when) | Planned |
+| `milepost review ID` | Mark a note as reviewed by you (records who and when) | Works |
 | `milepost outline PATH` | Symbols and line ranges of one file, computed now | Planned |
 | `milepost impact PATH` | Importers and likely tests of one file, computed now | Planned |
 | `milepost sync [--base REF]` | What changed and which notes to update, and how | Planned |
 | `milepost status` | Per module: review state and unreviewed churn | Planned |
 | `milepost report --base REF` | Review aid for a pull request | Planned |
-| `milepost rehash ID` | Recompute a note's hash after review | Planned |
-| `milepost hooks install\|uninstall` | Manage git hooks and the merge driver | Planned |
-| `milepost merge-driver` | Git merge driver for note files | Planned |
+| `milepost rehash ID [--yes]` | Record the current source hash on a note whose prose you have read | Works |
+| `milepost hooks install\|uninstall` | Manage git hooks and the merge driver | Works |
+| `milepost merge-driver` | Git merge driver for note files (called by git, not by you) | Works |
 | `milepost serve` | Run the MCP server for agents | Planned |
 | `milepost hook post-edit\|stop` | Called by the Claude Code plugin hooks | Planned |
 | `milepost doctor [--json]` | Report the environment milepost needs | Works |

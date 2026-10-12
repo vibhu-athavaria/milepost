@@ -23,8 +23,11 @@ from milepost.services.check import run_check
 from milepost.services.coverage import CONFIG_NAME, undeclared_candidates
 from milepost.services.doctor import run_doctor
 from milepost.services.draft import draft_modules
+from milepost.services.hooks import install_hooks, uninstall_hooks
 from milepost.services.index import run_index
 from milepost.services.init import InitReport, run_init
+from milepost.services.merge_driver import run_merge_driver
+from milepost.services.review import plan_rehash, rehash_note, review_note
 from milepost.services.search import search as run_search
 
 app = typer.Typer(
@@ -148,6 +151,7 @@ def init(
             environ=os.environ,
             now=_now(),
             sleep=time.sleep,
+            install_hooks_flag=not no_hooks,
         )
 
     if dry_run or not yes:
@@ -171,6 +175,12 @@ def init(
     report = run(False)
     for path in report.created:
         typer.echo(f"created {path}")
+    if report.hooks is not None:
+        if report.hooks.written:
+            typer.echo(f"installed git hooks: {', '.join(report.hooks.written)}")
+        else:
+            typer.echo(f"git hooks not installed: {report.hooks.skipped_reason}")
+            typer.echo(report.hooks.snippet)
     for module_id in report.drafted:
         typer.echo(f"drafted kb/modules/{module_id}.md (status: draft)")
     if report.drafted:
@@ -256,15 +266,44 @@ def draft(
 
 
 @app.command()
-def review() -> None:
-    """Mark a draft note as reviewed."""
-    _not_implemented("review")
+@handle_errors
+def review(
+    note_id: Annotated[str, typer.Argument(help="Note id, for example module/services.")],
+    repo: RepoOption = None,
+) -> None:
+    """Mark a note as reviewed by you, after you have read it."""
+    root = _repo_root(repo)
+    config = load_config(root / CONFIG_NAME)
+    review_note(root, config, note_id, _now())
+    typer.echo(f"{note_id} marked reviewed")
+    typer.echo("Next: commit the note and kb/INDEX.md.")
 
 
 @app.command()
-def rehash() -> None:
-    """Recompute the source hash of a note after review."""
-    _not_implemented("rehash")
+@handle_errors
+def rehash(
+    note_id: Annotated[str, typer.Argument(help="Note id, for example module/services.")],
+    repo: RepoOption = None,
+    yes: Annotated[bool, typer.Option("--yes", help="Do not ask for confirmation.")] = False,
+) -> None:
+    """Record the current source hash on a note whose prose you have just read."""
+    root = _repo_root(repo)
+    config = load_config(root / CONFIG_NAME)
+    plan = plan_rehash(root, config, note_id)
+    typer.echo(f"old hash: {plan.old_hash}")
+    typer.echo(f"new hash: {plan.new_hash}")
+    typer.echo(
+        "sources now (path, short digest; the old manifest cannot be recovered from a hash):"
+    )
+    for path, digest in plan.manifest.items():
+        typer.echo(f"  {path}  {digest[:12]}")
+    if not yes:
+        if not sys.stdin.isatty():
+            raise UsageError("not an interactive shell; rerun with --yes to confirm")
+        if not typer.confirm("Does the note's prose match these sources?"):
+            raise typer.Exit(code=1)
+    rehash_note(root, config, note_id)
+    typer.echo(f"{note_id} rehashed")
 
 
 @app.command()
@@ -289,9 +328,16 @@ def search(
 
 
 @app.command(name="merge-driver")
-def merge_driver() -> None:
+def merge_driver(
+    base: Annotated[Path, typer.Argument(help="%O: the common ancestor version.")],
+    ours: Annotated[Path, typer.Argument(help="%A: our version; the result is written here.")],
+    theirs: Annotated[Path, typer.Argument(help="%B: their version.")],
+    name: Annotated[str, typer.Argument(help="%P: the path of the file being merged.")],
+) -> None:
     """Git merge driver for kb notes."""
-    _not_implemented("merge-driver")
+    code = run_merge_driver(base, ours, theirs, name)
+    if code:
+        raise typer.Exit(code=code)
 
 
 @app.command()
@@ -330,15 +376,24 @@ def scan(repo: RepoOption = None, json_output: JsonOption = False) -> None:
 
 
 @hooks_app.command("install")
-def hooks_install() -> None:
+@handle_errors
+def hooks_install(repo: RepoOption = None) -> None:
     """Install git hooks and the merge driver."""
-    _not_implemented("hooks install")
+    report = install_hooks(_repo_root(repo))
+    if report.written:
+        typer.echo(f"installed git hooks: {', '.join(report.written)}")
+        typer.echo("merge driver configured; commit .gitattributes")
+        return
+    typer.echo(f"git hooks not installed: {report.skipped_reason}")
+    typer.echo(report.snippet)
 
 
 @hooks_app.command("uninstall")
-def hooks_uninstall() -> None:
+@handle_errors
+def hooks_uninstall(repo: RepoOption = None) -> None:
     """Remove hooks installed by milepost."""
-    _not_implemented("hooks uninstall")
+    removed = uninstall_hooks(_repo_root(repo))
+    typer.echo(f"removed: {', '.join(removed)}" if removed else "no milepost hooks found")
 
 
 @hook_app.command("post-edit")

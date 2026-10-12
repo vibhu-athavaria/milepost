@@ -14,11 +14,11 @@ from milepost.errors import EnvironmentProblem, UsageError
 from milepost.llm.client import LlmClient
 from milepost.services.coverage import CONFIG_NAME, uncovered_candidates, undeclared_candidates
 from milepost.services.draft import collect_sources, draft_modules
+from milepost.services.hooks import GITATTRIBUTES_LINE, HooksReport, install_hooks
 from milepost.services.index import run_index
 from milepost.structure.candidates import Candidate
 
 GITIGNORE_LINES = ["kb/.index/", "kb/.progress.json", ".env"]
-GITATTRIBUTES_LINE = "kb/**/*.md merge=milepost"
 WORKFLOW_PATH = ".github/workflows/milepost.yml"
 WORKFLOW_TEMPLATE = Path(__file__).resolve().parent.parent / "resources" / "ci-kb-check.yml"
 
@@ -33,6 +33,7 @@ class InitReport:
     outline_only: dict[str, list[str]] = field(default_factory=dict)
     estimated_tokens: int = 0
     indexed: int = 0
+    hooks: HooksReport | None = None
 
 
 def _require_git_repo(root: Path) -> None:
@@ -145,6 +146,7 @@ def run_init(
     environ: Mapping[str, str],
     now: str,
     sleep: Callable[[float], None],
+    install_hooks_flag: bool = False,
 ) -> InitReport:
     _require_git_repo(root)
     config, newly, suggested, config_exists = _plan_config(root, modules, force_config)
@@ -184,6 +186,9 @@ def run_init(
         workflow.parent.mkdir(parents=True, exist_ok=True)
         workflow.write_text(_workflow_text())
         report.created.append(WORKFLOW_PATH)
+
+    if install_hooks_flag:
+        report.hooks = install_hooks(root)
 
     final = load_config(config_path)
     if to_draft:

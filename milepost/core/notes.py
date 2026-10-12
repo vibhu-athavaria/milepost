@@ -21,6 +21,8 @@ KEY_ORDER = [
     "related",
     "written_by",
     "written_at",
+    "reviewed_by",
+    "reviewed_at",
 ]
 BASE_KEYS = ["kb_schema", "id", "level", "title", "status", "written_by", "written_at"]
 HASHED_KEYS = ["sources", "source_hash"]
@@ -78,6 +80,15 @@ def render_note(note: Note) -> str:
 def write_note(note: Note, path: Path) -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
     path.write_bytes(render_note(note).encode("utf-8"))
+
+
+def note_path_for_id(kb_dir: Path, note_id: str) -> Path | None:
+    """File that holds note `note_id`, or None if the id has no known prefix."""
+    prefix, _, name = note_id.partition("/")
+    for directory, id_prefix in ID_PREFIX_BY_DIR.items():
+        if id_prefix == prefix and name:
+            return kb_dir / directory / f"{name}.md"
+    return None
 
 
 def expected_id(rel_path: str) -> str | None:
