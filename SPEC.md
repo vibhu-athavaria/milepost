@@ -302,13 +302,13 @@ All commands accept `--repo <path>` (default: nearest ancestor with `milepost.to
 | `milepost check [--ci --base REF] [--format text\|json]` | Validate and detect staleness (section 6) | Exit codes in section 6 |
 | `milepost index [--rebuild]` | Write `kb/INDEX.md`, then rebuild or update the search index (section 7) | Safe to run from git hooks |
 | `milepost draft <module-id> [--force]` | (Re)draft one L2 note with `status: draft` | Refuses to overwrite `reviewed` unless `--force`; `model` mode only (agent mode drafts through `kb_draft_module`) |
-| `milepost review <note-id>` | Set `status: reviewed` after human sign-off | Does not change `source_hash`; records `reviewed_by` and `reviewed_at` from the git identity |
+| `milepost review <note-id>` | Set `status: reviewed` after human sign-off | Does not change `source_hash`; records `reviewed_by` and `reviewed_at` from the git identity (exit 3 if it is not set); refuses a stale note and a `CONFLICT` note; rewrites `INDEX.md` because the status column changes |
 | `milepost outline <path> [--json]` | Symbols, signatures and line ranges of one file, computed now | Section 8.3 |
 | `milepost impact <path> [--json]` | Files that import this file and the tests likely to cover it, computed now | Section 8.3 |
 | `milepost sync [--base REF] [--json]` | What changed and which notes to update, and how | Section 8.3; read-only |
 | `milepost status [--json]` | Per module: review state and unreviewed churn | Section 8.4; read-only |
 | `milepost report --base REF [--format markdown\|json]` | Review aid for a change range | Section 8.4; read-only, always exits 0 |
-| `milepost rehash <note-id>` | Recompute `source_hash` for a note marked `CONFLICT` or intentionally updated | Prints the diff of the manifest; requires `--yes` in non-interactive shells |
+| `milepost rehash <note-id>` | Recompute `source_hash` for a note marked `CONFLICT` or intentionally updated | Prints the old and new hash and the current manifest (path and short digest; the old manifest cannot be recovered from a hash alone); asks for confirmation, and requires `--yes` in non-interactive shells (exit 2 otherwise) |
 | `milepost search <query> [--level L] [--k N]` | Hybrid search | Section 7.4 |
 | `milepost hooks install \| uninstall` | Manage git hooks and merge driver config | Section 10 |
 | `milepost merge-driver %O %A %B %P` | Invoked by git for `kb/**/*.md` | Section 10.3 |
@@ -440,7 +440,9 @@ Installed into `.git/hooks/` by `milepost hooks install`. Each hook is a three-l
 
 If a hook directory is managed by another tool (for example the `pre-commit` framework), `milepost hooks install` prints the snippet to add to that tool's config instead of writing to `.git/hooks`.
 
-Hooks installed by milepost are marked with a comment line `# managed-by: milepost`. `uninstall` removes only files carrying that marker.
+Hooks installed by milepost are marked with a comment line `# managed-by: milepost`. `uninstall` removes only files carrying that marker, and unsets the merge driver config. Every hook first checks that `milepost` is on the PATH and exits 0 with a warning if it is not, so a missing install never blocks git. If `core.hooksPath` is set, or any of the three hook files exists without the marker, `hooks install` writes nothing and prints the snippet. `milepost init` runs `hooks install` unless `--no-hooks` is given.
+
+`pre-commit` runs the whole-repository `milepost check`, so a note that was already stale blocks every commit until fixed. That is the specified behavior; a developer who needs to commit past it uses `git commit --no-verify`, and CI still judges the pull request by what it changes (section 6).
 
 ### 10.2 CI workflow
 
@@ -460,7 +462,9 @@ Git config (set by `hooks install`): `merge.milepost.driver = milepost merge-dri
 Behavior of `milepost merge-driver`:
 1. Run `git merge-file` on the bodies (text after the frontmatter) with the base, ours, and theirs versions. Body conflicts are written as standard conflict markers and the driver exits non-zero, which leaves the file conflicted for a human.
 2. For frontmatter, take each key from ours or theirs when only one side changed it. When both changed a key to different values, keep the value from ours and set `source_hash: CONFLICT` if the key is `source_hash`; for other keys, keep ours.
-3. Write the result to `%A`.
+3. A review only counts for the prose the reviewer read. If the merged status is `reviewed` but the merged body is not exactly the body of the side that holds that review (and not the unchanged base body), the driver sets `status: draft` and removes `reviewed_by` and `reviewed_at`. An edit by one side always wins over a review by the other: a status that is `draft` on one side and unchanged on the other becomes `draft`.
+4. Write the result to `%A`.
+5. `kb/INDEX.md` is generated, so the driver keeps ours and exits 0; `milepost index` (run by the `post-merge` hook) regenerates it, and `check` reports `INDEX_DRIFT` until it has. A file with no frontmatter is merged as plain text.
 
 Result: a merge never silently chooses a `source_hash`. A conflicted hash fails `milepost check` until `milepost rehash` runs after review.
 

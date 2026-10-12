@@ -250,11 +250,19 @@ Tests:
 - `test_merge_driver_when_only_ours_changed_key_then_keeps_ours`
 - `test_merge_driver_when_both_changed_source_hash_then_writes_conflict`
 - `test_merge_driver_when_body_conflicts_then_leaves_markers_and_exits_nonzero`
+- `test_merge_driver_when_ours_reviewed_but_theirs_edited_body_then_draft`
+- `test_merge_driver_when_agent_edit_on_one_side_then_draft_wins_over_reviewed`
+- `test_merge_driver_when_index_md_then_keeps_ours`
+- `test_review_when_note_stale_then_refused_and_unchanged`
+- `test_review_when_hash_conflict_then_refused_pointing_at_rehash`
+- `test_hooks_install_when_hooks_path_configured_then_snippet_and_nothing_written`
+- `test_pre_commit_when_milepost_not_installed_then_hook_exits_zero_with_warning`
+- `test_init_when_hooks_requested_then_hooks_installed`
 - `test_merge_conflict_when_two_branches_edit_same_module_then_check_fails_until_rehash`
 - `test_post_merge_when_index_fails_then_hook_exits_zero_with_warning`
 
 Acceptance:
-- `init` also runs `milepost hooks install` (skipped by `--no-hooks`). M7 leaves that call out because hooks do not exist yet.
+- `init` also runs `milepost hooks install` (skipped by `--no-hooks`).
 - Integration test creates two branches in a temp repo, edits the same module note and source, merges, and asserts the documented outcome (`CONFLICT` sentinel or body markers, never a silently chosen hash).
 
 ---
