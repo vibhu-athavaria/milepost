@@ -1,0 +1,38 @@
+{
+  "hooks": {
+    "SessionStart": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "uv run --quiet --project \"${CLAUDE_PLUGIN_ROOT}/..\" milepost hook session-start",
+            "timeout": 30
+          }
+        ]
+      }
+    ],
+    "PostToolUse": [
+      {
+        "matcher": "Edit|Write|MultiEdit",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "uv run --quiet --project \"${CLAUDE_PLUGIN_ROOT}/..\" milepost hook post-edit",
+            "timeout": 30
+          }
+        ]
+      }
+    ],
+    "Stop": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "uv run --quiet --project \"${CLAUDE_PLUGIN_ROOT}/..\" milepost hook stop",
+            "timeout": 60
+          }
+        ]
+      }
+    ]
+  }
+}

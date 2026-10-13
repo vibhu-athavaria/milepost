@@ -260,8 +260,8 @@ Built test-first. Milestones are defined in [TASKS.md](TASKS.md).
 | M8 | Review and rehash commands, git hooks, merge driver | Done, on `main` |
 | M8a | Computed context: `outline`, `impact`, `sync`, the one-line purpose in the index | Built, on the `m8a-computed-context` branch |
 | M8b | Human visibility: `status`, `report`, unreviewed-churn warning, CODEOWNERS | Specified, not started |
-| M9 | MCP server for agents (ten tools, model-mode drafting) | Built, on the `m9-mcp-server` branch |
-| M10 | Claude Code plugin: one `/kb-init` command, hooks, usage skill | Not started |
+| M9 | MCP server for agents (ten tools, model-mode drafting) | Done, on `main` |
+| M10 | Claude Code plugin: one `/kb-init` command, hooks, usage skill | Built, on the `m10-plugin` branch; try it with [USAGE.md](USAGE.md) |
 | M11 | Pilot: token cost, review effort, and the release decision | Not started |
 
 **Not usable end to end yet.** Today you can run `milepost scan` and `milepost check`. The commands that create and maintain notes (`init`, `draft`, `review`, `rehash`) and the agent integration are still ahead. **[USAGE.md](USAGE.md)** covers installation, what works now, the intended workflow, and a command reference.

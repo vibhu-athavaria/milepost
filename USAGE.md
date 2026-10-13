@@ -2,6 +2,30 @@
 
 This guide separates **what works today** from **what is planned**. Milepost is early: it is not yet usable end to end. Where something is planned, the behavior described is the one specified in [SPEC.md](SPEC.md), and it may change before it is built.
 
+
+## Try it as a Claude Code plugin (MVP)
+
+The plugin lives in [plugin/](plugin/). For now it runs your local checkout of milepost, so there is nothing to publish or install from a registry.
+
+1. **One-time setup.** In this repository run `uv sync`. In the repository you want to try it on, put your model settings in a git-ignored `.env` file at its root (or export them in your shell):
+   ```
+   MILEPOST_MODEL=openrouter/<model slug>
+   OPENROUTER_API_KEY=...
+   ```
+2. **Start Claude Code with the plugin loaded**, from the repository you want to try it on:
+   ```
+   claude --plugin-dir /path/to/milepost/plugin
+   ```
+   Approve the MCP server and hooks if Claude Code asks. `/mcp` should list `milepost` with ten `kb_*` tools.
+3. **Run `/milepost:kb-init`.** It checks your environment, lists candidate modules, shows the files that would be sent to the model and the token estimate, asks once, then drafts a note for each module you keep.
+4. **Review the drafts.** Read each note under `kb/modules/`, fix anything wrong, then approve it with `milepost review module/<id>` and commit `milepost.toml`, `kb/`, `.gitattributes` and `.github/workflows/milepost.yml`. (If `milepost` is not on your PATH, use `uv run --project /path/to/milepost milepost review module/<id>`.)
+5. **Work normally.** At session start the agent is shown the module index. When it edits a covered file it is told which notes describe that file. When it tries to finish with a note out of date for files it changed, it is blocked once and told what to update. Its note edits are saved as `draft`, so run `milepost review` on them before merging.
+
+What to expect on a first try:
+- The first `kb_search` downloads the local embedding model (about 130 MB) and indexes the notes.
+- Each hook starts `uv run`, which adds a fraction of a second to the first edit hook of a turn. If that bothers you, install milepost (`uv tool install /path/to/milepost`) and change the commands in `plugin/hooks/hooks.json` to plain `milepost hook ...`.
+- If something looks wrong, run `milepost doctor` in the repository, and `claude plugin validate /path/to/milepost/plugin` for the plugin files.
+
 ## Contents
 
 1. [Install](#install)

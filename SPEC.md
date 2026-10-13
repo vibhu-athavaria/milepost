@@ -533,7 +533,7 @@ Verify the plugin file layout (`.claude-plugin/plugin.json`, `.mcp.json`, `skill
 
 ### 12.2 Plugin contents
 
-Shipped from `plugin/` in the milepost repository (templates in `templates/plugin/`):
+Shipped from `plugin/` in the milepost repository :
 
 ```
 plugin/
@@ -544,7 +544,7 @@ plugin/
   hooks/hooks.json                # PostToolUse and Stop hooks, section 12.4
 ```
 
-The skill text is in `templates/plugin/skills/kb-usage/SKILL.md`. It is derived from the playbook in section 12.5 and must name only tools that exist in the MCP server (section 11).
+The skill text is in `plugin/skills/kb-usage/SKILL.md`. It is derived from the playbook in section 12.5 and must name only tools that exist in the MCP server (section 11).
 
 ### 12.3 Distribution
 
@@ -567,7 +567,7 @@ The hook JSON field names, matcher syntax, and plugin hook file location are wri
 
 ### 12.5 Agent playbook
 
-This table is normative. The skill (`templates/plugin/skills/kb-usage/SKILL.md`) and the CLAUDE.md snippet are written from it, and a test (TASKS M10) checks that every tool the skill names exists. Calls are in order.
+This table is normative. The skill (`plugin/skills/kb-usage/SKILL.md`) and the CLAUDE.md snippet are written from it, and a test (TASKS M10) checks that every tool the skill names exists. Calls are in order.
 
 | # | Scenario | Agent calls | If it cannot proceed |
 |---|---|---|---|

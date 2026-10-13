@@ -10,7 +10,7 @@ from dataclasses import asdict
 from datetime import UTC, datetime
 from importlib.metadata import version
 from pathlib import Path
-from typing import Annotated, NoReturn
+from typing import Annotated, Any, NoReturn
 
 import typer
 
@@ -24,6 +24,10 @@ from milepost.services.check import run_check
 from milepost.services.coverage import CONFIG_NAME, undeclared_candidates
 from milepost.services.doctor import run_doctor
 from milepost.services.draft import draft_modules
+from milepost.services.hook import post_edit as hook_post_edit_text
+from milepost.services.hook import project_root as hook_project_root
+from milepost.services.hook import session_start as hook_session_start_text
+from milepost.services.hook import stop as hook_stop_text
 from milepost.services.hooks import install_hooks, uninstall_hooks
 from milepost.services.impact import file_impact
 from milepost.services.index import run_index
@@ -477,13 +481,40 @@ def hooks_uninstall(repo: RepoOption = None) -> None:
     typer.echo(f"removed: {', '.join(removed)}" if removed else "no milepost hooks found")
 
 
+def _hook_payload() -> dict[str, Any]:
+    raw = sys.stdin.read()
+    try:
+        parsed = json.loads(raw) if raw.strip() else {}
+    except json.JSONDecodeError:
+        return {}
+    return parsed if isinstance(parsed, dict) else {}
+
+
+def _run_hook(handler: Callable[[Path, dict[str, Any]], str]) -> None:
+    """Hooks always exit 0: any failure prints a warning on stderr and adds no context."""
+    try:
+        payload = _hook_payload()
+        output = handler(hook_project_root(payload, os.environ.get("CLAUDE_PROJECT_DIR")), payload)
+    except Exception as error:  # noqa: BLE001 - a hook must never block the agent
+        typer.echo(f"milepost hook: {error}", err=True)
+        return
+    if output:
+        typer.echo(output)
+
+
+@hook_app.command("session-start")
+def hook_session_start() -> None:
+    """Add the index to the session context."""
+    _run_hook(lambda root, payload: hook_session_start_text(root))
+
+
 @hook_app.command("post-edit")
 def hook_post_edit() -> None:
     """List the notes covering an edited file."""
-    _not_implemented("hook post-edit")
+    _run_hook(hook_post_edit_text)
 
 
 @hook_app.command("stop")
 def hook_stop() -> None:
     """Run the check when the agent tries to finish."""
-    _not_implemented("hook stop")
+    _run_hook(hook_stop_text)

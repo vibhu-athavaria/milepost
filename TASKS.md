@@ -405,23 +405,28 @@ Acceptance:
 
 ## M10. Claude Code plugin
 
-Files: `plugin/` (from `templates/plugin/`), `templates/AGENTS.md.snippet`, `milepost/services/hook.py`, `tests/integration/test_plugin_manifest.py`, `tests/unit/test_hook.py`, `tests/unit/test_playbook.py`.
+**MVP scope:** the plugin runs the local checkout (`uv run --project ${CLAUDE_PLUGIN_ROOT}/..`), so nothing is published. The PyPI-pinned `uvx milepost==<version>` form and the `plugin/` marketplace entry wait for the release (M11). The hook formats and plugin layout were verified against the Claude Code docs and `claude plugin validate` passes.
+
+Files: `plugin/` (moved from `templates/plugin/`), `templates/AGENTS.md.snippet`, `milepost/services/hook.py`, `tests/integration/test_plugin_manifest.py`, `tests/unit/test_hook.py`.
 
 Tests:
 - `test_plugin_manifest_when_parsed_then_has_name_version_and_description`
-- `test_plugin_mcp_config_when_parsed_then_pins_milepost_version_matching_package`
+- `test_plugin_mcp_config_when_parsed_then_starts_milepost_serve`
 - `test_plugin_skill_when_present_then_frontmatter_has_name_and_description`
 - `test_plugin_commands_when_present_then_each_maps_to_existing_cli_command`
 - `test_plugin_commands_when_listed_then_only_kb_init_present`
 - `test_plugin_kb_init_command_when_parsed_then_names_doctor_scan_and_init_steps_in_order`
-- `test_plugin_hooks_when_parsed_then_session_start_post_edit_and_stop_hooks_pin_matching_version`
+- `test_plugin_hooks_when_parsed_then_session_start_post_edit_and_stop_hooks_present`
+- `test_plugin_hooks_when_parsed_then_each_command_is_a_real_milepost_hook`
+- `test_hook_stop_when_stale_note_is_old_debt_unrelated_to_this_work_then_no_block`
+- `test_hook_post_edit_when_note_stale_then_marked_stale`
 - `test_playbook_when_skill_names_kb_tools_then_every_name_exists_in_mcp_server`
 - `test_playbook_when_spec_scenarios_listed_then_each_has_a_section_in_skill`
 - `test_hook_session_start_when_kb_present_then_returns_index_cut_to_3000_chars_and_playbook_reminder`
 - `test_hook_session_start_when_no_kb_then_prints_nothing`
 - `test_hook_session_start_when_milepost_errors_then_exits_zero_with_stderr_warning`
 - `test_agents_snippet_when_names_kb_tools_then_every_name_exists_in_mcp_server`
-- `test_playbook_when_skill_scenarios_listed_then_all_twelve_present`
+- `test_playbook_when_spec_scenarios_listed_then_each_has_a_section_in_skill`
 - `test_hook_post_edit_when_path_covered_then_returns_covering_notes_and_update_instruction`
 - `test_hook_post_edit_when_path_under_kb_dir_then_prints_nothing`
 - `test_hook_post_edit_when_path_in_uncovered_dir_then_names_uncovered_dir`

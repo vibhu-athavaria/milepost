@@ -1,0 +1,8 @@
+{
+  "mcpServers": {
+    "milepost": {
+      "command": "uv",
+      "args": ["run", "--project", "${CLAUDE_PLUGIN_ROOT}/..", "milepost", "serve"]
+    }
+  }
+}
