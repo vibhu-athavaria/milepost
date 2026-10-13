@@ -4,7 +4,7 @@ from dataclasses import dataclass, field
 from pathlib import Path, PurePosixPath
 
 from milepost.errors import NotFoundError, UsageError
-from milepost.structure.outline import SUPPORTED_EXTENSIONS, Symbol, parse_symbols
+from milepost.structure.outline import SUPPORTED_EXTENSIONS, Symbol, parse_symbols, split_lines
 
 MAX_SYMBOLS = 200
 
@@ -32,7 +32,8 @@ def resolve_repo_file(root: Path, path: str) -> tuple[str, Path]:
 def outline_file(root: Path, path: str) -> OutlineResult:
     relative, absolute = resolve_repo_file(root, path)
     data = absolute.read_bytes()
-    line_count = len(data.decode("utf-8", errors="replace").splitlines())
+    text = data.decode("utf-8-sig", errors="replace")
+    line_count = len(split_lines(text)) - (1 if text.endswith(("\n", "\r")) else 0)
     extension = PurePosixPath(relative).suffix
     if extension not in SUPPORTED_EXTENSIONS:
         raise UsageError(

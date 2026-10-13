@@ -125,6 +125,8 @@ agent_trailers = ["Co-Authored-By: Claude", "Generated with"]   # regexes matche
 churn_warn_lines = 1000                # warn UNREVIEWED_CHURN above this many changed lines since the last review; a placeholder to tune in the pilot
 ```
 
+**Not implemented yet:** `draft.mode` and the `[visibility]` table are specified here but the loader does not accept them until M9 (agent mode) and M8b (visibility); until then they are rejected as unknown keys rather than silently ignored.
+
 Validation rules (fail fast, exit code 2):
 - Module ids are unique and match `^[a-z0-9][a-z0-9_-]*$`.
 - Every `sources` list is non-empty and every glob is relative (no leading `/`, no `..`).

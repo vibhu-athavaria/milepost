@@ -137,8 +137,9 @@ def sync(root: Path, config: Config, base: str | None = None) -> SyncResult:
 
     kb_notes = _load_kb_notes(root, config)
     hash_cache: dict[str, str] = {}
-    affected: dict[str, str] = {}
+    affected: dict[str, list[str]] = {}
     verify_modules: set[str] = set()
+    missing_notes: dict[str, str] = {}
     changed = set(paths)
     for path in paths:
         status = _status_of(path, changes)
@@ -160,13 +161,14 @@ def sync(root: Path, config: Config, base: str | None = None) -> SyncResult:
             change.notes.append(NoteRef(note.id, note.level, now != note.recorded, now))
             route = _route(status, note, path)
             change.routes.append(route)
-            affected.setdefault(note.id, route)
+            affected.setdefault(note.id, []).append(route)
         for module_id in modules:
             verify_modules.add(module_id)
-            if not any(n.module_id == module_id for n in kb_notes):
-                change.routes.append(
-                    f"module/{module_id} has no note yet: draft it (kb_draft_module)"
-                )
+            note_file = root / config.project.kb_dir / "modules" / f"{module_id}.md"
+            if not note_file.exists():
+                text = f"module/{module_id} has no note yet: draft it (kb_draft_module)"
+                change.routes.append(text)
+                missing_notes.setdefault(module_id, text)
         if not modules:
             result.uncovered.append(path)
             change.routes.append(
@@ -180,12 +182,15 @@ def sync(root: Path, config: Config, base: str | None = None) -> SyncResult:
     result.verify = {
         m: config.modules[m].verify for m in sorted(verify_modules) if config.modules[m].verify
     }
-    result.next_steps = _next_steps(result, affected)
+    result.next_steps = _next_steps(result, affected, missing_notes)
     return result
 
 
-def _next_steps(result: SyncResult, affected: dict[str, str]) -> list[str]:
-    steps = [f"update {route}" for _, route in sorted(affected.items())]
+def _next_steps(
+    result: SyncResult, affected: dict[str, list[str]], missing_notes: dict[str, str]
+) -> list[str]:
+    steps = [f"update {route}" for _, routes in sorted(affected.items()) for route in routes]
+    steps += [text for _, text in sorted(missing_notes.items())]
     steps += [
         f"confirm this still holds in {c.note_id} ({c.section}), {c.path} changed: {c.text}"
         for c in result.cited

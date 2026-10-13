@@ -18,6 +18,7 @@ from milepost.structure.python_scanner import scan_python
 from milepost.structure.tree_sitter_scanner import scan_typescript
 
 MAX_ITEMS = 50
+MIN_NAME_STEM = 3
 _ALWAYS_IGNORE = ["**/.git/**", "**/venv/**", "**/site-packages/**"]
 _TEST_DIRS = {"tests", "test", "__tests__"}
 _TEST_NAMES = ["test_*.py", "*_test.py", "*.test.*", "*.spec.*"]
@@ -110,7 +111,11 @@ def file_impact(root: Path, config: Config, path: str) -> ImpactResult:
     tests += [
         TestRef(p, "name")
         for p in files
-        if is_test_path(p) and p not in imported_tests and p != relative and stem in p
+        if is_test_path(p)
+        and p not in imported_tests
+        and p != relative
+        and len(stem) >= MIN_NAME_STEM
+        and stem in PurePosixPath(p).name
     ]
     modules = [
         ModuleRef(module_id, module.verify)

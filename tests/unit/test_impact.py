@@ -155,3 +155,20 @@ def test_impact_when_not_a_git_repo_then_falls_back_to_globbing(tmp_path: Path) 
     result = impact(repo, "app/billing/charge.py")
 
     assert "app/api/routes.py" in result.importers
+
+
+def test_impact_when_directory_name_contains_stem_then_not_listed_as_test(tmp_path: Path) -> None:
+    repo = make_repo(tmp_path)
+    repo.write("tests/charge_suite/test_other.py", "def test_x():\n    assert True\n")
+
+    paths = [t.path for t in impact(repo, "app/billing/charge.py").tests]
+
+    assert "tests/charge_suite/test_other.py" not in paths
+
+
+def test_impact_when_stem_shorter_than_three_chars_then_no_name_matches(tmp_path: Path) -> None:
+    repo = make_repo(tmp_path)
+    repo.write("app/db.py", "x = 1\n")
+    repo.write("tests/test_db_things.py", "def test_x():\n    assert True\n")
+
+    assert impact(repo, "app/db.py").tests == []

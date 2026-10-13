@@ -183,3 +183,48 @@ def test_sync_when_run_twice_then_identical(tmp_path: Path) -> None:
     repo.write("app/billing/charge.py", "def charge(card):\n    return None\n")
 
     assert run(repo) == run(repo)
+
+
+def test_sync_when_several_files_change_in_one_module_then_next_steps_has_every_route(
+    tmp_path: Path,
+) -> None:
+    repo = make_repo(tmp_path)
+    repo.write("app/billing/charge.py", "def charge(card):\n    return None\n")
+    repo.write("app/billing/invoice.py", "def invoice():\n    pass\n")
+    (repo.root / "app/billing/refund.py").unlink()
+
+    steps = " | ".join(run(repo).next_steps)
+
+    assert "re-read app/billing/charge.py" in steps
+    assert "add app/billing/invoice.py to the File map" in steps
+    assert "remove or rename app/billing/refund.py in the File map" in steps
+
+
+def test_sync_when_module_has_no_note_then_next_steps_says_to_draft(tmp_path: Path) -> None:
+    repo = make_repo(tmp_path)
+    repo.add_module("other", ["app/other/**/*.py"], {}, with_note=False)
+    repo.commit("module without note")
+    repo.write("app/other/thing.py", "x = 3\n")
+
+    assert any("has no note yet" in step for step in run(repo).next_steps)
+
+
+def test_sync_when_note_exists_but_is_invalid_then_not_reported_as_missing(tmp_path: Path) -> None:
+    repo = make_repo(tmp_path)
+    repo.write("kb/modules/billing.md", "not a note\n")
+    repo.commit("break the note")
+    repo.write("app/billing/charge.py", "def charge(card):\n    return None\n")
+
+    result = run(repo)
+
+    assert not any("has no note yet" in step for step in result.next_steps)
+
+
+def test_sync_when_repo_has_no_commits_then_everything_counts_as_added(tmp_path: Path) -> None:
+    repo = KbRepo(tmp_path / "fresh")
+    repo.add_module("billing", SOURCES, {"app/billing/a.py": "x = 1\n"}, with_note=False)
+
+    result = run(repo)
+
+    assert {c.status for c in result.changes} == {"added"}
+    assert "app/billing/a.py" in [c.path for c in result.changes]

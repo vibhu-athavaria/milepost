@@ -179,3 +179,64 @@ def test_outline_when_path_outside_repo_then_usage_error(tmp_path: Path) -> None
 def test_outline_when_file_missing_then_not_found(tmp_path: Path) -> None:
     with pytest.raises(NotFoundError):
         outline_file(tmp_path, "nope.py")
+
+
+def test_outline_when_file_has_form_feed_or_bom_then_line_numbers_and_parse_correct(
+    tmp_path: Path,
+) -> None:
+    source = "# header\x0c second page\ndef first():\n    pass\n\n\ndef second():\n    pass\n"
+    (tmp_path / "ff.py").write_bytes(b"\xef\xbb\xbf" + source.encode("utf-8"))
+
+    result = outline_file(tmp_path, "ff.py")
+
+    symbols = names(result.symbols)
+    assert (symbols["first"].start_line, symbols["second"].start_line) == (2, 6)
+    assert symbols["second"].signature == "def second():"
+    assert result.line_count == 7
+
+
+def test_outline_when_signature_spans_lines_then_joined_into_one_line(tmp_path: Path) -> None:
+    write(
+        tmp_path,
+        "sig.py",
+        "def create_invoice(\n    customer,\n    amount: int = 0,\n) -> str:\n    return ''\n",
+    )
+
+    symbol = names(outline_file(tmp_path, "sig.py").symbols)["create_invoice"]
+
+    assert symbol.signature == "def create_invoice( customer, amount: int = 0, ) -> str:"
+
+
+def test_outline_when_function_defined_under_if_or_try_then_listed(tmp_path: Path) -> None:
+    write(
+        tmp_path,
+        "cond.py",
+        "if TYPE_CHECKING:\n    class Hint:\n        pass\n\n"
+        "try:\n    import fast\nexcept ImportError:\n    def slow():\n        pass\n",
+    )
+
+    symbols = names(outline_file(tmp_path, "cond.py").symbols)
+
+    assert {"Hint", "slow"} <= set(symbols)
+
+
+def test_outline_when_typescript_class_decorated_then_signature_is_the_class_line(
+    tmp_path: Path,
+) -> None:
+    write(tmp_path, "svc.ts", "@Injectable()\nexport class Foo {\n  run() {}\n}\n")
+
+    symbols = names(outline_file(tmp_path, "svc.ts").symbols)
+
+    assert symbols["Foo"].signature == "export class Foo {"
+
+
+def test_outline_when_line_comment_ends_with_slash_then_not_truncated(tmp_path: Path) -> None:
+    write(tmp_path, "c.ts", "// see https://x.io/\nexport function f() {}\n")
+
+    assert names(outline_file(tmp_path, "c.ts").symbols)["f"].doc == "see https://x.io/"
+
+
+def test_outline_when_var_function_expression_then_listed(tmp_path: Path) -> None:
+    write(tmp_path, "v.js", "var legacy = function () { return 1; };\n")
+
+    assert names(outline_file(tmp_path, "v.js").symbols)["legacy"].kind == "function"

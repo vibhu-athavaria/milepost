@@ -1,6 +1,7 @@
 """Symbols of one source file with line ranges, parsed at call time (SPEC section 8.3)."""
 
 import ast
+import re
 from dataclasses import dataclass
 from pathlib import PurePosixPath
 
@@ -9,6 +10,8 @@ import tree_sitter_typescript
 from tree_sitter import Language, Node, Parser
 
 DOC_MAX = 120
+SIGNATURE_MAX = 200
+_LINE_BREAK = re.compile(r"\r\n|\r|\n")
 PYTHON_EXTENSIONS = {".py"}
 _JAVASCRIPT = Language(tree_sitter_javascript.language())
 _TS_LANGUAGES = {
@@ -39,13 +42,24 @@ def _clip(text: str) -> str:
     return text if len(text) <= DOC_MAX else text[: DOC_MAX - 3].rstrip() + "..."
 
 
-def _python_symbols(source: str) -> list[Symbol]:
-    tree = ast.parse(source)
-    lines = source.splitlines()
+def split_lines(text: str) -> list[str]:
+    """Lines as Python's tokenizer counts them: only \\n, \\r\\n and \\r end a line."""
+    return _LINE_BREAK.split(text)
+
+
+def _python_symbols(data: bytes) -> list[Symbol]:
+    tree = ast.parse(data)
+    lines = split_lines(data.decode("utf-8-sig", errors="replace"))
     symbols: list[Symbol] = []
 
-    def header(node: ast.stmt) -> str:
-        return lines[node.lineno - 1].strip()
+    def header(node: ast.FunctionDef | ast.AsyncFunctionDef | ast.ClassDef) -> str:
+        first = node.body[0].lineno if node.body else node.lineno
+        last = max(node.lineno, first - 1)
+        text = " ".join(line.strip() for line in lines[node.lineno - 1 : last])
+        return " ".join(text.split())[:SIGNATURE_MAX]
+
+    def one_line(node: ast.stmt) -> str:
+        return lines[node.lineno - 1].strip()[:SIGNATURE_MAX]
 
     def start(node: ast.FunctionDef | ast.AsyncFunctionDef | ast.ClassDef) -> int:
         return min([node.lineno, *(d.lineno for d in node.decorator_list)])
@@ -75,6 +89,9 @@ def _python_symbols(source: str) -> list[Symbol]:
                     )
                 )
                 visit(node.body, f"{prefix}{node.name}.", True)
+            elif isinstance(node, ast.If | ast.Try | ast.With | ast.AsyncWith | ast.For):
+                for block in _blocks(node):
+                    visit(block, prefix, in_class)
             elif not in_class and isinstance(node, ast.Assign | ast.AnnAssign):
                 targets = node.targets if isinstance(node, ast.Assign) else [node.target]
                 if len(targets) == 1 and isinstance(targets[0], ast.Name):
@@ -82,7 +99,7 @@ def _python_symbols(source: str) -> list[Symbol]:
                         Symbol(
                             targets[0].id,
                             "const",
-                            header(node),
+                            one_line(node),
                             "",
                             node.lineno,
                             node.end_lineno or node.lineno,
@@ -91,6 +108,16 @@ def _python_symbols(source: str) -> list[Symbol]:
 
     visit(tree.body, "", False)
     return symbols
+
+
+def _blocks(node: ast.If | ast.Try | ast.With | ast.AsyncWith | ast.For) -> list[list[ast.stmt]]:
+    blocks = [node.body]
+    if isinstance(node, ast.If | ast.For):
+        blocks.append(node.orelse)
+    if isinstance(node, ast.Try):
+        blocks += [handler.body for handler in node.handlers]
+        blocks += [node.orelse, node.finalbody]
+    return blocks
 
 
 _DECLARATIONS = {
@@ -118,9 +145,28 @@ def _leading_comment(node: Node) -> str:
     if previous is None or previous.type != "comment" or previous.end_point[0] != anchor_row - 1:
         return ""
     for raw in _text(previous).splitlines():
-        cleaned = raw.strip().lstrip("/*").strip().rstrip("*/").strip()
+        cleaned = _comment_text(raw)
         if cleaned and not cleaned.startswith("@"):
             return _clip(cleaned)
+    return ""
+
+
+def _comment_text(line: str) -> str:
+    text = line.strip()
+    if text.startswith("//"):
+        return text[2:].strip()
+    if text.startswith("/*"):
+        text = text.lstrip("/").lstrip("*")
+    elif text.startswith("*"):
+        text = text[1:]
+    return text.removesuffix("*/").strip()
+
+
+def _signature(node: Node) -> str:
+    for line in _text(node).splitlines():
+        stripped = line.strip()
+        if stripped and not stripped.startswith("@"):
+            return stripped[:SIGNATURE_MAX]
     return ""
 
 
@@ -131,7 +177,7 @@ def _ts_symbol(node: Node, name: str, kind: str, prefix: str) -> Symbol:
     return Symbol(
         prefix + name,
         kind,
-        _first_line(_text(outer)),
+        _signature(outer),
         _leading_comment(node),
         outer.start_point[0] + 1,
         outer.end_point[0] + 1,
@@ -180,7 +226,7 @@ def _ts_visit(parent: Node, prefix: str, symbols: list[Symbol]) -> None:
                         symbols.append(
                             _ts_symbol(member, _text(member_name), "method", f"{prefix}{name}.")
                         )
-        elif current.type == "lexical_declaration":
+        elif current.type in ("lexical_declaration", "variable_declaration"):
             symbols.extend(_ts_variable_symbols(current, prefix))
 
 
@@ -195,7 +241,7 @@ def parse_symbols(path: str, data: bytes) -> list[Symbol]:
     """Symbols in line order. Raises SyntaxError for Python source that does not parse."""
     extension = PurePosixPath(path).suffix
     if extension in PYTHON_EXTENSIONS:
-        symbols = _python_symbols(data.decode("utf-8", errors="replace"))
+        symbols = _python_symbols(data)
     else:
         symbols = _typescript_symbols(data, extension)
     return sorted(symbols, key=lambda s: (s.start_line, s.end_line))

@@ -372,6 +372,8 @@ def impact(
         typer.echo(f"  {test.path}  (via {test.via})")
     for module in result.modules:
         typer.echo(f"module {module.id}: " + (", ".join(module.verify) or "no verify commands"))
+    if result.notes:
+        typer.echo("notes: " + ", ".join(result.notes))
     if result.truncated:
         typer.echo("(truncated at the list limit)")
     typer.echo(f"note: {result.caveat}")
