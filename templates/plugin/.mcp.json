@@ -1,8 +1,0 @@
-{
-  "mcpServers": {
-    "milepost": {
-      "command": "uvx",
-      "args": ["milepost==0.1.0", "serve"]
-    }
-  }
-}

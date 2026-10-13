@@ -94,3 +94,15 @@ def repo_files(root: Path) -> list[str]:
     untracked = _git(root, "ls-files", "--others", "--exclude-standard", "-z")
     names = {name for name in (tracked + "\x00" + untracked).split("\x00") if name}
     return sorted(name for name in names if (root / name).is_file())
+
+
+def changed_in_head(root: Path) -> set[str]:
+    """Files touched by the latest commit, or none if there is no parent commit to compare."""
+    done = subprocess.run(
+        ["git", "diff", "--name-only", "-z", "HEAD~1", "HEAD"],
+        cwd=root,
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+    return {name for name in done.stdout.split("\x00") if name} if done.returncode == 0 else set()
