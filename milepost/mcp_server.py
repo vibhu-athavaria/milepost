@@ -29,8 +29,17 @@ def _now() -> str:
     return datetime.now(UTC).strftime("%Y-%m-%dT%H:%M:%SZ")
 
 
-def _default_embedder(config: Config) -> Embedder:
-    return FastembedEmbedder(config.index.embedding_model, config.index.embedding_dim)
+class _CachedEmbedders:
+    """One embedder per model for the life of the server, so the model loads once."""
+
+    def __init__(self) -> None:
+        self._by_model: dict[tuple[str, int], Embedder] = {}
+
+    def __call__(self, config: Config) -> Embedder:
+        key = (config.index.embedding_model, config.index.embedding_dim)
+        if key not in self._by_model:
+            self._by_model[key] = FastembedEmbedder(*key)
+        return self._by_model[key]
 
 
 def _guard(call: Callable[[], dict[str, Any]]) -> dict[str, Any]:
@@ -42,11 +51,12 @@ def _guard(call: Callable[[], dict[str, Any]]) -> dict[str, Any]:
 
 def build_server(
     root: Path,
-    embedder_for: Callable[[Config], Embedder] = _default_embedder,
+    embedder_for: Callable[[Config], Embedder] | None = None,
     client: LlmClient | None = None,
 ) -> MCPServer:
     server = MCPServer("milepost", instructions=INSTRUCTIONS)
     llm = client or LiteLlmClient()
+    embedders = embedder_for or _CachedEmbedders()
 
     @server.tool()
     def kb_overview() -> dict[str, Any]:
@@ -69,13 +79,15 @@ def build_server(
 
     @server.tool()
     def kb_search(query: str, level: str | None = None, limit: int = 5) -> dict[str, Any]:
-        """Search the notes (keyword and meaning). At most 10 results."""
-        return _guard(lambda: kb.kb_search(root, embedder_for, query, level, limit))
+        """Search the notes (keyword and meaning). At most 10 results. Updates the local
+        search index first if notes changed."""
+        return _guard(lambda: kb.kb_search(root, embedders, query, level, limit))
 
     @server.tool()
     def kb_update(id: str, body: str, read_hash: str | None = None) -> dict[str, Any]:
         """Write a note. For L2 and L3, pass read_hash=source_hash_now from kb_module or
-        kb_file. The note is saved as a draft; a person must run `milepost review`."""
+        kb_file (kb_file's file_hash_now to create a new file note). The note is saved as a
+        draft and kb/INDEX.md is regenerated; a person must run `milepost review`."""
         return _guard(lambda: kb.kb_update(root, id, body, read_hash, _now()))
 
     @server.tool()

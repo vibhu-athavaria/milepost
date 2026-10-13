@@ -7,6 +7,8 @@ from support.kb_repo import KbRepo
 from milepost.config import Config
 from milepost.core.notes import read_note, write_note
 from milepost.embeddings import Embedder
+from milepost.errors import UsageError
+from milepost.services import kb as kb_module_under_test
 from milepost.services.kb import (
     KbToolError,
     kb_check,
@@ -438,3 +440,121 @@ def test_kb_file_when_notes_cover_path_then_next_steps_names_kb_sync(tmp_path: P
     steps = " ".join(kb_file(repo.root, "app/billing/charge.py")["next_steps"])
 
     assert "kb_sync" in steps and "kb_update" in steps
+
+
+@pytest.mark.parametrize(
+    "note_id",
+    [
+        "passage/../../../escaped",
+        "module/../../x",
+        "file/../../x",
+        "file//etc/passwd",
+        "passage/..",
+    ],
+)
+def test_kb_update_when_id_escapes_kb_dir_then_rejected_and_nothing_written(
+    tmp_path: Path, note_id: str
+) -> None:
+    repo = make_repo(tmp_path)
+    before = sorted(p for p in tmp_path.rglob("*") if p.is_file() and ".git/" not in str(p))
+
+    with pytest.raises(KbToolError) as error:
+        kb_update(repo.root, note_id, "hi", repo.hash_of(SOURCES), NOW)
+
+    assert error.value.code in {"INVALID_INPUT", "NOT_FOUND"}
+    assert sorted(p for p in tmp_path.rglob("*") if p.is_file() and ".git/" not in str(p)) == before
+
+
+def test_kb_file_when_dotfile_path_then_dot_kept(tmp_path: Path) -> None:
+    repo = make_repo(tmp_path)
+    repo.write(".github/ci.yml", "a: 1\n")
+
+    result = kb_file(repo.root, "./.github/ci.yml")
+
+    assert result["path"] == ".github/ci.yml"
+    assert result["file_hash_now"] != ""
+
+
+@pytest.mark.parametrize("path", ["../outside.py", "/etc/passwd", "a/../../outside.py"])
+def test_kb_file_when_path_outside_repo_then_invalid_input(tmp_path: Path, path: str) -> None:
+    repo = make_repo(tmp_path)
+
+    with pytest.raises(KbToolError) as error:
+        kb_file(repo.root, path)
+
+    assert error.value.code == "INVALID_INPUT"
+
+
+def test_kb_draft_module_when_sources_match_no_files_then_coded_error_not_crash(
+    tmp_path: Path,
+) -> None:
+    repo = make_repo(tmp_path)
+    repo.add_module("empty", ["app/empty/**/*.py"], {}, with_note=False)
+
+    try:
+        kb_draft_module(repo.root, "empty", FakeClient(), {"MILEPOST_MODEL": "m"}, NOW, no_sleep)
+    except KbToolError as error:
+        assert error.code in {"INVALID_INPUT", "NOT_FOUND", "ENVIRONMENT"}
+
+
+def test_kb_check_when_a_service_raises_milepost_error_then_coded_error(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    repo = make_repo(tmp_path)
+
+    def boom(root: Path, config: Config) -> None:
+        raise UsageError("git exploded")
+
+    monkeypatch.setattr(kb_module_under_test, "run_check", boom)
+
+    with pytest.raises(KbToolError) as error:
+        kb_check(repo.root)
+
+    assert error.value.code == "INVALID_INPUT" and "git exploded" in error.value.message
+
+
+def test_kb_update_when_existing_l2_file_is_invalid_then_does_not_claim_missing(
+    tmp_path: Path,
+) -> None:
+    repo = make_repo(tmp_path)
+    repo.write("kb/modules/billing.md", "not a note\n")
+
+    with pytest.raises(KbToolError) as error:
+        kb_update(repo.root, "module/billing", "## Purpose\n\nx\n", repo.hash_of(SOURCES), NOW)
+
+    assert error.value.code == "INVALID_INPUT"
+    assert "kb_draft_module" not in error.value.message
+    assert (repo.root / "kb/modules/billing.md").read_text() == "not a note\n"
+
+
+def test_kb_update_when_existing_l3_file_is_invalid_then_not_overwritten(tmp_path: Path) -> None:
+    repo = make_repo(tmp_path)
+    repo.write("kb/files/app/billing/charge.py.md", "hand written junk\n")
+    file_hash = kb_file(repo.root, "app/billing/charge.py")["file_hash_now"]
+
+    with pytest.raises(KbToolError):
+        kb_update(repo.root, "file/app/billing/charge.py", "body", file_hash, NOW)
+
+    assert (repo.root / "kb/files/app/billing/charge.py.md").read_text() == "hand written junk\n"
+
+
+def test_kb_module_when_body_is_long_then_returned_in_full_with_a_shorten_step(
+    tmp_path: Path,
+) -> None:
+    repo = make_repo(tmp_path)
+    long_body = "\n## Purpose\n\nBills.\n\n## Gotchas\n\n" + "- a point\n" * 3000
+    note = read_note(repo.root / "kb/modules/billing.md")
+    note.body = long_body
+    write_note(note, repo.root / "kb/modules/billing.md")
+
+    result = kb_module(repo.root, "billing")
+
+    assert result["body"] == long_body
+    assert any("shorten" in step for step in result["next_steps"])
+
+
+def test_kb_overview_when_git_missing_or_detached_then_branch_is_explicit(tmp_path: Path) -> None:
+    repo = make_repo(tmp_path)
+    repo.git("checkout", "-q", "--detach")
+
+    assert "detached" in kb_overview(repo.root)["branch"]

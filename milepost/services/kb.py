@@ -5,6 +5,8 @@ computed from repository state (never by a model). Failures raise KbToolError wi
 codes NOT_FOUND, INVALID_INPUT, CONFLICT, STALE_READ, ENVIRONMENT.
 """
 
+import functools
+import os
 import subprocess
 from collections.abc import Callable, Mapping
 from dataclasses import asdict
@@ -57,6 +59,19 @@ class KbToolError(Exception):
         super().__init__(f"{code}: {message}")
 
 
+def _tool[**P](func: Callable[P, dict[str, Any]]) -> Callable[P, dict[str, Any]]:
+    """Turn any MilepostError a tool raises into a KbToolError with a documented code."""
+
+    @functools.wraps(func)
+    def wrapper(*args: P.args, **kwargs: P.kwargs) -> dict[str, Any]:
+        try:
+            return func(*args, **kwargs)
+        except MilepostError as error:
+            raise _translate(error) from error
+
+    return wrapper
+
+
 def _config(root: Path) -> Config:
     try:
         return load_config(root / CONFIG_NAME)
@@ -93,10 +108,25 @@ def _note_sources(note: Note) -> list[str]:
 
 
 def _branch(root: Path) -> str:
-    done = subprocess.run(
-        ["git", "branch", "--show-current"], cwd=root, capture_output=True, text=True, check=False
-    )
-    return done.stdout.strip()
+    try:
+        done = subprocess.run(
+            ["git", "branch", "--show-current"],
+            cwd=root,
+            capture_output=True,
+            text=True,
+            check=False,
+        )
+    except FileNotFoundError:
+        return "(git not installed)"
+    return done.stdout.strip() or "(detached HEAD or not a git repository)"
+
+
+def _repo_relative(root: Path, path: str) -> str:
+    """Repo-relative POSIX path, rejecting absolute paths and any that leave the repository."""
+    normal = os.path.normpath(path).replace(os.sep, "/")
+    if normal.startswith(("/", "../")) or normal == ".." or Path(path).is_absolute():
+        raise KbToolError("INVALID_INPUT", f"{path} is outside the repository")
+    return normal
 
 
 def _write_index_md(root: Path, config: Config) -> None:
@@ -133,6 +163,7 @@ def _status_steps(summary: dict[str, Any]) -> list[str]:
     return steps
 
 
+@_tool
 def kb_overview(root: Path) -> dict[str, Any]:
     config = _config(root)
     index_path = root / config.project.kb_dir / "INDEX.md"
@@ -158,6 +189,7 @@ def kb_overview(root: Path) -> dict[str, Any]:
     }
 
 
+@_tool
 def kb_module(root: Path, module_id: str) -> dict[str, Any]:
     config = _config(root)
     module = config.modules.get(module_id)
@@ -181,21 +213,27 @@ def kb_module(root: Path, module_id: str) -> dict[str, Any]:
             }
         )
     steps = _status_steps(summary)
+    if len(note.body) > MAX_BODY_CHARS:
+        steps.append(
+            f"this note is over {MAX_BODY_CHARS} characters and kb_update will reject it as is; "
+            "shorten it when you update it"
+        )
     steps.append("call kb_outline on each file you will read, then read only those line ranges")
     steps.append("call kb_impact on each file you will change")
     return {
         **summary,
         "meta": note.meta,
-        "body": note.body[:MAX_BODY_CHARS],
+        "body": note.body,
         "verify": module.verify,
         "related": related,
         "next_steps": steps,
     }
 
 
+@_tool
 def kb_file(root: Path, path: str) -> dict[str, Any]:
     config = _config(root)
-    relative = Path(path).as_posix().lstrip("./")
+    relative = _repo_relative(root, path)
     kb = root / config.project.kb_dir
     notes: list[dict[str, Any]] = []
     for module_id in sorted(config.modules):
@@ -223,6 +261,7 @@ def kb_file(root: Path, path: str) -> dict[str, Any]:
     }
 
 
+@_tool
 def kb_search(
     root: Path,
     embedder_for: Callable[[Config], Embedder],
@@ -247,6 +286,7 @@ def kb_search(
     }
 
 
+@_tool
 def kb_check(root: Path) -> dict[str, Any]:
     config = _config(root)
     result = run_check(root, config)
@@ -263,6 +303,7 @@ def kb_check(root: Path) -> dict[str, Any]:
     return {"ok": result.exit_code == 0, "findings": findings, "next_steps": steps}
 
 
+@_tool
 def kb_outline(root: Path, path: str) -> dict[str, Any]:
     try:
         result = outline_file(root, path)
@@ -274,6 +315,7 @@ def kb_outline(root: Path, path: str) -> dict[str, Any]:
     }
 
 
+@_tool
 def kb_impact(root: Path, path: str) -> dict[str, Any]:
     config = _config(root)
     try:
@@ -285,6 +327,7 @@ def kb_impact(root: Path, path: str) -> dict[str, Any]:
     return {**asdict(result), "next_steps": steps}
 
 
+@_tool
 def kb_sync(root: Path, base: str | None = None) -> dict[str, Any]:
     config = _config(root)
     try:
@@ -294,6 +337,7 @@ def kb_sync(root: Path, base: str | None = None) -> dict[str, Any]:
     return {**asdict(result)}
 
 
+@_tool
 def kb_update(
     root: Path, note_id: str, body: str, read_hash: str | None, now: str
 ) -> dict[str, Any]:
@@ -306,11 +350,24 @@ def kb_update(
         raise KbToolError(
             "INVALID_INPUT", f"'{note_id}' is not a note id (module/, file/, passage/)"
         )
+    if not name or ".." in Path(name).parts or Path(name).is_absolute():
+        raise KbToolError("INVALID_INPUT", f"'{note_id}' must not contain '..' or start with '/'")
+    if level == "L3":
+        name = _repo_relative(root, name)
+        path = note_path_for_id(kb, f"{prefix}/{name}")
+    if path is None or not path.resolve().is_relative_to(kb.resolve()):
+        raise KbToolError("INVALID_INPUT", f"'{note_id}' resolves outside the knowledge base")
     if len(body) > MAX_BODY_CHARS:
         raise KbToolError("INVALID_INPUT", f"body is {len(body)} characters; the limit is 20000")
     if not body.strip():
         raise KbToolError("INVALID_INPUT", "body is empty")
     existing = _read(path) if path.is_file() else None
+    if path.is_file() and existing is None:
+        raise KbToolError(
+            "INVALID_INPUT",
+            f"{note_id} exists but its file is not a valid note; ask the user to fix or "
+            "remove it, do not overwrite it",
+        )
 
     if level == "L2" and existing is None:
         raise KbToolError(
@@ -373,6 +430,7 @@ def kb_update(
     }
 
 
+@_tool
 def kb_draft_module(
     root: Path,
     module_id: str,
