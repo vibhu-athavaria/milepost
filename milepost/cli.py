@@ -19,6 +19,7 @@ from milepost.embeddings import FastembedEmbedder
 from milepost.env import load_env
 from milepost.errors import MilepostError, UsageError
 from milepost.llm.client import LiteLlmClient, LlmClient
+from milepost.mcp_server import run_server
 from milepost.services.check import run_check
 from milepost.services.coverage import CONFIG_NAME, undeclared_candidates
 from milepost.services.doctor import run_doctor
@@ -417,9 +418,13 @@ def merge_driver(
 
 
 @app.command()
-def serve() -> None:
+@handle_errors
+def serve(repo: RepoOption = None) -> None:
     """Run the MCP server on stdio."""
-    _not_implemented("serve")
+    project_dir = os.environ.get("CLAUDE_PROJECT_DIR")
+    root = repo or (Path(project_dir) if project_dir else _repo_root(None))
+    load_env(root)
+    run_server(root)
 
 
 @app.command()

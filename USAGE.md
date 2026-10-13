@@ -181,7 +181,7 @@ Reminders do not depend on the agent remembering: each tool response says what t
 | `milepost rehash ID [--yes]` | Record the current source hash on a note whose prose you have read | Works |
 | `milepost hooks install\|uninstall` | Manage git hooks and the merge driver | Works |
 | `milepost merge-driver` | Git merge driver for note files (called by git, not by you) | Works |
-| `milepost serve` | Run the MCP server for agents | Planned |
+| `milepost serve` | Run the MCP server on stdio (ten `kb_*` tools); started by the plugin, not by hand | Works |
 | `milepost hook post-edit\|stop` | Called by the Claude Code plugin hooks | Planned |
 | `milepost doctor [--json]` | Report the environment milepost needs | Works |
 
