@@ -1649,7 +1649,7 @@ dev = [
 requires-dist = [
     { name = "fastembed" },
     { name = "litellm" },
-    { name = "mcp" },
+    { name = "mcp", specifier = ">=2,<3" },
     { name = "numpy" },
     { name = "pydantic", specifier = ">=2" },
     { name = "python-dotenv", specifier = ">=1.2.4" },

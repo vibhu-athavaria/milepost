@@ -260,7 +260,7 @@ Built test-first. Milestones are defined in [TASKS.md](TASKS.md).
 | M8 | Review and rehash commands, git hooks, merge driver | Done, on `main` |
 | M8a | Computed context: `outline`, `impact`, `sync`, the one-line purpose in the index | Built, on the `m8a-computed-context` branch |
 | M8b | Human visibility: `status`, `report`, unreviewed-churn warning, CODEOWNERS | Specified, not started |
-| M9 | MCP server for agents (ten tools, model or agent drafting) | Not started |
+| M9 | MCP server for agents (ten tools, model-mode drafting) | Built, on the `m9-mcp-server` branch |
 | M10 | Claude Code plugin: one `/kb-init` command, hooks, usage skill | Not started |
 | M11 | Pilot: token cost, review effort, and the release decision | Not started |
 

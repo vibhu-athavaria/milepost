@@ -10,7 +10,7 @@ dependencies = [
     "pydantic>=2",
     "pyyaml",
     "wcmatch",
-    "mcp",
+    "mcp>=2,<3",
     "litellm",
     "fastembed",
     "numpy",

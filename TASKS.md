@@ -360,6 +360,8 @@ Acceptance:
 
 ## M9. MCP server
 
+**MVP scope:** the ten tools in model mode. Agent-mode drafting (`draft.mode = "agent"`, draft packets, `kb_update` creating L2) is deferred past the MVP and its tests were removed from this list; SPEC 9.3 and 11 still describe it.
+
 Files: `milepost/mcp_server.py`, `tests/unit/test_mcp_tools.py`, `tests/integration/test_mcp_stdio.py`.
 
 Tests:
@@ -393,11 +395,6 @@ Tests:
 - `test_kb_impact_when_called_then_matches_impact_service`
 - `test_kb_sync_when_called_then_matches_sync_service_and_next_steps_present`
 - `test_kb_outline_when_over_cap_then_truncated_and_response_under_token_budget`
-- `test_kb_draft_module_when_mode_agent_then_returns_packet_and_calls_no_model`
-- `test_kb_draft_module_when_mode_agent_and_secret_in_sources_then_packet_refused_naming_file`
-- `test_kb_update_when_mode_agent_and_declared_module_has_no_note_then_creates_draft_l2`
-- `test_kb_update_when_mode_agent_and_module_not_declared_then_rejects`
-- `test_init_when_mode_agent_then_scaffolds_and_skips_drafting_with_instruction`
 - `test_mcp_stdio_when_client_lists_tools_then_ten_tools_returned`
 
 Acceptance:
