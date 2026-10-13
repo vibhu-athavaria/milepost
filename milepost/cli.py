@@ -24,11 +24,14 @@ from milepost.services.coverage import CONFIG_NAME, undeclared_candidates
 from milepost.services.doctor import run_doctor
 from milepost.services.draft import draft_modules
 from milepost.services.hooks import install_hooks, uninstall_hooks
+from milepost.services.impact import file_impact
 from milepost.services.index import run_index
 from milepost.services.init import InitReport, run_init
 from milepost.services.merge_driver import run_merge_driver
+from milepost.services.outline import outline_file
 from milepost.services.review import plan_rehash, rehash_note, review_note
 from milepost.services.search import search as run_search
+from milepost.services.sync import sync as run_sync
 
 app = typer.Typer(
     help="Git-native, drift-checked codebase memory for coding agents.",
@@ -325,6 +328,79 @@ def search(
     for result in results:
         snippet = " ".join(result.snippet.split())[:100]
         typer.echo(f"{result.score:.4f}  {result.note_id}  [{result.heading}]  {snippet}")
+
+
+@app.command()
+@handle_errors
+def outline(
+    path: Annotated[str, typer.Argument(help="Source file, relative to the repo root.")],
+    repo: RepoOption = None,
+    json_output: JsonOption = False,
+) -> None:
+    """List the symbols of one file with line ranges, computed now."""
+    result = outline_file(_repo_root(repo), path)
+    if json_output:
+        typer.echo(json.dumps(asdict(result), indent=2))
+        return
+    typer.echo(f"{result.path} ({result.line_count} lines)")
+    for symbol in result.symbols:
+        doc = f"  # {symbol.doc}" if symbol.doc else ""
+        typer.echo(f"{symbol.start_line}-{symbol.end_line}  {symbol.kind}  {symbol.signature}{doc}")
+    if result.truncated:
+        typer.echo("(truncated: more symbols than the limit; read the file for the rest)")
+
+
+@app.command()
+@handle_errors
+def impact(
+    path: Annotated[str, typer.Argument(help="Source file, relative to the repo root.")],
+    repo: RepoOption = None,
+    json_output: JsonOption = False,
+) -> None:
+    """List who imports a file and which tests likely cover it, computed now."""
+    root = _repo_root(repo)
+    result = file_impact(root, load_config(root / CONFIG_NAME), path)
+    if json_output:
+        typer.echo(json.dumps(asdict(result), indent=2))
+        return
+    typer.echo(f"{result.path}")
+    typer.echo(f"importers ({len(result.importers)}):")
+    for importer in result.importers:
+        typer.echo(f"  {importer}")
+    typer.echo(f"tests ({len(result.tests)}):")
+    for test in result.tests:
+        typer.echo(f"  {test.path}  (via {test.via})")
+    for module in result.modules:
+        typer.echo(f"module {module.id}: " + (", ".join(module.verify) or "no verify commands"))
+    if result.notes:
+        typer.echo("notes: " + ", ".join(result.notes))
+    if result.truncated:
+        typer.echo("(truncated at the list limit)")
+    typer.echo(f"note: {result.caveat}")
+
+
+@app.command()
+@handle_errors
+def sync(
+    repo: RepoOption = None,
+    base: Annotated[
+        str | None, typer.Option("--base", help="Compare REF...HEAD instead of the working tree.")
+    ] = None,
+    json_output: JsonOption = False,
+) -> None:
+    """Show what changed and which notes to update, and how."""
+    root = _repo_root(repo)
+    result = run_sync(root, load_config(root / CONFIG_NAME), base)
+    if json_output:
+        typer.echo(json.dumps(asdict(result), indent=2))
+        return
+    for change in result.changes:
+        typer.echo(f"{change.status:<8} {change.path}")
+        for route in change.routes:
+            typer.echo(f"  - {route}")
+    typer.echo("Next:")
+    for step in result.next_steps:
+        typer.echo(f"  - {step}")
 
 
 @app.command(name="merge-driver")

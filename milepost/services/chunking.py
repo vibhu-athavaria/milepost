@@ -71,6 +71,6 @@ def chunk_index(text: str) -> list[Chunk]:
         cells = [cell.strip() for cell in line.strip("|").split("|")]
         if len(cells) < 4 or cells[0] == "Module" or set(cells[0]) <= {"-"}:
             continue
-        module, title, status, note = cells[:4]
-        chunks.append(Chunk(module, f"Module {module}: {title}. Status: {status}. Note: {note}"))
+        module, purpose, status, note = cells[:4]
+        chunks.append(Chunk(module, f"Module {module}: {purpose} Status: {status}. Note: {note}"))
     return chunks

@@ -51,12 +51,12 @@ def test_chunk_note_when_heading_has_no_body_then_heading_only_chunk_kept() -> N
 
 def test_chunk_index_when_table_rows_then_one_chunk_per_module_row() -> None:
     text = (
-        "# Codebase index\n\n| Module | Title | Status | Note |\n|---|---|---|---|\n"
-        "| ai | AI | reviewed | kb/modules/ai.md |\n"
-        "| services | Services | draft | kb/modules/services.md |\n"
+        "# Codebase index\n\n| Module | Purpose | Status | Note |\n|---|---|---|---|\n"
+        "| ai | Runs the tutor. | reviewed | kb/modules/ai.md |\n"
+        "| services | Owns billing rules. | draft | kb/modules/services.md |\n"
     )
 
     chunks = chunk_index(text)
 
     assert [chunk.heading for chunk in chunks] == ["ai", "services"]
-    assert "Services" in chunks[1].text
+    assert "Owns billing rules." in chunks[1].text

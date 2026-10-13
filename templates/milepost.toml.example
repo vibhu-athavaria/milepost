@@ -29,9 +29,6 @@ embedding_model = "BAAI/bge-small-en-v1.5"
 embedding_dim = 384
 
 [draft]
-# "model": milepost calls the model named by MILEPOST_MODEL to draft notes (needs a provider key).
-# "agent": milepost calls no model; your coding agent drafts through kb_draft_module.
-mode = "model"
 # Resolved from the MILEPOST_MODEL environment variable at run time. Never put a model name here.
 # Also set the provider's own key variable (OPENROUTER_API_KEY, ANTHROPIC_API_KEY, ...).
 # Both can live in a git-ignored .env file at the repo root; see templates/.env.example.
@@ -45,9 +42,3 @@ exclude = ["**/.env*", "**/*secret*", "**/*.pem", "**/*.key", "**/credentials*"]
 fail_on = "stale"
 # Warn when L3 plus L4 notes exceed this count. A placeholder; tune it in the pilot.
 max_detail_notes = 50
-
-[visibility]
-# Regexes matched against commit messages to count agent-authored commits in `milepost status`.
-agent_trailers = ["Co-Authored-By: Claude", "Generated with"]
-# Warn (never fail) when a reviewed note's sources changed by more than this many lines since review.
-churn_warn_lines = 1000

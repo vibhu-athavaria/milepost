@@ -4,6 +4,7 @@ from support.kb_repo import KbRepo
 
 from milepost.config import load_config
 from milepost.core.findings import Finding
+from milepost.core.notes import read_note, write_note
 from milepost.services.check import CheckResult, run_check
 
 SERVICES = ["app/services/**/*.py"]
@@ -179,3 +180,16 @@ def test_check_when_run_twice_then_findings_identical(tmp_path: Path) -> None:
     repo.write("app/payments/p.py", "x\n")
 
     assert check(repo).findings == check(repo).findings
+
+
+def test_check_when_purpose_edited_and_index_not_rewritten_then_index_drift(tmp_path: Path) -> None:
+    repo = make_repo(tmp_path)
+    note = read_note(repo.root / "kb/modules/services.md")
+    note.body = note.body.replace("Describes the thing.", "Now describes another thing.")
+    write_note(note, repo.root / "kb/modules/services.md")
+
+    assert "INDEX_DRIFT" in codes(check(repo).findings, "failure")
+
+    repo.refresh_index()
+
+    assert check(repo).findings == []

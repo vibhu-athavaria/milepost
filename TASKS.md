@@ -271,7 +271,7 @@ Acceptance:
 
 Revision of the design (SPEC sections 0, 8.2, 8.3). Per-file detail is computed from source on demand instead of stored in L3 notes. No MCP and no model: pure services plus thin CLI commands, so they can be tested and used before the server exists.
 
-Files: `milepost/services/outline.py`, `milepost/services/impact.py`, `milepost/services/sync.py`, changes to `milepost/services/render.py`, `milepost/config.py` (`verify`, `draft.mode`, `visibility`), `milepost/structure/*`, `tests/unit/test_outline.py`, `tests/unit/test_impact.py`, `tests/unit/test_sync.py`, `tests/unit/test_render.py`.
+Files: `milepost/services/outline.py`, `milepost/services/impact.py`, `milepost/services/sync.py`, changes to `milepost/services/render.py`, `milepost/config.py` (`verify`; `draft.mode` and `visibility` wait for M9 and M8b), `milepost/structure/*`, `tests/unit/test_outline.py`, `tests/unit/test_impact.py`, `tests/unit/test_sync.py`, `tests/unit/test_render.py`.
 
 Tests:
 - `test_outline_when_python_file_then_symbols_with_line_ranges`
@@ -302,13 +302,22 @@ Tests:
 - `test_render_index_when_no_purpose_section_then_row_says_so`
 - `test_check_when_purpose_edited_and_index_not_rewritten_then_index_drift`
 - `test_config_when_module_verify_list_then_parsed`
-- `test_config_when_draft_mode_invalid_then_exit_two`
-- `test_config_when_agent_trailer_not_valid_regex_then_exit_two`
 - `test_cli_outline_impact_sync_when_json_flag_then_output_parses`
+- `test_sync_when_several_files_change_in_one_module_then_next_steps_has_every_route`
+- `test_sync_when_module_has_no_note_then_next_steps_says_to_draft`
+- `test_sync_when_note_exists_but_is_invalid_then_not_reported_as_missing`
+- `test_sync_when_repo_has_no_commits_then_everything_counts_as_added`
+- `test_outline_when_file_has_form_feed_or_bom_then_line_numbers_and_parse_correct`
+- `test_outline_when_signature_spans_lines_then_joined_into_one_line`
+- `test_outline_when_function_defined_under_if_or_try_then_listed`
+- `test_outline_when_typescript_class_decorated_then_signature_is_the_class_line`
+- `test_outline_when_line_comment_ends_with_slash_then_not_truncated`
+- `test_impact_when_directory_name_contains_stem_then_not_listed_as_test`
+- `test_impact_when_stem_shorter_than_three_chars_then_no_name_matches`
 
 Acceptance:
-- On the Kaihle checkout, `milepost outline` on the largest route file returns in under 200 ms and its symbol list matches `grep -nE "^(async )?def |^class "` for that file.
-- `milepost impact` on a Kaihle service file lists a known importer and a known test, checked by hand once and recorded in `PILOT.md`.
+- On the Kaihle checkout, `milepost outline` on the largest route file (1,779 lines) lists the same 31 top-level definitions as `grep -nE "^(async )?def |^class "`. Whole-command time including `uv` startup was 1.1 s; the parse itself is not separately timed, so the 200 ms target in SPEC section 14 is not yet shown.
+- `milepost impact` on a Kaihle service file lists its importers and test, checked by hand against `grep` (done for `analytics_service.py`: 2 route importers and 1 test; two other grep hits were docstring mentions, correctly not listed).
 - The existing INDEX fixtures and `milepost index` regenerate with the Purpose column and `check` passes.
 
 ---
@@ -376,6 +385,7 @@ Tests:
 - `test_kb_draft_module_when_written_then_frontmatter_set_by_milepost_and_status_draft`
 - `test_tool_response_when_any_tool_called_then_next_steps_present_and_deterministic`
 - `test_kb_file_when_notes_cover_path_then_next_steps_names_each_note_to_update`
+- `test_kb_update_when_purpose_changed_then_index_md_rewritten_so_check_has_no_drift`
 - `test_kb_update_when_reviewed_note_updated_then_status_draft_and_review_fields_removed`
 - `test_kb_update_when_status_reviewed_requested_then_ignored_stays_draft`
 - `test_kb_module_when_called_then_includes_verify_commands`

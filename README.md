@@ -257,8 +257,8 @@ Built test-first. Milestones are defined in [TASKS.md](TASKS.md).
 | M5a | Baseline measurement on a real repository | Recorded, on `main` |
 | M6 | `milepost index` and `milepost search` | Done, on `main` |
 | M7 | Model drafting, `milepost init`, `milepost doctor`, `.env` support | Built, on the `m7-draft-and-init` branch (hooks step waits for M8) |
-| M8 | Review and rehash commands, git hooks, merge driver | Built, on the `m8-review-hooks-merge` branch |
-| M8a | Computed context: `outline`, `impact`, `sync`, the one-line purpose in the index | Specified, not started |
+| M8 | Review and rehash commands, git hooks, merge driver | Done, on `main` |
+| M8a | Computed context: `outline`, `impact`, `sync`, the one-line purpose in the index | Built, on the `m8a-computed-context` branch |
 | M8b | Human visibility: `status`, `report`, unreviewed-churn warning, CODEOWNERS | Specified, not started |
 | M9 | MCP server for agents (ten tools, model or agent drafting) | Not started |
 | M10 | Claude Code plugin: one `/kb-init` command, hooks, usage skill | Not started |

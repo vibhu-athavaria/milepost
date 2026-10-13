@@ -158,3 +158,18 @@ def test_resolve_model_when_env_set_then_returns_value(tmp_path: Path) -> None:
     config = load_config(write_config(tmp_path, MINIMAL))
 
     assert resolve_model(config, {"MILEPOST_MODEL": "some-model"}) == "some-model"
+
+
+def test_config_when_module_verify_list_then_parsed(tmp_path: Path) -> None:
+    text = MINIMAL + 'verify = ["pytest app/tests/services", "ruff check app/services"]\n'
+
+    config = load_config(write_config(tmp_path, text))
+
+    assert config.modules["services"].verify == [
+        "pytest app/tests/services",
+        "ruff check app/services",
+    ]
+
+
+def test_config_when_no_verify_then_empty_list(tmp_path: Path) -> None:
+    assert load_config(write_config(tmp_path, MINIMAL)).modules["services"].verify == []

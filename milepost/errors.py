@@ -62,3 +62,9 @@ class SecretDetected(ProviderError):
     def __init__(self, path: str) -> None:
         self.path = path
         super().__init__(f"possible secret in {path}; nothing was sent for this module")
+
+
+class NotFoundError(MilepostError):
+    """A path or id the caller named does not exist (exit 2)."""
+
+    exit_code = 2

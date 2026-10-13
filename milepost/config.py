@@ -47,6 +47,7 @@ class Module(_Model):
     sources: Annotated[list[RelativeGlob], Field(min_length=1)]
     related: list[str] = []
     title: str | None = None
+    verify: list[str] = []
 
 
 class Structure(_Model):
