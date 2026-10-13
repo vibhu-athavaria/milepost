@@ -5,16 +5,18 @@ They never raise for ordinary problems: a hook that fails must not get in the ag
 """
 
 import json
+import os
 from pathlib import Path
 from typing import Any
 
-from milepost.config import load_config
+from milepost.config import Config, load_config
 from milepost.core.glob import matches_any
-from milepost.errors import MilepostError
+from milepost.core.notes import parse_note
+from milepost.errors import MilepostError, NoteInvalid
 from milepost.services.check import run_check
 from milepost.services.coverage import CONFIG_NAME, uncovered_candidates
-from milepost.services.gitinfo import working_tree_changes
-from milepost.services.kb import kb_file, kb_overview
+from milepost.services.gitinfo import changed_in_head, working_tree_changes
+from milepost.services.kb import KbToolError, kb_file, kb_overview
 
 INDEX_CHARS = 3000
 MAX_REASON_FINDINGS = 10
@@ -26,9 +28,9 @@ REMINDER = (
 
 
 def project_root(payload: dict[str, Any], env_dir: str | None) -> Path:
-    """The repository to act on: the hook's cwd, else CLAUDE_PROJECT_DIR, else the cwd of the
-    process, walking up to the nearest milepost.toml."""
-    start = Path(str(payload.get("cwd") or env_dir or Path.cwd()))
+    """The repository to act on: CLAUDE_PROJECT_DIR (stable even if the agent runs `cd`), else
+    the hook's cwd, else the process cwd, walking up to the nearest milepost.toml."""
+    start = Path(str(env_dir or payload.get("cwd") or Path.cwd()))
     for directory in (start, *start.parents):
         if (directory / CONFIG_NAME).is_file():
             return directory
@@ -53,7 +55,9 @@ def session_start(root: Path) -> str:
 
 def _edited_path(root: Path, payload: dict[str, Any]) -> str | None:
     tool_input = payload.get("tool_input")
-    raw = tool_input.get("file_path") if isinstance(tool_input, dict) else None
+    raw = None
+    if isinstance(tool_input, dict):
+        raw = tool_input.get("file_path") or tool_input.get("notebook_path")
     if not isinstance(raw, str) or not raw:
         return None
     path = Path(raw)
@@ -74,7 +78,7 @@ def post_edit(root: Path, payload: dict[str, Any]) -> str:
         return ""
     try:
         config = load_config(root / CONFIG_NAME)
-        if relative.startswith(config.project.kb_dir.rstrip("/") + "/"):
+        if relative.startswith(os.path.normpath(config.project.kb_dir).replace(os.sep, "/") + "/"):
             return ""
         covered = kb_file(root, relative)
         lines = []
@@ -88,41 +92,62 @@ def post_edit(root: Path, payload: dict[str, Any]) -> str:
                 + "\nBefore you finish: call kb_sync and kb_update each of these notes."
             )
             return _context("PostToolUse", text)
-        for candidate in uncovered_candidates(root, config.structure, config.modules):
-            if relative.startswith(candidate.path + "/"):
-                text = (
-                    f"{relative} is in {candidate.path}, which no module covers "
-                    "(UNCOVERED_DIR). If it should have a note, declare a module in "
-                    "milepost.toml and call kb_draft_module; otherwise ask the user."
-                )
-                return _context("PostToolUse", text)
-    except (MilepostError, OSError):
+        matching = [
+            c
+            for c in uncovered_candidates(root, config.structure, config.modules)
+            if c.path and relative.startswith(c.path.rstrip("/") + "/")
+        ]
+        if matching:
+            directory = max(matching, key=lambda c: len(c.path)).path
+            text = (
+                f"{relative} is in {directory}, which no module covers (UNCOVERED_DIR). If it "
+                "should have a note, declare a module in milepost.toml and call "
+                "kb_draft_module; otherwise ask the user."
+            )
+            return _context("PostToolUse", text)
+    except (MilepostError, OSError, KbToolError):
         return ""
     return ""
 
 
+def _note_sources(root: Path, config: Config, rel_path: str) -> list[str]:
+    """Source globs of the note at a repo-relative path: from config for module notes, from the
+    note's own frontmatter for file notes."""
+    kb = config.project.kb_dir
+    for module_id, module in config.modules.items():
+        if rel_path == f"{kb}/modules/{module_id}.md":
+            return module.sources
+    try:
+        note = parse_note((root / rel_path).read_text(encoding="utf-8"))
+    except (OSError, NoteInvalid):
+        return []
+    sources = note.meta.get("sources")
+    return [str(source) for source in sources] if isinstance(sources, list) else []
+
+
 def stop(root: Path, payload: dict[str, Any]) -> str:
+    """Block once when a note is stale for files changed in this piece of work.
+
+    "Changed" means the working tree against HEAD plus the latest commit, so an agent that
+    commits before finishing is still caught. Old debt is left to `check`, pre-commit and CI."""
     if payload.get("stop_hook_active"):
         return ""
     try:
         config = load_config(root / CONFIG_NAME)
         findings = run_check(root, config).findings
-        changed = working_tree_changes(root).all
+        changed = {
+            path
+            for path in working_tree_changes(root).all | changed_in_head(root)
+            if not matches_any(path, config.structure.ignore)
+        }
     except (MilepostError, OSError):
         return ""
-    module_sources = {
-        f"{config.project.kb_dir}/modules/{module_id}.md": module.sources
-        for module_id, module in config.modules.items()
-    }
     relevant = [
         f
         for f in findings
-        if f.severity == "failure"
-        and (
-            f.code != "STALE_NOTE"
-            or any(matches_any(p, module_sources.get(f.path, [])) for p in changed)
-            or f.path.startswith(f"{config.project.kb_dir}/files/")
-        )
+        if f.code == "STALE_NOTE"
+        and f.severity == "failure"
+        and any(matches_any(path, _note_sources(root, config, f.path)) for path in changed)
     ]
     if not relevant:
         return ""

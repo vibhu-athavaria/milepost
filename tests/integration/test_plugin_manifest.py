@@ -81,7 +81,7 @@ def test_plugin_hooks_when_parsed_then_session_start_post_edit_and_stop_hooks_pr
     hooks = json.loads((PLUGIN / "hooks/hooks.json").read_text())["hooks"]
 
     assert set(hooks) == {"SessionStart", "PostToolUse", "Stop"}
-    assert hooks["PostToolUse"][0]["matcher"] == "Edit|Write|MultiEdit"
+    assert hooks["PostToolUse"][0]["matcher"] == "Edit|Write|MultiEdit|NotebookEdit"
 
 
 def test_plugin_hooks_when_parsed_then_each_command_is_a_real_milepost_hook() -> None:

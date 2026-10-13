@@ -143,6 +143,8 @@ def test_hook_stop_when_stale_note_is_old_debt_unrelated_to_this_work_then_no_bl
     repo.write("app/billing/charge.py", "def charge(card):\n    return None\n")
     repo.commit("someone else made the note stale")
     repo.write("app/other/x.py", "x = 2\n")
+    repo.commit("an unrelated later commit")
+    repo.write("app/other/x.py", "x = 3\n")
 
     assert hook.stop(repo.root, {}) == ""
 
@@ -182,3 +184,98 @@ def test_hook_cli_when_stdin_is_not_json_then_exits_zero_silently(tmp_path: Path
     result = runner.invoke(cli.app, ["hook", "stop"], input="not json")
 
     assert result.exit_code == 0 and result.output.strip() == ""
+
+
+def test_hook_stop_when_agent_committed_the_change_then_still_blocks(tmp_path: Path) -> None:
+    repo = make_repo(tmp_path)
+    repo.write("app/billing/charge.py", "def charge(card):\n    return None\n")
+    repo.commit("the agent commits before finishing")
+
+    out = json.loads(hook.stop(repo.root, {}))
+
+    assert out["decision"] == "block" and "STALE_NOTE" in out["reason"]
+
+
+def test_hook_stop_when_failure_is_not_a_stale_note_then_no_block(tmp_path: Path) -> None:
+    repo = make_repo(tmp_path)
+    (repo.root / "kb/INDEX.md").write_text("drifted\n")
+    repo.write("app/other/x.py", "x = 3\n")
+
+    assert hook.stop(repo.root, {}) == ""
+
+
+def test_hook_stop_when_stale_l3_note_covers_untouched_file_then_no_block(tmp_path: Path) -> None:
+    repo = make_repo(tmp_path)
+    repo.add_file_note("app/billing/charge.py")
+    repo.commit("l3")
+    repo.write("app/billing/charge.py", "def charge(card):\n    return None\n")
+    repo.commit("someone changed it long ago")
+    repo.commit("another unrelated commit")
+    repo.write("app/other/x.py", "x = 4\n")
+
+    assert hook.stop(repo.root, {}) == ""
+
+
+def test_hook_stop_when_changed_file_is_ignored_then_no_block(tmp_path: Path) -> None:
+    repo = make_repo(tmp_path)
+    repo.write("app/billing/__pycache__/gen.py", "x = 1\n")
+
+    assert hook.stop(repo.root, {}) == ""
+
+
+def test_hook_project_root_when_env_dir_set_then_preferred_over_payload_cwd(
+    tmp_path: Path,
+) -> None:
+    repo = make_repo(tmp_path)
+    elsewhere = tmp_path / "elsewhere"
+    elsewhere.mkdir()
+
+    root = hook.project_root({"cwd": str(elsewhere)}, str(repo.root))
+
+    assert root == repo.root
+
+
+def test_hook_post_edit_when_notebook_path_then_handled(tmp_path: Path) -> None:
+    repo = make_repo(tmp_path)
+    covered = str(repo.root / "app/billing/charge.py")
+    payload = {"cwd": str(repo.root), "tool_input": {"notebook_path": covered}}
+
+    assert "module/billing" in context_of(hook.post_edit(repo.root, payload))
+
+
+def test_hook_post_edit_when_nested_uncovered_dirs_then_most_specific_named(
+    tmp_path: Path,
+) -> None:
+    repo = make_repo(tmp_path)
+    repo.write("app/other/deep/y.py", "y = 1\n")
+
+    text = context_of(hook.post_edit(repo.root, edit_payload(repo, "app/other/deep/y.py")))
+
+    assert "app/other," in text or "app/other " in text
+
+
+def test_hook_post_edit_when_kb_dir_configured_with_dot_slash_then_still_ignored(
+    tmp_path: Path,
+) -> None:
+    repo = make_repo(tmp_path)
+    toml = (
+        (repo.root / "milepost.toml")
+        .read_text()
+        .replace('name = "example"', 'name = "example"\nkb_dir = "./kb"')
+    )
+    (repo.root / "milepost.toml").write_text(toml)
+
+    assert hook.post_edit(repo.root, edit_payload(repo, "kb/modules/billing.md")) == ""
+
+
+def test_hook_session_start_when_milepost_errors_then_exits_zero_with_stderr_warning(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    def boom(root: Path, payload: dict[str, object]) -> str:
+        raise RuntimeError("session boom")
+
+    monkeypatch.setattr(cli, "hook_session_start_text", lambda root: boom(root, {}))
+
+    result = runner.invoke(cli.app, ["hook", "session-start"], input="{}")
+
+    assert result.exit_code == 0 and "session boom" in result.output

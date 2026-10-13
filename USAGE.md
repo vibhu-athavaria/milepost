@@ -5,7 +5,7 @@ This guide separates **what works today** from **what is planned**. Milepost is 
 
 ## Try it as a Claude Code plugin (MVP)
 
-The plugin lives in [plugin/](plugin/). For now it runs your local checkout of milepost, so there is nothing to publish or install from a registry.
+The plugin lives in [plugin/](plugin/). For now it runs your local checkout of milepost, so there is nothing to publish or install from a registry. That means it must be loaded in place with `--plugin-dir` (below); installing it from a marketplace, which copies it elsewhere, needs the published release and does not work yet.
 
 1. **One-time setup.** In this repository run `uv sync`. In the repository you want to try it on, put your model settings in a git-ignored `.env` file at its root (or export them in your shell):
    ```

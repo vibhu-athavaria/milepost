@@ -533,7 +533,7 @@ Verify the plugin file layout (`.claude-plugin/plugin.json`, `.mcp.json`, `skill
 
 ### 12.2 Plugin contents
 
-Shipped from `plugin/` in the milepost repository :
+Shipped from `plugin/` in the milepost repository:
 
 ```
 plugin/
