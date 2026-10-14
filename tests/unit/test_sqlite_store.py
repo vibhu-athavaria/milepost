@@ -147,3 +147,24 @@ def test_search_keyword_when_content_word_present_then_found(tmp_path: Path) -> 
     store = store_with(tmp_path, {"billing": "charges payment cards", "other": "unrelated words"})
 
     assert [hit.note_id for hit in store.search_keyword("payment", 10, None)] == ["billing"]
+
+
+def test_store_when_chunks_have_no_embeddings_then_keyword_search_works_and_vector_is_empty(
+    tmp_path: Path,
+) -> None:
+    store = SqliteStore(tmp_path / "index.sqlite", DIM)
+    record = NoteRecord("billing", "L2", "reviewed", "", "sha")
+    store.replace_note(record, [ChunkRecord("Purpose", "charges payment cards", None)])
+
+    assert [h.note_id for h in store.search_keyword("payment", 5, None)] == ["billing"]
+    assert store.search_vector([1.0, 0.0, 0.0, 0.0], 5, None) == []
+
+
+def test_replace_note_when_embedding_is_empty_list_then_raises_not_silently_keyword_only(
+    tmp_path: Path,
+) -> None:
+    store = SqliteStore(tmp_path / "index.sqlite", DIM)
+    record = NoteRecord("a", "L2", "reviewed", "", "sha")
+
+    with pytest.raises(ValueError, match="dimension"):
+        store.replace_note(record, [ChunkRecord("Purpose", "t", [])])

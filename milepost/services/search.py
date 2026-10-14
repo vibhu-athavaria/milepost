@@ -27,7 +27,7 @@ class SearchResult:
 def search(
     root: Path,
     config: Config,
-    embedder: Embedder,
+    embedder: Embedder | None,
     query: str,
     k: int = 5,
 ) -> list[SearchResult]:
@@ -45,7 +45,12 @@ def search(
                 "run `milepost index --rebuild`"
             )
         keyword = store.search_keyword(query, CANDIDATES, None)
-        vector = store.search_vector(embedder.embed([query])[0], CANDIDATES, None)
+        has_vectors = store.get_meta("vectors") != "False"  # a keyword-only index has none
+        vector = (
+            store.search_vector(embedder.embed([query])[0], CANDIDATES, None)
+            if embedder is not None and has_vectors
+            else []
+        )
     finally:
         store.close()
 

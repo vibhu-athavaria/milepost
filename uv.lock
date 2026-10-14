@@ -1621,11 +1621,7 @@ name = "milepost"
 version = "0.1.0"
 source = { editable = "." }
 dependencies = [
-    { name = "fastembed", version = "0.7.4", source = { registry = "https://pypi.org/simple" }, marker = "python_full_version >= '3.14' and platform_machine == 'x86_64' and sys_platform == 'darwin'" },
-    { name = "fastembed", version = "0.8.1", source = { registry = "https://pypi.org/simple" }, marker = "python_full_version < '3.14' or platform_machine != 'x86_64' or sys_platform != 'darwin'" },
-    { name = "litellm" },
     { name = "mcp" },
-    { name = "numpy" },
     { name = "pydantic" },
     { name = "python-dotenv" },
     { name = "pyyaml" },
@@ -1634,6 +1630,22 @@ dependencies = [
     { name = "tree-sitter-typescript" },
     { name = "typer" },
     { name = "wcmatch" },
+]
+
+[package.optional-dependencies]
+all = [
+    { name = "fastembed", version = "0.7.4", source = { registry = "https://pypi.org/simple" }, marker = "python_full_version >= '3.14' and platform_machine == 'x86_64' and sys_platform == 'darwin'" },
+    { name = "fastembed", version = "0.8.1", source = { registry = "https://pypi.org/simple" }, marker = "python_full_version < '3.14' or platform_machine != 'x86_64' or sys_platform != 'darwin'" },
+    { name = "litellm" },
+    { name = "numpy" },
+]
+model = [
+    { name = "litellm" },
+]
+search = [
+    { name = "fastembed", version = "0.7.4", source = { registry = "https://pypi.org/simple" }, marker = "python_full_version >= '3.14' and platform_machine == 'x86_64' and sys_platform == 'darwin'" },
+    { name = "fastembed", version = "0.8.1", source = { registry = "https://pypi.org/simple" }, marker = "python_full_version < '3.14' or platform_machine != 'x86_64' or sys_platform != 'darwin'" },
+    { name = "numpy" },
 ]
 
 [package.dev-dependencies]
@@ -1647,10 +1659,11 @@ dev = [
 
 [package.metadata]
 requires-dist = [
-    { name = "fastembed" },
-    { name = "litellm" },
+    { name = "fastembed", marker = "extra == 'search'" },
+    { name = "litellm", marker = "extra == 'model'" },
     { name = "mcp", specifier = ">=2,<3" },
-    { name = "numpy" },
+    { name = "milepost", extras = ["search", "model"], marker = "extra == 'all'" },
+    { name = "numpy", marker = "extra == 'search'" },
     { name = "pydantic", specifier = ">=2" },
     { name = "python-dotenv", specifier = ">=1.2.4" },
     { name = "pyyaml" },
@@ -1660,6 +1673,7 @@ requires-dist = [
     { name = "typer" },
     { name = "wcmatch" },
 ]
+provides-extras = ["search", "model", "all"]
 
 [package.metadata.requires-dev]
 dev = [

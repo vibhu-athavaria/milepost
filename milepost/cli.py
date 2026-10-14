@@ -15,7 +15,7 @@ from typing import Annotated, Any
 import typer
 
 from milepost.config import Config, Index, load_config, load_config_or_default, resolve_model
-from milepost.embeddings import FastembedEmbedder
+from milepost.embeddings import Embedder, default_embedder
 from milepost.env import load_env
 from milepost.errors import MilepostError, UsageError
 from milepost.llm.client import LiteLlmClient, LlmClient
@@ -75,15 +75,15 @@ def handle_errors[**P](func: Callable[P, None]) -> Callable[P, None]:
     return wrapper
 
 
-def _embedder(config: Config) -> FastembedEmbedder:
-    return FastembedEmbedder(config.index.embedding_model, config.index.embedding_dim)
+def _embedder(config: Config) -> Embedder | None:
+    return default_embedder(config.index.embedding_model, config.index.embedding_dim)
 
 
-def _embedder_for(root: Path) -> FastembedEmbedder:
+def _embedder_for(root: Path) -> Embedder | None:
     """Embedder for init, which may run before milepost.toml exists: use the default model."""
     config_path = root / CONFIG_NAME
     index = load_config(config_path).index if config_path.is_file() else Index()
-    return FastembedEmbedder(index.embedding_model, index.embedding_dim)
+    return default_embedder(index.embedding_model, index.embedding_dim)
 
 
 def _llm_client() -> LlmClient:
@@ -140,11 +140,12 @@ def init(
         bool, typer.Option("--force-config", help="Replace an existing milepost.toml.")
     ] = False,
     no_hooks: Annotated[bool, typer.Option("--no-hooks", help="Do not install git hooks.")] = False,
-    agent_mode: Annotated[
+    model_mode: Annotated[
         bool,
         typer.Option(
-            "--agent-mode",
-            help="Write notes with your coding agent instead of a model (no API key needed).",
+            "--model-mode",
+            help="Draft notes with a separate model (needs the model extra and MILEPOST_MODEL) "
+            "instead of your coding agent.",
         ),
     ] = False,
 ) -> None:
@@ -165,7 +166,7 @@ def init(
             now=_now(),
             sleep=time.sleep,
             install_hooks_flag=not no_hooks,
-            agent_mode=agent_mode,
+            model_mode=model_mode,
         )
 
     if dry_run or not yes:

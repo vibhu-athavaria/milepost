@@ -270,7 +270,7 @@ def kb_file(root: Path, path: str) -> dict[str, Any]:
 @_tool
 def kb_search(
     root: Path,
-    embedder_for: Callable[[Config], Embedder],
+    embedder_for: Callable[[Config], Embedder | None],
     query: str,
     limit: int = 5,
 ) -> dict[str, Any]:

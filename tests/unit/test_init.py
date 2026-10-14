@@ -1,3 +1,4 @@
+import importlib.util
 import socket
 import tomllib
 from importlib.metadata import version
@@ -44,6 +45,7 @@ def init(
     dry_run: bool = False,
     force_config: bool = False,
     environ: dict[str, str] | None = None,
+    model_mode: bool = True,
 ) -> InitReport:
     return run_init(
         repo.root,
@@ -55,6 +57,7 @@ def init(
         environ=ENV if environ is None else environ,
         now="2026-10-10T09:00:00Z",
         sleep=no_sleep,
+        model_mode=model_mode,
     )
 
 
@@ -335,7 +338,6 @@ def test_init_when_mode_agent_then_scaffolds_and_skips_drafting_with_instruction
         environ={},
         now="2026-10-14T09:00:00Z",
         sleep=no_sleep,
-        agent_mode=True,
     )
 
     config = load_config(repo.root / "milepost.toml")
@@ -346,53 +348,57 @@ def test_init_when_mode_agent_then_scaffolds_and_skips_drafting_with_instruction
     assert not (repo.root / "kb/INDEX.md").exists()
 
 
-def test_init_when_agent_mode_requested_but_config_exists_in_model_mode_then_usage_error(
+def test_init_when_model_mode_requested_but_config_exists_in_agent_mode_then_usage_error(
     tmp_path: Path,
 ) -> None:
     repo = make_repo(tmp_path)
-    init(repo, modules=["billing"])
+    init(repo, modules=["billing"], model_mode=False)
 
     with pytest.raises(UsageError, match="agent"):
-        run_init(
-            repo.root,
-            modules=None,
-            dry_run=False,
-            force_config=False,
-            client=FakeClient(),
-            embedder=HashEmbedder(),
-            environ=ENV,
-            now="2026-10-14T09:00:00Z",
-            sleep=no_sleep,
-            agent_mode=True,
-        )
+        init(repo, model_mode=True)
 
 
 def test_init_when_force_config_on_agent_mode_repo_then_agent_mode_kept(tmp_path: Path) -> None:
     repo = make_repo(tmp_path)
-    run_init(
-        repo.root,
-        modules=["billing"],
-        dry_run=False,
-        force_config=False,
-        client=FakeClient(),
-        embedder=HashEmbedder(),
-        environ={},
-        now="2026-10-14T09:00:00Z",
-        sleep=no_sleep,
-        agent_mode=True,
-    )
+    init(repo, modules=["billing"], model_mode=False)
 
-    report = run_init(
-        repo.root,
-        modules=["billing"],
-        dry_run=False,
-        force_config=True,
-        client=FakeClient(),
-        embedder=HashEmbedder(),
-        environ={},
-        now="2026-10-14T09:00:00Z",
-        sleep=no_sleep,
-    )
+    report = init(repo, modules=["billing"], force_config=True, model_mode=False)
 
     assert load_config(repo.root / "milepost.toml").draft.mode == "agent"
     assert report.agent_mode is True
+
+
+def test_init_when_force_config_on_model_mode_repo_then_model_mode_kept(tmp_path: Path) -> None:
+    repo = make_repo(tmp_path)
+    init(repo, modules=["billing"], model_mode=True)
+
+    init(repo, modules=["billing"], force_config=True, model_mode=False)
+
+    assert load_config(repo.root / "milepost.toml").draft.mode == "model"
+
+
+def test_init_when_nothing_requested_then_default_mode_is_agent_and_no_key_is_needed(
+    tmp_path: Path,
+) -> None:
+    repo = make_repo(tmp_path)
+
+    report = init(repo, modules=["billing"], model_mode=False, environ={})
+
+    assert load_config(repo.root / "milepost.toml").draft.mode == "agent"
+    assert report.agent_pending == ["billing"]
+
+
+def test_init_when_model_mode_and_litellm_missing_then_fails_before_writing_anything(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    real = importlib.util.find_spec
+    monkeypatch.setattr(
+        importlib.util, "find_spec", lambda name, *a: None if name == "litellm" else real(name, *a)
+    )
+    repo = make_repo(tmp_path)
+
+    with pytest.raises(EnvironmentProblem, match=r"milepost\[model\]"):
+        init(repo, modules=["billing"], model_mode=True)
+
+    assert not (repo.root / "milepost.toml").exists()
+    assert not (repo.root / "kb").exists()

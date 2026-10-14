@@ -23,7 +23,7 @@ A complete note, with every frontmatter field, is in [templates/note.md.template
 
 ## Try the plugin
 
-**You need:** [uv](https://docs.astral.sh/uv/), Python 3.12, [Claude Code](https://claude.com/claude-code), and a git repository to try it on. Drafting notes needs either an API key for a model (below) or *agent mode*, where Claude Code writes the notes itself.
+**You need:** [uv](https://docs.astral.sh/uv/), Python 3.12, [Claude Code](https://claude.com/claude-code), and a git repository to try it on. By default Claude Code writes the first drafts itself (*agent mode*), so no API key is needed; you can instead use a separate model (below).
 
 The plugin lives in [plugin/](plugin/) and runs your local checkout of milepost. That means it must be loaded in place with `--plugin-dir`. Installing it from a marketplace, which copies it elsewhere, needs a published release and does not work yet.
 
@@ -42,7 +42,7 @@ MILEPOST_MODEL=openrouter/<model slug>      # LiteLLM's format
 OPENROUTER_API_KEY=...                      # or ANTHROPIC_API_KEY for an Anthropic model
 ```
 
-**To skip the key**, use agent mode in step 3. It spends tokens in your Claude Code session instead.
+Nothing else is needed for the default. Agent mode spends tokens in your Claude Code session instead of calling another model.
 
 ### 2. Start Claude Code with the plugin
 
@@ -57,7 +57,7 @@ Approve the MCP server and hooks if asked. Run `/mcp`: `milepost` should be list
 
 Run **`/milepost:kb-init`**. It will:
 
-1. check your environment (and offer agent mode if no model key is set);
+1. check your environment;
 2. list the candidate modules found under `src`, `app`, `backend/app`, `packages` and `apps`;
 3. show the files that would be sent for drafting and the token estimate, then **ask once** which modules to keep;
 4. declare those modules in `milepost.toml`, install the git hooks and merge driver, write the CI workflow, build the index, and draft one note per module.
@@ -85,7 +85,7 @@ Nothing more to run. During a session:
 
 ### What to expect on a first run
 
-- The first `kb_search` downloads the local embedding model (about 130 MB) and indexes the notes.
+- Search is keyword-only until you install the `search` extra; the first meaning-based search then downloads a ~130 MB model.
 - Each hook starts `uv run`, which adds a fraction of a second. To remove it, run `uv tool install --editable /path/to/milepost` and change the commands in `plugin/hooks/hooks.json` to plain `milepost hook ...`.
 - Drafting sends a module's source to your model provider (or shows it to your agent). Only run it on code you are allowed to send, and read the dry-run list first.
 - The CI workflow that `init` writes installs milepost from PyPI, which does not exist yet, so that step fails in CI. Edit `.github/workflows/milepost.yml` to install from your checkout or a git URL, or leave the workflow out of a first trial.
@@ -111,6 +111,17 @@ milepost init --yes --modules api,core             # create the knowledge base a
 milepost check                                     # is every note current?
 milepost review module/api                         # after you have read it
 ```
+
+### Optional extras
+
+The default install is lean (no machine-learning libraries, no downloads). Two extras add capabilities:
+
+| Extra | Adds | Install |
+|---|---|---|
+| `search` | meaning-based search over the notes (local embeddings; the first use downloads a ~130 MB model). Without it, search is keyword-only | `uv tool install --editable ".[search]"` |
+| `model` | drafting notes with a separate model through LiteLLM (`milepost init --model-mode`) | `uv tool install --editable ".[model]"` |
+
+`milepost doctor` says which are missing. For development use `uv sync --all-extras`.
 
 Without `uv tool install`, prefix commands with `uv run --project /path/to/milepost`. Every command accepts `--repo PATH`; the default is the nearest parent directory containing `milepost.toml`.
 
@@ -158,14 +169,14 @@ KB-Waive: dir:app/payments scratch code, a module comes later
 
 | Command | Purpose |
 |---|---|
-| `milepost init [--dry-run] [--modules ID,...] [--yes] [--agent-mode] [--force-config] [--no-hooks]` | Scaffold the knowledge base, declare the named modules, draft their notes, install the git hooks, build the index. Writes and sends nothing with `--dry-run` |
+| `milepost init [--dry-run] [--modules ID,...] [--yes] [--model-mode] [--force-config] [--no-hooks]` | Scaffold the knowledge base, declare the named modules, draft their notes, install the git hooks, build the index. Writes and sends nothing with `--dry-run` |
 | `milepost scan [--json]` | List candidate modules no declared module covers. Read-only |
 | `milepost check [--ci --base REF] [--format text\|json] [--no-churn]` | Validate notes and detect staleness. Exit 1 on failures. `--no-churn` skips the slower unreviewed-churn warning |
 | `milepost draft ID [--force]` | Draft or redraft one module note with the configured model |
 | `milepost review NOTE_ID` | Mark a note reviewed by you (records your git identity and the time). Refuses a stale note |
 | `milepost overview` | Print the module index (one line per module), built from the notes |
 | `milepost index [--rebuild]` | Build or update the local search index |
-| `milepost search QUERY [--k N] [--json]` | Search the notes (keyword and meaning) |
+| `milepost search QUERY [--k N] [--json]` | Search the notes: keyword, plus meaning-based when the `search` extra is installed |
 | `milepost outline PATH [--json]` | Symbols, signatures and line ranges of one file, computed now (Python, TypeScript, JavaScript). Works in any git repository, no setup |
 | `milepost impact PATH [--json]` | Files that import a file and the tests likely to cover it, computed now. A static import graph. Works with no `milepost.toml` |
 | `milepost sync [--base REF] [--json]` | What changed and which notes to update, and how. With no `milepost.toml` it lists the changed files only |
@@ -225,7 +236,7 @@ Module ids are lowercase letters, digits, `_` and `-`. Globs must be relative an
 
 ## Environment variables
 
-Needed only to draft notes with a separate model (`draft`, `init`, and `kb_draft_module` in model mode). In **agent mode** (`milepost init --agent-mode`, or `[draft] mode = "agent"`) your coding agent writes the notes itself, so no model or key is needed. Nothing is stored in `milepost.toml` or any committed file.
+Needed only to draft notes with a separate model: `milepost init --model-mode` (or `[draft] mode = "model"`), then `draft`, `init` and `kb_draft_module`. Install the extra with `uv tool install --editable ".[model]"`. In the default **agent mode** your coding agent writes the notes itself, so no model, key or extra is needed. Nothing is stored in `milepost.toml` or any committed file.
 
 | Variable | Purpose |
 |---|---|
@@ -245,12 +256,12 @@ Start with `milepost doctor`. It checks Python, git, SQLite, your model settings
 | `/mcp` does not list `milepost` | Claude Code was not started with `--plugin-dir /path/to/milepost/plugin`, or `uv sync` was not run in the milepost checkout. Run `claude plugin validate /path/to/milepost/plugin` |
 | Hooks seem to do nothing | They fail open on purpose. Run one by hand: `echo '{}' \| uv run --project /path/to/milepost milepost hook session-start`, and read stderr |
 | `config file not found` | You are outside a repository with a `milepost.toml`. Run `/milepost:kb-init` or `milepost init`, or pass `--repo` |
-| `MILEPOST_MODEL is not set` | Set it and the provider key in `.env` or your shell, or use agent mode |
+| `MILEPOST_MODEL is not set` | You are in model mode. Set it and the provider key in `.env` or your shell, or switch to agent mode (`[draft] mode = "agent"`), which needs neither |
 | `STALE_NOTE` after an ordinary edit | Expected: any commit that touches a covered file after the note was last touched counts, comments included. Re-read the code and touch the note (`kb_update`, or edit it; an unchanged body is fine if it still holds). It only warns unless you set `[check] stale = "fail"` |
 | `milepost review` refuses | The note is stale: update it first (any edit counts as touching it), then review |
 | `CITATION_BROKEN` | The note names a file or symbol that isn't there. Fix the note: it may be an invented detail |
 | CI fails at "Install milepost" | milepost isn't on PyPI yet. Edit `.github/workflows/milepost.yml` to install from a git URL |
-| The first search is slow | It is downloading the embedding model (about 130 MB) once |
+| The first search is slow | With the `search` extra it is downloading the embedding model (about 130 MB) once |
 | A commit is blocked by `pre-commit` | A note is stale or invalid. Fix it, or `git commit --no-verify` |
 
 ---

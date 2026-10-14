@@ -190,3 +190,59 @@ def test_search_when_index_missing_then_raises_with_hint_and_exit_three(tmp_path
 
     assert error.value.exit_code == 3
     assert "milepost index" in str(error.value)
+
+
+def test_search_when_no_embedder_then_keyword_only_and_still_finds_the_note(tmp_path: Path) -> None:
+    repo, _ = indexed_repo(tmp_path)
+
+    run_index(repo.root, config_of(repo), None, rebuild=True)
+    results = search(repo.root, config_of(repo), None, "billing", k=5)
+
+    assert results and results[0].note_id
+    assert rows(repo, "select count(*) from chunk_vectors") == [(0,)]
+
+
+def test_index_when_extra_arrives_after_a_keyword_only_index_then_rebuilt_with_vectors(
+    tmp_path: Path,
+) -> None:
+    repo, embedder = indexed_repo(tmp_path)
+    run_index(repo.root, config_of(repo), None, rebuild=True)
+    assert rows(repo, "select count(*) from chunk_vectors") == [(0,)]
+
+    run_index(repo.root, config_of(repo), embedder)
+
+    assert rows(repo, "select count(*) from chunk_vectors")[0][0] > 0
+
+
+def test_index_when_run_without_the_extra_after_a_semantic_index_then_vectors_are_kept(
+    tmp_path: Path,
+) -> None:
+    repo, _ = indexed_repo(tmp_path)
+    before = rows(repo, "select count(*) from chunk_vectors")
+
+    run_index(repo.root, config_of(repo), None)
+
+    assert rows(repo, "select count(*) from chunk_vectors") == before
+
+
+def test_index_when_note_changes_without_the_extra_then_state_is_mixed_and_next_run_rebuilds(
+    tmp_path: Path,
+) -> None:
+    repo, embedder = indexed_repo(tmp_path)
+    repo.touch_note("auth")
+    run_index(repo.root, config_of(repo), None)
+    assert rows(repo, "select value from meta where key = 'vectors'") == [("mixed",)]
+
+    run_index(repo.root, config_of(repo), embedder)
+
+    assert rows(repo, "select value from meta where key = 'vectors'") == [("True",)]
+
+
+def test_search_when_index_is_keyword_only_then_the_query_is_not_embedded(tmp_path: Path) -> None:
+    repo, _ = indexed_repo(tmp_path)
+    run_index(repo.root, config_of(repo), None, rebuild=True)
+    counting = CountingEmbedder()
+
+    search(repo.root, config_of(repo), counting, "billing", k=3)
+
+    assert counting.texts == []

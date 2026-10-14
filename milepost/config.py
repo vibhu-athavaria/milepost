@@ -75,7 +75,7 @@ class Index(_Model):
 
 
 class Draft(_Model):
-    mode: Literal["model", "agent"] = "model"
+    mode: Literal["model", "agent"] = "agent"
     provider_model: str = "${MILEPOST_MODEL}"
     max_source_bytes: PositiveInt = 200000
     exclude: list[str] = ["**/.env*", "**/*secret*", "**/*.pem", "**/*.key", "**/credentials*"]

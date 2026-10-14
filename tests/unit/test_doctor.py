@@ -1,5 +1,8 @@
+import importlib.util
 import subprocess
 from pathlib import Path
+
+import pytest
 
 from milepost.services.doctor import DoctorReport, run_doctor
 
@@ -14,11 +17,16 @@ def key_missing(model: str) -> list[str]:
     return ["OPENROUTER_API_KEY"]
 
 
+def model_mode(path: Path) -> None:
+    (path / "milepost.toml").write_text('[project]\nname = "x"\n\n[draft]\nmode = "model"\n')
+
+
 def status_of(report: DoctorReport, name: str) -> str:
     return next(check.status for check in report.checks if check.name == name)
 
 
 def test_doctor_when_model_env_unset_then_exit_three_naming_variable(tmp_path: Path) -> None:
+    model_mode(tmp_path)
     report = run_doctor(tmp_path, {}, keys_present)
 
     assert report.exit_code == 3
@@ -27,6 +35,7 @@ def test_doctor_when_model_env_unset_then_exit_three_naming_variable(tmp_path: P
 
 
 def test_doctor_when_provider_key_missing_then_exit_three_naming_variable(tmp_path: Path) -> None:
+    model_mode(tmp_path)
     report = run_doctor(tmp_path, {"MILEPOST_MODEL": MODEL}, key_missing)
 
     assert report.exit_code == 3
@@ -35,6 +44,7 @@ def test_doctor_when_provider_key_missing_then_exit_three_naming_variable(tmp_pa
 
 
 def test_doctor_when_all_present_then_exit_zero(tmp_path: Path) -> None:
+    model_mode(tmp_path)
     report = run_doctor(tmp_path, {"MILEPOST_MODEL": MODEL}, keys_present)
 
     assert report.exit_code == 0
@@ -77,3 +87,47 @@ def test_doctor_when_config_is_invalid_then_reports_the_config_error(tmp_path: P
 
     assert status_of(report, "milepost.toml") == "fail"
     assert report.exit_code == 3
+
+
+def test_doctor_when_no_config_then_default_agent_mode_needs_no_key(tmp_path: Path) -> None:
+    report = run_doctor(tmp_path, {}, key_missing)
+
+    assert report.exit_code == 0 and status_of(report, "draft-mode") == "ok"
+
+
+def test_doctor_when_search_extra_missing_then_warns_keyword_only(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    real = importlib.util.find_spec
+    monkeypatch.setattr(
+        importlib.util,
+        "find_spec",
+        lambda name, *a: None if name == "fastembed" else real(name, *a),
+    )
+
+    report = run_doctor(tmp_path, {}, keys_present)
+
+    assert status_of(report, "search") == "warn" and report.exit_code == 0
+
+
+def test_doctor_when_model_mode_and_litellm_missing_then_fails_naming_the_extra(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    model_mode(tmp_path)
+    real = importlib.util.find_spec
+    monkeypatch.setattr(
+        importlib.util, "find_spec", lambda name, *a: None if name == "litellm" else real(name, *a)
+    )
+
+    report = run_doctor(tmp_path, {"MILEPOST_MODEL": MODEL}, keys_present)
+
+    assert status_of(report, "litellm") == "fail" and report.exit_code == 3
+
+
+def test_doctor_when_model_variable_set_but_mode_is_agent_then_says_it_is_unused(
+    tmp_path: Path,
+) -> None:
+    report = run_doctor(tmp_path, {"MILEPOST_MODEL": MODEL}, keys_present)
+
+    detail = next(c.detail for c in report.checks if c.name == "draft-mode")
+    assert "not used in agent mode" in detail and report.exit_code == 0

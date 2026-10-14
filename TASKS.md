@@ -27,7 +27,7 @@ An architecture review of the finished MVP found structural risks: one stored ha
 | 2 | Render the L1 index on demand; stop storing `INDEX.md` | Done |
 | 3 | Remove L3 and L4 notes: one note per module | Done |
 | 4 | Staleness from git history, soft by default; remove the stored hash, `rehash` and the `CONFLICT` sentinel | Done |
-| 5 | Heavy dependencies become optional extras; agent mode becomes the default | Planned |
+| 5 | Heavy dependencies become optional extras; agent mode becomes the default | Done |
 | 6 | Consolidate SPEC and README around the trimmed product | Planned |
 
 Kill criterion (decided before the pilot): stop, or ship only the computed tools as a small standalone server, if tokens after the first turn are not clearly lower (under about 20% savings), or if reviewers do not answer questions about a pull request faster or more accurately from the notes and `report` than from the diff.

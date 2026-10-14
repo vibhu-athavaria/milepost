@@ -12,7 +12,7 @@ from mcp.server.mcpserver.exceptions import ToolError
 from pydantic import Field
 
 from milepost.config import Config
-from milepost.embeddings import Embedder, FastembedEmbedder
+from milepost.embeddings import Embedder, default_embedder
 from milepost.llm.client import LiteLlmClient, LlmClient
 from milepost.services import kb
 
@@ -34,12 +34,12 @@ class _CachedEmbedders:
     """One embedder per model for the life of the server, so the model loads once."""
 
     def __init__(self) -> None:
-        self._by_model: dict[tuple[str, int], Embedder] = {}
+        self._by_model: dict[tuple[str, int], Embedder | None] = {}
 
-    def __call__(self, config: Config) -> Embedder:
+    def __call__(self, config: Config) -> Embedder | None:
         key = (config.index.embedding_model, config.index.embedding_dim)
-        if key not in self._by_model:
-            self._by_model[key] = FastembedEmbedder(*key)
+        if self._by_model.get(key) is None:  # not cached while the extra is missing, so a later
+            self._by_model[key] = default_embedder(*key)  # install is picked up without a restart
         return self._by_model[key]
 
 
@@ -52,7 +52,7 @@ def _guard(call: Callable[[], dict[str, Any]]) -> dict[str, Any]:
 
 def build_server(
     root: Path,
-    embedder_for: Callable[[Config], Embedder] | None = None,
+    embedder_for: Callable[[Config], Embedder | None] | None = None,
     client: LlmClient | None = None,
 ) -> MCPServer:
     server = MCPServer("milepost", instructions=INSTRUCTIONS)

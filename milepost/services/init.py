@@ -11,7 +11,7 @@ from pathlib import Path
 from milepost.config import Config, Module, Project, Structure, load_config, resolve_model
 from milepost.embeddings import Embedder
 from milepost.errors import EnvironmentProblem, MilepostError, UsageError
-from milepost.llm.client import LlmClient
+from milepost.llm.client import LlmClient, model_extra_available
 from milepost.services.coverage import CONFIG_NAME, uncovered_candidates, undeclared_candidates
 from milepost.services.draft import collect_sources, draft_modules
 from milepost.services.hooks import GITATTRIBUTES_LINE, HooksReport, install_hooks
@@ -64,7 +64,7 @@ def _module_table(candidate: Candidate, commented: bool) -> str:
 
 
 def _render_config(
-    name: str, active: list[Candidate], suggested: list[Candidate], agent_mode: bool = False
+    name: str, active: list[Candidate], suggested: list[Candidate], model_mode: bool = False
 ) -> str:
     defaults = Structure()
     parts = [
@@ -82,9 +82,9 @@ def _render_config(
     )
     parts.append(
         "[draft]\n"
-        '# "model": milepost calls the model named by MILEPOST_MODEL. "agent": your coding agent '
-        "writes the notes itself (no key needed).\n"
-        f'mode = "{"agent" if agent_mode else "model"}"\n'
+        '# "agent" (default): your coding agent writes the notes itself, no key needed. '
+        '"model": milepost calls the model named by MILEPOST_MODEL (pip install milepost[model]).\n'
+        f'mode = "{"model" if model_mode else "agent"}"\n'
         "# Resolved from the MILEPOST_MODEL environment variable (shell or .env). "
         "Never put a model name or key here.\n"
         'provider_model = "${MILEPOST_MODEL}"\n'
@@ -111,12 +111,12 @@ def _workflow_text() -> str:
     )
 
 
-def _existing_agent_mode(root: Path) -> bool:
-    """True when the config that --force-config is about to replace uses agent mode."""
+def _existing_mode(root: Path) -> str | None:
+    """Draft mode of the config that --force-config is about to replace, if there is one."""
     try:
-        return load_config(root / CONFIG_NAME).draft.mode == "agent"
+        return load_config(root / CONFIG_NAME).draft.mode
     except MilepostError:
-        return False
+        return None
 
 
 def _plan_config(
@@ -157,24 +157,24 @@ def run_init(
     dry_run: bool,
     force_config: bool,
     client: LlmClient,
-    embedder: Embedder,
+    embedder: Embedder | None,
     environ: Mapping[str, str],
     now: str,
     sleep: Callable[[float], None],
     install_hooks_flag: bool = False,
-    agent_mode: bool = False,
+    model_mode: bool = False,
 ) -> InitReport:
     _require_git_repo(root)
     config, newly, suggested, config_exists = _plan_config(root, modules, force_config)
-    if agent_mode and config_exists and config.draft.mode != "agent":
+    if model_mode and config_exists and config.draft.mode != "model":
         raise UsageError(
-            'milepost.toml already exists in model mode; set [draft] mode = "agent" in it yourself'
+            'milepost.toml already exists in agent mode; set [draft] mode = "model" in it yourself'
         )
-    if agent_mode and not config_exists:
-        config.draft.mode = "agent"
-    agent_drafts = config.draft.mode == "agent" or (force_config and _existing_agent_mode(root))
-    if agent_drafts:
-        config.draft.mode = "agent"
+    if not config_exists:
+        # --force-config keeps the mode of the file it replaces; --model-mode picks model mode.
+        previous = _existing_mode(root) if force_config else None
+        config.draft.mode = "model" if model_mode or previous == "model" else "agent"
+    agent_drafts = config.draft.mode == "agent"
     kb = root / config.project.kb_dir
     to_draft = [m for m in config.modules if not (kb / "modules" / f"{m}.md").is_file()]
     report = InitReport(dry_run=dry_run, declared=[c.id for c in newly], agent_mode=agent_drafts)
@@ -188,12 +188,17 @@ def run_init(
             report.estimated_tokens += collected.estimated_tokens
         return report
 
+    if not agent_drafts and to_draft and not model_extra_available():
+        raise EnvironmentProblem(
+            "model mode needs the `model` extra: pip install 'milepost[model]' "
+            "(or use the default agent mode)"
+        )
     model = "" if agent_drafts or not to_draft else resolve_model(config, environ)
 
     config_path = root / CONFIG_NAME
     if not config_exists:
         config_path.write_text(
-            _render_config(config.project.name, newly, suggested, agent_mode=agent_drafts)
+            _render_config(config.project.name, newly, suggested, model_mode=not agent_drafts)
         )
         report.created.append(CONFIG_NAME)
     elif newly:
