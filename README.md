@@ -118,7 +118,7 @@ In the Claude Code plugin there is a single command, `/milepost:kb-init` (the pl
 
 ### 8. Handles your code carefully (works today)
 
-Drafting is the only step that sends source to a model, and only the model you configure. Files that look like secrets (`.env*`, keys, credentials) are never read for drafting, a scan aborts a module if it finds credentials in what it was about to send, and `milepost init --dry-run` lists every file before any network call. Model names and keys come from environment variables or a git-ignored `.env` file, never from committed files.
+Drafting sends source to a model: either the one you configure, or, in agent mode, your own coding agent (no separate key). Nothing else is sent. Files that look like secrets (`.env*`, keys, credentials) are never read for drafting, a scan aborts a module if it finds credentials in what it was about to send, and `milepost init --dry-run` lists every file before any network call. Model names and keys come from environment variables or a git-ignored `.env` file, never from committed files.
 
 ### 9. Keeps people in the loop (works today)
 
@@ -267,7 +267,7 @@ Built test-first. Milestones are defined in [TASKS.md](TASKS.md).
 | M10 | Claude Code plugin: one `/kb-init` command, hooks, usage skill | Built, on `main`. Loads from a local checkout; not yet tried in a live session |
 | M11 | Pilot: token cost, review effort, and the release decision (and publishing to PyPI) | Not started |
 
-**What is left.** Agent-mode drafting (the coding agent writes the first draft instead of a separate model, so no API key is needed), the `AGENTS.md` route for other agents, publishing to PyPI so the plugin can be installed from a marketplace, and the pilot that decides whether it is worth releasing. **[USAGE.md](USAGE.md)** covers installing it, trying the plugin, and a command reference.
+**What is left.** Testing the `AGENTS.md` route with agents other than Claude Code, publishing to PyPI so the plugin can be installed from a marketplace, and the pilot that decides whether it is worth releasing. **[USAGE.md](USAGE.md)** covers installing it, trying the plugin, and a command reference.
 
 ## Documents
 

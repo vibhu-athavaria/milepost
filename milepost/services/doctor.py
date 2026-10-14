@@ -8,7 +8,10 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Literal
 
+from milepost.config import load_config
 from milepost.env import DOTENV_NAME, dotenv_is_ignored
+from milepost.errors import MilepostError
+from milepost.services.coverage import CONFIG_NAME
 
 MODEL_VAR = "MILEPOST_MODEL"
 Status = Literal["ok", "warn", "fail"]
@@ -47,6 +50,16 @@ def _fts5_available() -> bool:
     return True
 
 
+def _draft_mode(root: Path) -> tuple[str, str]:
+    """(mode, config error). The error is empty when milepost.toml is absent or valid."""
+    if not (root / CONFIG_NAME).is_file():
+        return "model", ""
+    try:
+        return load_config(root / CONFIG_NAME).draft.mode, ""
+    except MilepostError as error:
+        return "model", str(error)
+
+
 def run_doctor(
     root: Path,
     environ: Mapping[str, str],
@@ -67,7 +80,14 @@ def run_doctor(
         ),
     ]
     model = environ.get(MODEL_VAR, "")
-    if not model:
+    mode, config_error = _draft_mode(root)
+    if config_error:
+        checks.append(Check(CONFIG_NAME, "fail", config_error))
+    if mode == "agent":
+        checks.append(
+            Check("draft-mode", "ok", "agent: your coding agent writes the notes; no model needed")
+        )
+    elif not model:
         checks.append(
             Check(MODEL_VAR, "fail", f"{MODEL_VAR} is not set (set it in the shell or in .env)")
         )

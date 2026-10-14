@@ -29,6 +29,10 @@ embedding_model = "BAAI/bge-small-en-v1.5"
 embedding_dim = 384
 
 [draft]
+# "model": milepost calls the model named by MILEPOST_MODEL (needs a provider key).
+# "agent": your coding agent writes the notes itself through kb_draft_module and kb_update (no key).
+# `milepost init --agent-mode` writes this for you.
+mode = "model"
 # Resolved from the MILEPOST_MODEL environment variable at run time. Never put a model name here.
 # Also set the provider's own key variable (OPENROUTER_API_KEY, ANTHROPIC_API_KEY, ...).
 # Both can live in a git-ignored .env file at the repo root; see templates/.env.example.

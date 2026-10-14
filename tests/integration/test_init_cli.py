@@ -115,3 +115,38 @@ def test_draft_when_run_then_note_written_as_draft(
 
     assert result.exit_code == 0, result.output
     assert read_note(repo.root / "kb/modules/billing.md").meta["status"] == "draft"
+
+
+def test_init_cli_when_agent_mode_flag_then_no_model_needed_and_instruction_printed(
+    repo: KbRepo,
+) -> None:
+    result = runner.invoke(
+        cli.app,
+        ["init", "--repo", str(repo.root), "--modules", "billing", "--yes", "--agent-mode"],
+    )
+
+    assert result.exit_code == 0, result.output
+    assert "kb_draft_module" in result.output and "billing" in result.output
+    assert not (repo.root / "kb/modules/billing.md").exists()
+
+
+def test_draft_cli_when_mode_agent_then_usage_error_pointing_at_the_agent(repo: KbRepo) -> None:
+    runner.invoke(
+        cli.app,
+        ["init", "--repo", str(repo.root), "--modules", "billing", "--yes", "--agent-mode"],
+    )
+
+    result = runner.invoke(cli.app, ["draft", "billing", "--repo", str(repo.root)])
+
+    assert result.exit_code == 2 and "kb_draft_module" in result.output
+
+
+def test_init_cli_when_agent_mode_dry_run_then_wording_says_agent_not_model(repo: KbRepo) -> None:
+    result = runner.invoke(
+        cli.app,
+        ["init", "--repo", str(repo.root), "--modules", "billing", "--dry-run", "--agent-mode"],
+    )
+
+    assert result.exit_code == 0, result.output
+    assert "would show your coding agent 1 file(s)" in result.output
+    assert "would send" not in result.output

@@ -86,8 +86,10 @@ def build_server(
     @server.tool()
     def kb_update(id: str, body: str, read_hash: str | None = None) -> dict[str, Any]:
         """Write a note. For L2 and L3, pass read_hash=source_hash_now from kb_module or
-        kb_file (kb_file's file_hash_now to create a new file note). The note is saved as a
-        draft and kb/INDEX.md is regenerated; a person must run `milepost review`."""
+        kb_file (kb_file's file_hash_now to create a new file note). In agent mode this also
+        creates the L2 note of a declared module that has none. The note is saved as a draft
+        and kb/INDEX.md is regenerated; a person must run `milepost review`. Bodies that look
+        like they contain a credential are rejected."""
         return _guard(lambda: kb.kb_update(root, id, body, read_hash, _now()))
 
     @server.tool()
@@ -97,8 +99,10 @@ def build_server(
 
     @server.tool()
     def kb_draft_module(id: str) -> dict[str, Any]:
-        """Draft the note for a module already declared in milepost.toml. Sends the module's
-        source to the configured LLM provider."""
+        """For a module already declared in milepost.toml. In model mode, drafts the note with
+        the configured LLM (sending the module's source to that provider). In agent mode,
+        writes nothing: it returns the drafting prompt and the module's sources, and you write
+        the note and save it with kb_update using read_hash=source_hash_now."""
         return _guard(lambda: kb.kb_draft_module(root, id, llm, os.environ, _now(), time.sleep))
 
     @server.tool()

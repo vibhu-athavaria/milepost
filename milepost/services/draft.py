@@ -101,6 +101,40 @@ def _system_prompt(config: Config, module_id: str) -> str:
     return PROMPT_PATH.read_text(encoding="utf-8").replace("{related}", lines or "None declared.")
 
 
+@dataclass
+class DraftPacket:
+    """Everything an agent needs to write a module note itself (draft.mode = "agent")."""
+
+    module_id: str
+    system_prompt: str
+    sources_text: str
+    source_hash_now: str
+    sent_files: list[str]
+    outline_only: list[str]
+    truncation_notice: str
+    estimated_tokens: int
+
+
+def build_draft_packet(root: Path, config: Config, module_id: str) -> DraftPacket:
+    """The drafting prompt and the module's sources, after `draft.exclude`, the size budget and
+    the secret scan. No model is called. Raises SecretDetected naming the file, not the value."""
+    module = config.modules[module_id]
+    collected = collect_sources(root, config, module_id)
+    leaked = scan_for_secrets(collected.contents)
+    if leaked is not None:
+        raise SecretDetected(leaked)
+    return DraftPacket(
+        module_id=module_id,
+        system_prompt=_system_prompt(config, module_id),
+        sources_text=collected.text,
+        source_hash_now=compute_source_hash(root, module.sources, config.structure.ignore).value,
+        sent_files=collected.sent,
+        outline_only=collected.outline_only,
+        truncation_notice=truncation_note(collected.outline_only) if collected.truncated else "",
+        estimated_tokens=collected.estimated_tokens,
+    )
+
+
 def _model_body(reply: str) -> str:
     try:
         body = parse_note(reply.strip() + "\n").body
@@ -134,21 +168,18 @@ def draft_modules(
     completed: list[str] = []
     for module_id in module_ids:
         module = config.modules[module_id]
-        collected = collect_sources(root, config, module_id)
-        leaked = scan_for_secrets(collected.contents)
-        if leaked is not None:
-            raise SecretDetected(leaked)
+        packet = build_draft_packet(root, config, module_id)
         try:
             reply = complete_with_retries(
-                client, model, _system_prompt(config, module_id), collected.text, sleep
+                client, model, packet.system_prompt, packet.sources_text, sleep
             )
         except ProviderError as error:
             raise ProviderError(f"module '{module_id}': {error}") from error
         body = _model_body(reply)
         if not body:
             raise ProviderError(f"module '{module_id}': the model returned an empty note")
-        if collected.truncated:
-            body = truncation_note(collected.outline_only) + "\n" + body
+        if packet.truncation_notice:
+            body = packet.truncation_notice + "\n" + body
         note = Note(
             meta={
                 "kb_schema": 1,
@@ -157,9 +188,7 @@ def draft_modules(
                 "title": module.title,
                 "status": "draft",
                 "sources": module.sources,
-                "source_hash": compute_source_hash(
-                    root, module.sources, config.structure.ignore
-                ).value,
+                "source_hash": packet.source_hash_now,
                 "related": module.related,
                 "written_by": "draft-command",
                 "written_at": now,

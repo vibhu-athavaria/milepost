@@ -111,7 +111,7 @@ embedding_model = "BAAI/bge-small-en-v1.5"   # fastembed model name; config, not
 embedding_dim = 384                    # must match the model
 
 [draft]
-mode = "model"                         # "model" (default) or "agent"; section 9.3
+mode = "model"                         # "model" (default) or "agent"; section 9.3. `milepost init --agent-mode` writes "agent"
 provider_model = "${MILEPOST_MODEL}"      # resolved from env var at run time; required when mode = "model"
 max_source_bytes = 200000              # per module; larger modules are sampled, see 9.3
 exclude = ["**/.env*", "**/*secret*", "**/*.pem", "**/*.key", "**/credentials*"]
@@ -124,8 +124,6 @@ max_detail_notes = 50                  # warn when L3 plus L4 notes exceed this;
 agent_trailers = ["(?im)^Co-Authored-By:.*noreply@anthropic\\.com", "Generated with \\[?Claude Code"]   # regexes matched against commit messages to count agent-authored commits
 churn_warn_lines = 1000                # warn UNREVIEWED_CHURN above this many changed lines since the last review; a placeholder to tune in the pilot
 ```
-
-**Not implemented yet:** `draft.mode` is specified here but the loader does not accept it until agent-mode drafting is built; until then it is rejected as an unknown key rather than silently ignored.
 
 Validation rules (fail fast, exit code 2):
 - Module ids are unique and match `^[a-z0-9][a-z0-9_-]*$`.

@@ -59,3 +59,21 @@ def test_doctor_when_dotenv_ignored_then_no_warning(tmp_path: Path) -> None:
     report = run_doctor(tmp_path, {"MILEPOST_MODEL": MODEL}, keys_present)
 
     assert all(check.name != ".env" for check in report.checks)
+
+
+def test_doctor_when_draft_mode_agent_then_no_model_or_key_needed(tmp_path: Path) -> None:
+    (tmp_path / "milepost.toml").write_text('[project]\nname = "x"\n\n[draft]\nmode = "agent"\n')
+
+    report = run_doctor(tmp_path, {}, key_missing)
+
+    assert report.exit_code == 0
+    assert status_of(report, "draft-mode") == "ok"
+
+
+def test_doctor_when_config_is_invalid_then_reports_the_config_error(tmp_path: Path) -> None:
+    (tmp_path / "milepost.toml").write_text('[project]\nname = "x"\n\n[draft]\nmode = "agnet"\n')
+
+    report = run_doctor(tmp_path, {"MILEPOST_MODEL": MODEL}, keys_present)
+
+    assert status_of(report, "milepost.toml") == "fail"
+    assert report.exit_code == 3
