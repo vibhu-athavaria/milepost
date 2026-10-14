@@ -12,6 +12,7 @@ from milepost.config import load_config
 from milepost.env import DOTENV_NAME, dotenv_is_ignored
 from milepost.errors import MilepostError
 from milepost.services.coverage import CONFIG_NAME
+from milepost.services.hooks import outdated_hooks
 
 MODEL_VAR = "MILEPOST_MODEL"
 Status = Literal["ok", "warn", "fail"]
@@ -104,6 +105,15 @@ def run_doctor(
             )
         else:
             checks.append(Check("provider-key", "ok", "present"))
+    outdated = outdated_hooks(root) if shutil.which("git") else []
+    if outdated:
+        checks.append(
+            Check(
+                "git-hooks",
+                "warn",
+                f"{', '.join(outdated)} written by an older milepost; run `milepost hooks install`",
+            )
+        )
     if not dotenv_is_ignored(root):
         checks.append(
             Check(

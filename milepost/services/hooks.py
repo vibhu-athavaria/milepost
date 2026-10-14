@@ -20,7 +20,7 @@ HOOKS = {
     "post-checkout": (
         f'{_GUARD}\nmilepost index || echo "milepost: index failed (non-blocking)" >&2\nexit 0\n'
     ),
-    "pre-commit": f"{_GUARD}\nexec milepost check\n",
+    "pre-commit": f"{_GUARD}\nexec milepost check --no-churn\n",
 }
 
 
@@ -95,3 +95,17 @@ def uninstall_hooks(root: Path) -> list[str]:
         _git(root, "config", "--unset", "merge.milepost.driver")
         _git(root, "config", "--unset", "merge.milepost.name")
     return removed
+
+
+def outdated_hooks(root: Path) -> list[str]:
+    """Names of milepost-managed hooks whose script differs from what `hooks install` writes now."""
+    try:
+        directory = _hooks_dir(root)
+    except OSError:
+        return []
+    return [
+        name
+        for name, body in HOOKS.items()
+        if _is_ours(directory / name)
+        and (directory / name).read_text(encoding="utf-8") != f"#!/bin/sh\n{MARKER}\n{body}"
+    ]

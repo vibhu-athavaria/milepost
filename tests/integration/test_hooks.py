@@ -5,7 +5,13 @@ from pathlib import Path
 
 from support.kb_repo import KbRepo
 
-from milepost.services.hooks import MARKER, MERGE_DRIVER, install_hooks, uninstall_hooks
+from milepost.services.hooks import (
+    MARKER,
+    MERGE_DRIVER,
+    install_hooks,
+    outdated_hooks,
+    uninstall_hooks,
+)
 
 
 def make_repo(tmp_path: Path) -> KbRepo:
@@ -152,3 +158,24 @@ def test_pre_commit_when_milepost_not_installed_then_hook_exits_zero_with_warnin
 
     assert done.returncode == 0
     assert "not installed" in done.stderr
+
+
+def test_pre_commit_when_installed_then_runs_check_without_the_slow_churn_warning(
+    tmp_path: Path,
+) -> None:
+    repo = make_repo(tmp_path)
+    install_hooks(repo.root)
+
+    assert "milepost check --no-churn" in hook_path(repo, "pre-commit").read_text()
+
+
+def test_outdated_hooks_when_pre_commit_written_by_an_older_milepost_then_reported(
+    tmp_path: Path,
+) -> None:
+    repo = make_repo(tmp_path)
+    install_hooks(repo.root)
+    assert outdated_hooks(repo.root) == []
+    path = hook_path(repo, "pre-commit")
+    path.write_text(path.read_text().replace(" --no-churn", ""))
+
+    assert outdated_hooks(repo.root) == ["pre-commit"]
