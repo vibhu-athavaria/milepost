@@ -120,7 +120,7 @@ Reminders do not depend on the agent remembering: each tool response says what t
 |---|---|
 | `milepost init [--dry-run] [--modules ID,...] [--yes] [--agent-mode] [--force-config] [--no-hooks]` | Scaffold the knowledge base, declare the named modules, draft their notes, install the git hooks, build the index. Writes nothing and sends nothing with `--dry-run` |
 | `milepost scan [--json]` | List candidate modules that no declared module covers. Read-only |
-| `milepost check [--ci --base REF] [--format text\|json]` | Validate notes and detect staleness. Exit 1 on failures |
+| `milepost check [--ci --base REF] [--format text\|json] [--no-churn]` | Validate notes and detect staleness. Exit 1 on failures. `--no-churn` skips the slower unreviewed-churn warning |
 | `milepost draft ID [--force]` | Draft or redraft one module note with the configured model |
 | `milepost review NOTE_ID` | Mark a note reviewed by you (records your git identity and the time). Refuses a stale or `CONFLICT` note |
 | `milepost rehash NOTE_ID [--yes]` | Record the current source hash on a note whose prose you have just read |
@@ -137,7 +137,7 @@ Reminders do not depend on the agent remembering: each tool response says what t
 | `milepost hook session-start\|post-edit\|stop` | Called by the plugin hooks, with JSON on stdin. Always exit 0 |
 | `milepost merge-driver` | Git merge driver for note files. Called by git, not by you |
 
-The git hooks `milepost hooks install` adds are `post-merge` and `post-checkout` (run `index`, never block) and `pre-commit` (runs `check`, which blocks on failures; bypass with `git commit --no-verify`).
+The git hooks `milepost hooks install` adds are `post-merge` and `post-checkout` (run `index`, never block) and `pre-commit` (runs `check --no-churn`, which blocks on failures; bypass with `git commit --no-verify`).
 
 ## What `check` reports
 
@@ -151,6 +151,7 @@ The git hooks `milepost hooks install` adds are `post-merge` and `post-checkout`
 | `UNCOVERED_DIR` | warning | A source directory is covered by no module |
 | `ORPHAN_NOTE` | warning | A file note describes a file that no longer exists |
 | `DETAIL_NOTE_COUNT` | warning | Too many file and passage notes; prefer module notes |
+| `CITATION_BROKEN` | warning | A note cites (in backticks, in Entry points, File map, Invariants or Gotchas) a file that is not in the repository, or a `file::symbol` whose name does not appear in the file. Lenient on purpose: it flags only what is clearly absent. A cheap check for invented details; it cannot tell whether a true citation supports the claim |
 | `UNREVIEWED_CHURN` | warning | A reviewed note's source files changed by more than `visibility.churn_warn_lines` since the review. Never a failure |
 
 **CI mode** (`milepost check --ci --base origin/main`) judges a pull request by what it changes. A stale note fails only if a file it covers changed in the PR; stale notes the PR does not touch stay warnings, so existing debt does not block unrelated changes. A new source directory with no module, or a deleted file that a file note described, also fails. Any of these can be waived with a trailer in a commit message, and a waiver without a reason is an error:
@@ -187,7 +188,7 @@ Needed only to draft notes with a separate model (`draft`, `init`, and `kb_draft
 | `MILEPOST_MODEL` | The model used to draft notes, in LiteLLM's format. For OpenRouter: `openrouter/<OpenRouter model slug>`. |
 | The provider's own key variable | `OPENROUTER_API_KEY` for an `openrouter/...` model, `ANTHROPIC_API_KEY` for an Anthropic model. |
 
-Set them in your shell, or put them in a `.env` file at the repository root (see [templates/.env.example](templates/.env.example)). milepost loads `.env` for `draft`, `init`, `doctor` and `serve`; a variable already set in the shell wins. `milepost init` adds `.env` to `.gitignore`, and `milepost doctor` warns if a `.env` file exists that git does not ignore. Run `milepost doctor` to see what is missing; a missing variable exits with status 3.
+Set them in your shell, or put them in a `.env` file at the repository root (see [templates/.env.example](templates/.env.example)). milepost loads `.env` for `draft`, `init`, `doctor` and `serve`; a variable already set in the shell wins. `milepost init` adds `.env` to `.gitignore`, and `milepost doctor` warns if a `.env` file exists that git does not ignore. Run `milepost doctor` to see what is missing; a missing variable exits with status 3. `doctor` also warns when a git hook was written by an older milepost (rerun `milepost hooks install`).
 
 Drafting sends the source of a module to the configured model provider. Files matching `draft.exclude` are never sent, a secret scan aborts a module if it finds credentials, and `init --dry-run` lists every file that would be sent before any network call.
 

@@ -229,6 +229,12 @@ def check(
     ci: Annotated[bool, typer.Option("--ci", help="Scope failures to the change range.")] = False,
     base: Annotated[str | None, typer.Option("--base", help="Base git ref for --ci.")] = None,
     output_format: Annotated[str, typer.Option("--format", help="text or json.")] = "text",
+    no_churn: Annotated[
+        bool,
+        typer.Option(
+            "--no-churn", help="Skip the slower unreviewed-churn warning (used by hooks)."
+        ),
+    ] = False,
 ) -> None:
     """Validate notes and detect stale ones."""
     if output_format not in ("text", "json"):
@@ -237,7 +243,7 @@ def check(
         raise UsageError("--ci requires --base <ref>")
     root = _repo_root(repo)
     config = load_config(root / CONFIG_NAME)
-    result = run_check(root, config, base if ci else None)
+    result = run_check(root, config, base if ci else None, with_churn=not no_churn)
     if output_format == "json":
         payload = [
             {"severity": f.severity, "code": f.code, "path": f.path, "message": f.message}

@@ -1,18 +1,20 @@
 """`milepost check`: validate notes and detect staleness (SPEC section 6)."""
 
+import re
 from dataclasses import dataclass, replace
 from pathlib import Path
 
 from wcmatch import glob
 
 from milepost.config import Config
+from milepost.core.citations import all_citations, path_matches
 from milepost.core.findings import Finding
 from milepost.core.glob import FLAGS
 from milepost.core.hashing import compute_source_hash
 from milepost.core.notes import Note, parse_note, validate_note
 from milepost.errors import NoteInvalid, UsageError
 from milepost.services.coverage import uncovered_candidates
-from milepost.services.gitinfo import Changes, changed_files, files_at, read_waivers
+from milepost.services.gitinfo import Changes, changed_files, files_at, read_waivers, repo_files
 from milepost.services.render import render_index
 from milepost.services.status import module_statuses
 from milepost.structure.candidates import Candidate
@@ -169,6 +171,62 @@ def _check_detail_count(config: Config, notes: list[_LoadedNote], findings: list
         )
 
 
+MAX_CITATIONS_CHECKED = 200
+_IDENTIFIER = re.compile(r"[A-Za-z_][A-Za-z0-9_]*$")
+
+
+def _check_citations(root: Path, notes: list[_LoadedNote], findings: list[Finding]) -> None:
+    """Warn when a note cites a file or symbol that does not exist: a cheap, deterministic
+    catch for invented details. It is deliberately lenient (a symbol counts if its name appears
+    in the file), so it flags only what is clearly absent. It must never crash a check."""
+    try:
+        repo_paths = repo_files(root)
+    except UsageError:
+        return  # not a git repository: skip rather than guess
+    by_name: dict[str, list[str]] = {}
+    for path in repo_paths:
+        by_name.setdefault(path.rsplit("/", 1)[-1], []).append(path)
+    texts: dict[str, str] = {}
+    for loaded in notes:
+        if loaded.note.meta.get("level") not in ("L2", "L3"):
+            continue
+        note_id = str(loaded.note.meta.get("id"))
+        for path, symbol in all_citations(loaded.note.body)[:MAX_CITATIONS_CHECKED]:
+            try:
+                problem = _citation_problem(root, repo_paths, by_name, texts, path, symbol)
+            except (OSError, ValueError, RecursionError):
+                continue  # unreadable or odd file: nothing to compare against
+            if problem:
+                findings.append(
+                    Finding("warning", "CITATION_BROKEN", loaded.rel_path, problem, note_id)
+                )
+
+
+def _citation_problem(
+    root: Path,
+    repo_paths: list[str],
+    by_name: dict[str, list[str]],
+    texts: dict[str, str],
+    path: str,
+    symbol: str,
+) -> str:
+    if path.endswith("/"):
+        prefix = path.lstrip("/")
+        found = any(p.startswith(prefix) or ("/" + prefix) in "/" + p for p in repo_paths)
+        return "" if found else f"cites the directory `{path}`, which is not in this repository"
+    matches = [p for p in by_name.get(path.rsplit("/", 1)[-1], []) if path_matches(p, path)]
+    if not matches:
+        return f"cites `{path}`, which is not a file in this repository"
+    wanted = symbol.split("(")[0].strip().rsplit(".", 1)[-1]
+    if not symbol or len(matches) != 1 or not _IDENTIFIER.match(wanted):
+        return ""
+    if matches[0] not in texts:
+        texts[matches[0]] = (root / matches[0]).read_text(encoding="utf-8", errors="replace")
+    if re.search(rf"\b{re.escape(wanted)}\b", texts[matches[0]]):
+        return ""
+    return f"cites `{path}::{symbol}`, but `{wanted}` does not appear in {matches[0]}"
+
+
 def _check_unreviewed_churn(root: Path, config: Config, findings: list[Finding]) -> None:
     try:
         statuses = module_statuses(root, config)
@@ -246,6 +304,7 @@ def run_check(
     _check_modules_and_index(root, config, findings)
     uncovered = _check_coverage(root, config, findings)
     _check_detail_count(config, notes, findings)
+    _check_citations(root, notes, findings)
     if with_churn:
         _check_unreviewed_churn(root, config, findings)
     if base is not None:
