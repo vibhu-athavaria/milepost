@@ -1,6 +1,6 @@
 # Proposal: Agent-Driven Codebase Knowledge Base (Milepost)
 
-> **Revision (October 2026).** The design now has two stated goals: cheaper, better agent context, and human visibility of agent-written changes. Per-file detail is computed on demand rather than stored as L3 notes, and visibility features (`status`, `report`, review rules) were added. The current design is in SPEC.md sections 0, 0.1, 8.3 and 8.4. Where this document and SPEC.md differ, SPEC.md wins.
+> **Revision (October 2026).** The design now has two stated goals: cheaper, better agent context, and human visibility of agent-written changes. Per-file detail is computed on demand rather than stored as L3 notes, and visibility features (`status`, `report`, review rules) were added. A later architecture review then trimmed it: no stored hash, index or per-file notes, staleness from git, optional heavy dependencies, agent drafting by default (see TASKS.md, "The trim"). The current design is in SPEC.md. Where this document and SPEC.md differ, SPEC.md wins; this file is the original case for building it, kept for the reasoning.
 
 Written for: maintainers and engineers who would decide whether to fund and build this.
 
@@ -50,7 +50,7 @@ It is not worth it for small repos. A good `CLAUDE.md` plus a short architecture
 
 | Level | Name | Content | Written by |
 |---|---|---|---|
-| L1 | Index | One line per module, plus module dependency map | Generated from structure, prose reviewed |
+| L1 | Index | One line per module with its purpose | Rendered on demand from the notes |
 | L2 | Module note | Purpose, entry points, owned data, invariants, related modules | Agent drafts, human reviews on first write |
 | L3, L4 | (removed) | There are no per-file or per-passage notes; per-file detail is computed by `outline` | n/a |
 
@@ -66,7 +66,7 @@ It is not worth it for small repos. A good `CLAUDE.md` plus a short architecture
 
 **Interfaces:** MCP tools `kb_overview`, `kb_module`, `kb_file`, `kb_search`, `kb_update`, `kb_check`, `kb_draft_module`, and the computed `kb_outline`, `kb_impact`, `kb_sync`. Plus a CLI: `milepost check` (staleness), `milepost index` (rebuild local search index), `milepost init` (section 11), `milepost scan` (undeclared module candidates). Tool responses carry the next step, and plugin hooks remind the agent of covering notes when it edits a file and run the check before it finishes, so the read and write paths do not depend on the agent remembering them. SPEC section 12.5 holds the scenario-by-scenario steps.
 
-**Language and tooling:** repository-agnostic. Hashing and frontmatter are language-neutral. Structure comes from an adapter, so any language with a structural graph works.
+**Language and tooling:** repository-agnostic. Staleness and frontmatter are language-neutral. Structure comes from an adapter, so any language with a structural graph works.
 
 ## 6. Multi-developer operation
 
@@ -80,13 +80,13 @@ This is the hardest part and the reason the design uses git as the transport.
 - the structural graph: codebase-memory-mcp auto-syncs on file change, so this is automatic per machine;
 - the local search index: a `post-merge` and `post-checkout` git hook runs `milepost index`. It is a cache, so a missed run only makes search stale, never wrong about structure.
 
-**Staleness is branch-local.** The hash check compares notes against the files in the working tree. A developer on a feature branch sees notes that match their branch's code, and sees a warning where their branch changed a file without updating its note.
+**Staleness is branch-local.** Git decides: a note is compared with the history and working tree of the branch you are on. A developer on a feature branch sees notes that match their branch's code, and a warning where their branch changed covered code without touching its note.
 
 **Merge conflicts.** Notes change less often than code, and one-file-per-module keeps conflicts local. Two additional mitigations:
-- A custom git merge driver for the frontmatter hash field recomputes the hash after a merge, so a conflict only arises in prose, which needs a human decision anyway.
+- Notes store nothing derived from the code, so two pull requests that change different files of one module cannot conflict on a hash; a merge driver merges note bodies line by line and returns a reviewed note to `draft` if it mixes in someone else's prose.
 - Agents are instructed to make small, targeted note edits rather than rewriting whole notes, which reduces conflicts further.
 
-**Who keeps main correct.** A CI check on every PR fails if a changed source file has a note whose hash no longer matches, unless the note was updated in the same PR. This is the only gate; it runs on each PR, so main stays consistent with its merges, not with some other branch's in-flight work.
+**Who keeps main correct.** A CI check on every PR flags a change that edits code a note covers without touching that note (a warning by default, a failure if the team opts in), with a written waiver for the exceptions. It runs on each PR, so main stays consistent with its merges, not with some other branch's in-flight work.
 
 **Concurrency under high merge frequency.** Because notes are per-module and updated with their code, two PRs touching different modules never conflict on notes. Two PRs touching the same module's note will conflict on prose, which surfaces a real disagreement about that module's documentation. That is acceptable at this scale; if it becomes frequent, the module note should be split.
 
@@ -96,13 +96,13 @@ This is the hardest part and the reason the design uses git as the transport.
 
 1. **Baseline (go/no-go gate).** On a real repository, pick five representative tasks. Record files read and tokens used with no knowledge base. Done when recorded.
 2. **Structural layer.** Install and verify the structural graph on the target repo, including auto-sync.
-3. **Notes for the main modules.** Write L1 and L2 notes for the largest modules. Human review each.
+3. **Notes for the main modules.** Write notes for the largest modules. Human review each.
 4. **Staleness check.** Implement `milepost check`, run in pre-commit and CI.
 5. **Agent integration.** MCP tools and a CLAUDE.md rule describing the read and write paths.
 6. **Measurement.** Repeat the five baseline tasks. Success: fewer files read and fewer tokens, with no regression in task outcome. If not met, stop.
 7. **Multi-developer pilot.** Run with two or three developers for two weeks. Measure merge conflicts on notes, stale-note warnings per PR, and whether agents on pulled main act on current notes.
 
-Out of scope for v1: L4 notes everywhere, a hosted service, cross-repo search, and any database backend beyond local SQLite.
+Out of scope for v1: per-file and per-passage notes, a hosted service, cross-repo search, and any database backend beyond local SQLite.
 
 ## 8. Storage, backends, and sync
 
@@ -122,7 +122,7 @@ Out of scope for v1: L4 notes everywhere, a hosted service, cross-repo search, a
 | Step | Estimate |
 |---|---|
 | Structural graph sync | Seconds for a typical repo |
-| Note hash check and parse | Under a second for a few hundred notes |
+| Staleness check (git) and note parse | A second or two for a few dozen modules |
 | Embedding rebuild, local model, few hundred notes | Seconds to about a minute on CPU |
 | Embedding rebuild, provider API | Seconds of network time, plus per-build cost |
 | Full CI job, merge to shared DB updated | Roughly 2–5 minutes |
@@ -171,7 +171,7 @@ Publish only after step 6 succeeds on a real repo. Until then the value is unpro
 - A reviewer sets `status: reviewed`. Only then is a note authoritative.
 
 **5. Baseline and verify**
-- Writes source hashes into each note's frontmatter so the staleness check starts clean.
+- Writes no hash: staleness is judged from git, so a fresh draft is current from its first commit.
 - Runs `milepost check` and `milepost index`, then a sample search, and reports the result.
 
 **Safety properties**
