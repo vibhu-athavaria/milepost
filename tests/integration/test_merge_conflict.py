@@ -33,7 +33,6 @@ def edit_branch(repo: KbRepo, branch: str, code: str, line: str) -> None:
     note.body = note.body.replace("Describes the thing.", line)
     note.meta["source_hash"] = repo.hash_of(SOURCES)
     write_note(note, repo.root / "kb/modules/billing.md")
-    repo.refresh_index()
     repo.commit(branch)
 
 

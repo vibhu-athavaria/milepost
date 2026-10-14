@@ -7,7 +7,6 @@ from support.kb_repo import KbRepo
 
 from milepost.config import Config, load_config
 from milepost.errors import IndexMissing, IndexRebuildRequired
-from milepost.services.check import run_check
 from milepost.services.index import run_index
 from milepost.services.search import search
 
@@ -143,14 +142,12 @@ def test_index_rebuild_when_run_then_tables_recreated(tmp_path: Path) -> None:
     assert "ghost" not in [r[0] for r in rows(repo, "select note_id from notes")]
 
 
-def test_index_when_index_md_stale_then_rewritten_so_check_has_no_drift(tmp_path: Path) -> None:
+def test_index_when_run_then_no_index_md_is_written(tmp_path: Path) -> None:
     repo = make_repo(tmp_path)
-    repo.write("kb/INDEX.md", "# stale\n")
 
     run_index(repo.root, config_of(repo), CountingEmbedder())
 
-    codes = [f.code for f in run_check(repo.root, config_of(repo)).findings]
-    assert "INDEX_DRIFT" not in codes
+    assert not (repo.root / "kb/INDEX.md").exists()
 
 
 def indexed_repo(tmp_path: Path) -> tuple[KbRepo, CountingEmbedder]:

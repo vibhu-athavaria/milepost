@@ -38,7 +38,6 @@ def test_review_when_draft_then_status_reviewed_and_hash_unchanged(tmp_path: Pat
     meta = read_note(repo.root / "kb/modules/billing.md").meta
     assert meta["status"] == "reviewed"
     assert meta["source_hash"] == before
-    assert "| reviewed |" in (repo.root / "kb/INDEX.md").read_text()
 
 
 def test_review_when_run_then_records_reviewer_and_time_from_git_identity(tmp_path: Path) -> None:

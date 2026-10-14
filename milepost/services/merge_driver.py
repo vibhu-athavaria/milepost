@@ -114,7 +114,7 @@ def merge_notes(base: str, ours: str, theirs: str) -> MergeResult:
 def run_merge_driver(base_path: Path, ours_path: Path, theirs_path: Path, name: str) -> int:
     """Write the merge into `ours_path`. Returns the exit code git expects (non-zero = conflict)."""
     if Path(name).name == "INDEX.md":
-        return 0
+        return 0  # a leftover from an older version (the index is no longer stored): keep ours
     result = merge_notes(
         base_path.read_text(encoding="utf-8"),
         ours_path.read_text(encoding="utf-8"),

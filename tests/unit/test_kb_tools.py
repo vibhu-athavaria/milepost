@@ -250,7 +250,7 @@ def test_kb_update_when_reviewed_note_updated_then_status_draft_and_review_field
     assert "reviewed_by" not in meta and "reviewed_at" not in meta
 
 
-def test_kb_update_when_purpose_changed_then_index_md_rewritten_so_check_has_no_drift(
+def test_kb_update_when_purpose_changed_then_overview_shows_it_and_check_is_clean(
     tmp_path: Path,
 ) -> None:
     repo = make_repo(tmp_path)
@@ -259,7 +259,7 @@ def test_kb_update_when_purpose_changed_then_index_md_rewritten_so_check_has_no_
         repo.root, "module/billing", "## Purpose\n\nNew purpose here.\n", repo.hash_of(SOURCES), NOW
     )
 
-    assert "New purpose here." in (repo.root / "kb/INDEX.md").read_text()
+    assert "New purpose here." in kb_overview(repo.root)["index"]
     assert kb_check(repo.root)["ok"] is True
 
 
@@ -328,7 +328,7 @@ def test_kb_draft_module_when_module_declared_and_no_note_then_writes_draft_note
     note = read_note(repo.root / "kb/modules/other.md")
     assert note.meta["status"] == "draft" and note.meta["written_by"] == "draft-command"
     assert "milepost review module/other" in " ".join(result["next_steps"])
-    assert "| other | Drafted. | draft |" in (repo.root / "kb/INDEX.md").read_text()
+    assert "| other | Drafted. | draft |" in kb_overview(repo.root)["index"]
 
 
 def test_kb_draft_module_when_module_not_in_config_then_not_found_with_config_hint(
@@ -625,7 +625,7 @@ def test_kb_update_when_mode_agent_and_declared_module_has_no_note_then_creates_
     assert note.meta["status"] == "draft" and note.meta["written_by"] == "agent"
     assert note.meta["sources"] == ["app/other/**/*.py"]
     assert note.meta["source_hash"] == repo.hash_of(["app/other/**/*.py"])
-    assert "| other | Runs things. | draft |" in (repo.root / "kb/INDEX.md").read_text()
+    assert "| other | Runs things. | draft |" in kb_overview(repo.root)["index"]
     assert kb_check(repo.root)["ok"] is True
 
 
@@ -727,3 +727,13 @@ def test_kb_impact_when_milepost_toml_is_invalid_then_environment_error(tmp_path
         kb_impact(repo.root, "app/charge.py")
 
     assert error.value.code == "ENVIRONMENT"
+
+
+def test_kb_overview_when_modules_declared_but_no_notes_then_says_to_draft(tmp_path: Path) -> None:
+    repo = KbRepo(tmp_path / "fresh")
+    repo.add_module("billing", SOURCES, {"app/billing/a.py": "x = 1\n"}, with_note=False)
+
+    result = kb_overview(repo.root)
+
+    assert "(no note yet)" in result["index"]
+    assert any("no note yet" in step and "kb_draft_module" in step for step in result["next_steps"])

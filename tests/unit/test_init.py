@@ -107,7 +107,7 @@ def test_init_when_modules_flag_then_declares_only_named_candidates(tmp_path: Pa
     note = read_note(repo.root / "kb/modules/billing.md")
     assert note.meta["status"] == "draft"
     assert not (repo.root / "kb/modules/accounts.md").exists()
-    assert (repo.root / "kb/INDEX.md").is_file()
+    assert not (repo.root / "kb/INDEX.md").exists()
     assert (repo.root / "kb/.index/index.sqlite").is_file()
 
 
@@ -343,7 +343,7 @@ def test_init_when_mode_agent_then_scaffolds_and_skips_drafting_with_instruction
     assert client.calls == 0 and report.drafted == []
     assert report.agent_pending == ["billing"]
     assert not (repo.root / "kb/modules/billing.md").exists()
-    assert (repo.root / "kb/INDEX.md").is_file()
+    assert not (repo.root / "kb/INDEX.md").exists()
 
 
 def test_init_when_agent_mode_requested_but_config_exists_in_model_mode_then_usage_error(

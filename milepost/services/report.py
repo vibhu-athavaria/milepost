@@ -77,9 +77,9 @@ def build_report(root: Path, config: Config, base: str) -> Report:
     ignore = config.structure.ignore
     report = Report(base=base)
 
-    for path in sorted(p for p in changes.all if p.startswith(kb) and p.endswith(".md")):
-        if path == f"{kb}INDEX.md":
-            continue
+    for path in sorted(
+        p for p in changes.all if p.startswith(f"{kb}modules/") and p.endswith(".md")
+    ):
         after = "(deleted)" if path in changes.deleted else _status_at(root, "HEAD", path)
         report.notes_changed.append(NoteChange(path, _status_at(root, fork_point, path), after))
 

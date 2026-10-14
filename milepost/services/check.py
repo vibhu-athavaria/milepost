@@ -15,7 +15,6 @@ from milepost.core.notes import Note, parse_note, validate_note
 from milepost.errors import NoteInvalid, UsageError
 from milepost.services.coverage import uncovered_candidates
 from milepost.services.gitinfo import Changes, changed_files, files_at, read_waivers, repo_files
-from milepost.services.render import render_index
 from milepost.services.status import module_statuses
 from milepost.structure.candidates import Candidate
 
@@ -107,7 +106,7 @@ def _check_staleness(
                 )
 
 
-def _check_modules_and_index(root: Path, config: Config, findings: list[Finding]) -> None:
+def _check_modules(root: Path, config: Config, findings: list[Finding]) -> None:
     kb_dir = config.project.kb_dir
     for module_id in config.modules:
         rel = f"{kb_dir}/modules/{module_id}.md"
@@ -121,22 +120,15 @@ def _check_modules_and_index(root: Path, config: Config, findings: list[Finding]
                     f"module/{module_id}",
                 )
             )
-    index_path = root / kb_dir / "INDEX.md"
-    index_rel = f"{kb_dir}/INDEX.md"
-    fresh = render_index(root, config)
-    if not index_path.is_file():
+    obsolete = root / kb_dir / "INDEX.md"
+    if obsolete.is_file():
         findings.append(
             Finding(
-                "failure", "INDEX_DRIFT", index_rel, "INDEX.md is missing; run `milepost index`"
-            )
-        )
-    elif index_path.read_text(encoding="utf-8") != fresh:
-        findings.append(
-            Finding(
-                "failure",
-                "INDEX_DRIFT",
-                index_rel,
-                "INDEX.md differs from a fresh render; run `milepost index`",
+                "warning",
+                "INDEX_OBSOLETE",
+                f"{kb_dir}/INDEX.md",
+                "this file is no longer used (the index is built from the notes on demand); "
+                "delete it, and run `milepost overview` to print the index",
             )
         )
 
@@ -301,7 +293,7 @@ def run_check(
     findings: list[Finding] = []
     notes = _load_notes(root, config, findings)
     _check_staleness(root, config, notes, findings)
-    _check_modules_and_index(root, config, findings)
+    _check_modules(root, config, findings)
     uncovered = _check_coverage(root, config, findings)
     _check_detail_count(config, notes, findings)
     _check_citations(root, notes, findings)

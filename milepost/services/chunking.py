@@ -63,7 +63,7 @@ def chunk_note(note: Note) -> list[Chunk]:
 
 
 def chunk_index(text: str) -> list[Chunk]:
-    """One chunk per module row of INDEX.md."""
+    """One chunk per module row of the rendered module index."""
     chunks = []
     for line in text.splitlines():
         if not line.startswith("|"):

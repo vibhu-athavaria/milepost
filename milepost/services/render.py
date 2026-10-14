@@ -1,4 +1,4 @@
-"""Deterministic rendering of kb/INDEX.md, the L1 index (SPEC section 8.2)."""
+"""Deterministic rendering of the L1 module index, built on demand (SPEC section 8.2)."""
 
 from pathlib import Path
 
