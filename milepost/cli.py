@@ -10,7 +10,7 @@ from dataclasses import asdict
 from datetime import UTC, datetime
 from importlib.metadata import version
 from pathlib import Path
-from typing import Annotated, Any, NoReturn
+from typing import Annotated, Any
 
 import typer
 
@@ -99,11 +99,6 @@ def _repo_root(repo: Path | None) -> Path:
         if (directory / CONFIG_NAME).is_file():
             return directory
     return start
-
-
-def _not_implemented(command: str) -> NoReturn:
-    typer.echo(f"milepost {command} is not implemented yet.", err=True)
-    raise typer.Exit(code=1)
 
 
 def _print_version(show: bool) -> None:

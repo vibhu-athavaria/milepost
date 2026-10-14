@@ -4,7 +4,7 @@
 
 Milepost keeps a small set of reviewed markdown notes about your code inside your own git repository. Each note records a fingerprint of the source files it describes, so when the code changes and the note doesn't, Milepost notices. Coding agents read the notes to find the right code quickly, and write back what they learn, so the next session, and the next teammate, doesn't start from zero. And because agents now change more code than any one person reads, the same notes, kept in pull requests, are how a developer still sees what changed in each module and which parts no person has reviewed.
 
-> **Early development, unproven.** About half of the build plan is done (see [Status](#status)). The central claim, that agents using these notes read fewer files and spend fewer tokens, has **not been measured yet**. A pilot on a real repository decides whether this gets released. Features marked **(planned)** below are specified but not built.
+> **MVP built, unproven.** You can run milepost as a Claude Code plugin from a local checkout (see [USAGE.md](USAGE.md)). The central claim, that agents using these notes read fewer files and spend fewer tokens, and that developers keep a better grip on agent-written code, has **not been measured yet**. A pilot on a real repository decides whether this gets released. It is not published to PyPI. Features marked **(planned)** below are specified but not built.
 
 ## Contents
 
@@ -44,7 +44,7 @@ The result is a memory that lives where your code lives, travels through your no
 
 ## What Milepost does
 
-> **Legend.** Items marked **(works today)** are built and tested on `main`. **(on branch)** means built but not merged. **(planned)** means specified in [SPEC.md](SPEC.md), not built.
+> **Legend.** Items marked **(works today)** are built and tested on `main`. **(partly built)** means some of it works and the rest is listed. **(planned)** means specified in [SPEC.md](SPEC.md), not built.
 
 ### 1. Keeps notes as plain markdown in git (works today)
 
@@ -94,7 +94,7 @@ KB-Waive: module/services prose is still accurate after this refactor
 KB-Waive: dir:app/payments scratch code, a module comes later
 ```
 
-### 4. Gives agents a read path and a write path (planned)
+### 4. Gives agents a read path and a write path (works today)
 
 Through an MCP server (`milepost serve`) agents get ten tools: an overview of the index, a module's note, the notes covering a given file, search, a note update, a check, drafting a note for a new module, and three that compute from the code as it is now: a file's **outline** (symbols with line ranges), a file's **impact** (importers and likely tests), and a **sync** (what changed and which notes to update).
 
@@ -108,34 +108,32 @@ The exact scenario-by-scenario playbook (starting a task, changing a file, renam
 
 `milepost search` runs a keyword search (SQLite FTS5) and a meaning-based search (local embeddings, no API key) over the notes and merges the two rankings, so both an exact term and a paraphrase find the right note. It covers the notes only, not your source code. Common filler words are kept out of the keyword half so they can't drown real matches. On a 20-note test knowledge base, 10 paraphrased questions each found their note in the top three.
 
-### 6. Survives teams and merges (planned)
+### 6. Survives teams and merges (works today)
 
 Notes are one file per module, so changes to different modules never conflict. When two branches both change a note's hash, a git merge driver never picks one. It writes `source_hash: CONFLICT`, and the check fails until a person reads the prose and runs `milepost rehash`. A merge can't quietly bless a stale note.
 
-### 7. Sets up with one command (planned)
+### 7. Sets up with one command (works today)
 
-The `milepost init` command underneath (scaffold, declare modules, draft, index) is built on the `m7-draft-and-init` branch; the single `/kb-init` plugin command that wraps it is planned.
+In the Claude Code plugin there is a single command, `/milepost:kb-init` (the plugin name prefixes plugin commands). It checks the environment, shows you the candidate modules and the exact files that would be sent to the drafting model, and asks once. Then it writes the config, installs the git hooks and merge driver, adds the CI workflow, drafts one note per module, and builds the index. The only step left for a person is reading each draft and approving it with `milepost review <id>`. Drafts are marked `draft`, and agents are told to treat `draft` notes as unverified until then.
 
-In the Claude Code plugin there is a single command, `/kb-init`. It checks the environment, shows you the candidate modules and the exact files that would be sent to the drafting model, and asks once. Then it writes the config, installs the git hooks and merge driver, adds the CI workflow, drafts one note per module, and builds the index. The only step left for a person is reading each draft and approving it with `milepost review <id>`. Drafts are marked `draft`, and agents are told to treat `draft` notes as unverified until then.
-
-### 8. Handles your code carefully (on branch)
+### 8. Handles your code carefully (works today)
 
 Drafting is the only step that sends source to a model, and only the model you configure. Files that look like secrets (`.env*`, keys, credentials) are never read for drafting, a scan aborts a module if it finds credentials in what it was about to send, and `milepost init --dry-run` lists every file before any network call. Model names and keys come from environment variables or a git-ignored `.env` file, never from committed files.
 
-### 9. Keeps people in the loop (planned)
+### 9. Keeps people in the loop (partly built)
 
 The aim is that a developer who did not write a change can still see what it did. Notes are in the pull request, so a reviewer reads a few lines of prose about each module instead of a long diff. On top of that:
 
-- **Agent edits don't count as reviewed.** Only `milepost review`, run by a person, marks a note reviewed. An agent's edit flips it back to `draft`, and the flip shows in the diff.
-- **`milepost status`** ranks modules by how much their code has changed since a person last reviewed their note, and how many of those commits look agent-authored.
-- **`milepost report`** summarises a pull request: which notes changed, which are stale, which changed files nothing covers, and which changed files a note cites as an invariant or a gotcha. CI writes it to the job summary.
-- **A named owner.** A one-line `CODEOWNERS` entry makes a person or team the required reviewer for `kb/`.
+- **Agent edits don't count as reviewed (works today).** Only `milepost review`, run by a person, marks a note reviewed and records who and when. An agent's edit flips it back to `draft`, and the flip shows in the diff. A merge that mixes in someone else's prose also returns a reviewed note to `draft`.
+- **`milepost status` (planned)** will rank modules by how much their code has changed since a person last reviewed their note, and how many of those commits look agent-authored.
+- **`milepost report` (planned)** will summarise a pull request: which notes changed, which are stale, which changed files nothing covers, and which changed files a note cites as an invariant or a gotcha. CI would write it to the job summary.
+- **A named owner (a template exists).** A one-line `CODEOWNERS` entry makes a person or team the required reviewer for `kb/`; a snippet is in `templates/CODEOWNERS.snippet`. `milepost init` does not write it because it can't know your team names.
 
 This shows people where to look. It doesn't find bugs or check that a note is true, and it can't make anyone read it.
 
 ## A walkthrough
 
-*What a team's experience is meant to be. Steps after the first two are planned.*
+*What a team's experience is meant to be, and what the Claude Code plugin does today, apart from the `status` and `report` views. It has not been run on a real team yet.*
 
 **Setting up (once).** A developer installs the plugin and runs `/kb-init` on a FastAPI-and-React repository. It proposes `ai`, `api`, `core`, `models`, `services` and `tasks`; the developer drops `tests` and confirms. Six draft notes appear under `kb/modules/`. The developer reads each, corrects two, and approves them with `milepost review`. They commit `milepost.toml`, `kb/` and the CI workflow.
 
@@ -162,6 +160,8 @@ source_hash: sha256:9f2c1a...        # filled in by the tool, never by hand
 related: [services, core]
 written_by: agent
 written_at: 2026-10-07T09:12:00Z
+reviewed_by: Jane Doe <jane@example.com>   # set only by `milepost review`
+reviewed_at: 2026-10-08T14:00:00Z
 ---
 
 ## Purpose
@@ -195,11 +195,14 @@ your-repo/
   kb/
     INDEX.md                    # L1: generated index of modules
     modules/                    # L2: one reviewed note per module
-    files/  passages/           # L3, L4: optional detail notes
+    files/  passages/           # L3, L4: rare, exceptions only
     .index/                     # local search cache (git-ignored, rebuildable)
   .gitattributes                # routes note merges through the merge driver
   .github/workflows/milepost.yml   # the CI gate
+  .git/hooks/                   # local hooks (post-merge, post-checkout, pre-commit); not committed
 ```
+
+It also adds `kb/.index/`, `kb/.progress.json` and `.env` to your `.gitignore`.
 
 ## How it is different
 
@@ -230,7 +233,7 @@ In short: code-graph and retrieval tools tell an agent *what the code is*. Milep
 
 ## FAQ
 
-**Does it send my code to a model?** Only when drafting a module note, and only to the model you configure. See [item 8](#8-handles-your-code-carefully-on-branch). Checking, indexing and searching run entirely on your machine.
+**Does it send my code to a model?** Only when drafting a module note, and only to the model you configure. See [item 8](#8-handles-your-code-carefully-works-today). Checking, indexing and searching run entirely on your machine.
 
 **What if a note is wrong?** Treat it like documentation: correct it in a pull request. Agents are told to treat `draft` notes as unverified, to read the source before trusting a claim that matters, and never to edit the hash by hand.
 
@@ -238,7 +241,7 @@ In short: code-graph and retrieval tools tell an agent *what the code is*. Milep
 
 **Why git and markdown instead of a database?** So the knowledge is reviewed, diffable, attributable and mergeable with the tools you already use, and can't be lost with a service. The database is only a cache for search.
 
-**Which agents does it work with?** The agent interface is MCP, so any MCP-capable agent can read and write notes. The one-command setup, hooks and usage skill are being built for Claude Code first.
+**Which agents does it work with?** The plugin (one-command setup, hooks and usage skill) is for Claude Code. The agent interface underneath is a standard MCP server, so another MCP-capable agent could use the same ten tools; `templates/AGENTS.md.snippet` carries the playbook as plain instructions. I have not tested any agent other than Claude Code.
 
 **What does it cost?** Drafting is the only paid step: roughly one model call per module, plus the cost of reading its source. `init --dry-run` shows the estimate first. Everything else is local.
 
@@ -256,15 +259,15 @@ Built test-first. Milestones are defined in [TASKS.md](TASKS.md).
 | M5 | `milepost check`, including CI mode, waivers, and uncovered-directory detection | Done, on `main` |
 | M5a | Baseline measurement on a real repository | Recorded, on `main` |
 | M6 | `milepost index` and `milepost search` | Done, on `main` |
-| M7 | Model drafting, `milepost init`, `milepost doctor`, `.env` support | Built, on the `m7-draft-and-init` branch (hooks step waits for M8) |
+| M7 | Model drafting, `milepost init`, `milepost doctor`, `.env` support | Done, on `main` |
 | M8 | Review and rehash commands, git hooks, merge driver | Done, on `main` |
-| M8a | Computed context: `outline`, `impact`, `sync`, the one-line purpose in the index | Built, on the `m8a-computed-context` branch |
+| M8a | Computed context: `outline`, `impact`, `sync`, the one-line purpose in the index | Done, on `main` |
 | M8b | Human visibility: `status`, `report`, unreviewed-churn warning, CODEOWNERS | Specified, not started |
 | M9 | MCP server for agents (ten tools, model-mode drafting) | Done, on `main` |
-| M10 | Claude Code plugin: one `/kb-init` command, hooks, usage skill | Built, on the `m10-plugin` branch; try it with [USAGE.md](USAGE.md) |
-| M11 | Pilot: token cost, review effort, and the release decision | Not started |
+| M10 | Claude Code plugin: one `/kb-init` command, hooks, usage skill | Built, on `main`. Loads from a local checkout; not yet tried in a live session |
+| M11 | Pilot: token cost, review effort, and the release decision (and publishing to PyPI) | Not started |
 
-**Not usable end to end yet.** Today you can run `milepost scan` and `milepost check`. The commands that create and maintain notes (`init`, `draft`, `review`, `rehash`) and the agent integration are still ahead. **[USAGE.md](USAGE.md)** covers installation, what works now, the intended workflow, and a command reference.
+**What is left.** `status` and `report` (M8b), agent-mode drafting (the coding agent writes the first draft instead of a separate model, so no API key is needed), the `AGENTS.md` route for other agents, publishing to PyPI so the plugin can be installed from a marketplace, and the pilot that decides whether it is worth releasing. **[USAGE.md](USAGE.md)** covers installing it, trying the plugin, and a command reference.
 
 ## Documents
 
@@ -274,7 +277,8 @@ Built test-first. Milestones are defined in [TASKS.md](TASKS.md).
 | [PROPOSAL.md](PROPOSAL.md) | Why the project exists, the alternatives considered, and the plan |
 | [SPEC.md](SPEC.md) | What to build: every file format, command, hash rule, and tool contract |
 | [TASKS.md](TASKS.md) | The build order, with the named tests for each milestone |
-| `templates/` | Config, note skeleton, CI workflow, CLAUDE.md snippet, and Claude Code plugin files that `init` copies into a repository |
+| [plugin/](plugin/) | The Claude Code plugin: manifest, MCP server config, usage skill, `/kb-init` command, hooks |
+| `templates/` | Config example, note skeleton, `.env` example, CLAUDE.md and AGENTS.md snippets, CODEOWNERS snippet |
 
 ## Development
 
@@ -284,14 +288,14 @@ Requires Python 3.12 and [uv](https://docs.astral.sh/uv/).
 uv sync --python 3.12
 uv run pytest            # unit and integration tests
 uv run ruff check        # lint
-uv run mypy milepost     # strict type check
+uv run mypy               # strict type check
 ```
 
 Tests are written before the code, and a milestone counts as done only when its acceptance commands have been run. The fixed decisions (Python 3.12+, Apache-2.0, notes in git as the source of truth, SQLite index in v1) are listed in [SPEC.md](SPEC.md) section 0. On Intel Macs, `pyproject.toml` constrains the resolver so a version of `onnxruntime` with a macOS x86_64 build is chosen.
 
 ## Naming
 
-This project was developed under the working name `kbmap`, which turned out to be taken on PyPI by an unrelated keyboard-mapping tool, so it is now **Milepost**. Other, unrelated projects share the name (for instance a Swift build plugin and a small Claude Code memory project); this one is neither. Early commits and the workspace folder (`agent-kmap`) still use the old name.
+This project was developed under the working name `kbmap`, which turned out to be taken on PyPI by an unrelated keyboard-mapping tool, so it is now **Milepost**. Other, unrelated projects share the name (for instance a Swift build plugin and a small Claude Code memory project); this one is neither. Early commits still use the old name.
 
 ## License
 

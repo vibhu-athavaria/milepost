@@ -1,6 +1,6 @@
 # Pilot: does milepost reduce agent effort on Kaihle?
 
-Status: baseline recorded (TASKS M5a). The with-milepost run happens in M11. The go/no-go decision is written here after that run.
+Status: baseline recorded (TASKS M5a). The MVP plugin is built, so the with-milepost run (M11) can start once the plugin has been tried by hand on Kaihle. The go/no-go decision is written here after that run.
 
 ## What is being measured
 
@@ -42,7 +42,7 @@ All five ran on `claude-sonnet-5-5`. Raw data: `pilot/baseline.json`. Task metad
 
 ## How to rerun (M11)
 
-1. In a Kaihle checkout at each task's base commit, with the milepost notes for that commit in place, start a sub-agent with the saved prompt.
+1. Put milepost on a Kaihle branch (the `milepost-pilot` branch holds the config, the `api` draft and the CI workflow) and make sure every module you want covered has a reviewed note. Create each task's worktree at its base commit with the notes in place, load the plugin (`claude --plugin-dir /path/to/milepost/plugin`), and start a sub-agent with the saved prompt.
 2. `python scripts/pilot_usage.py --project /Users/vibhu/Projects/kaihle --last 5` prints the same table for the new runs.
 3. Compare per task and in total. Add the new table and the decision below.
 

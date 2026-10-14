@@ -2,6 +2,21 @@
 
 Companion to SPEC.md. Each milestone lists the work, the test functions to write first (TDD), and acceptance criteria. Test names follow `test_<what>_when_<condition>_then_<expected>`.
 
+## Status
+
+| Milestone | State |
+|---|---|
+| M0 to M6, M5a | Done, on `main` |
+| M7 Drafting, init, doctor, `.env` | Done, on `main` |
+| M8 Review, rehash, hooks, merge driver | Done, on `main` |
+| M8a Computed context (outline, impact, sync, L1 purpose) | Done, on `main` |
+| M8b Human visibility (status, report, churn, CODEOWNERS) | **Not started** |
+| M9 MCP server | Done, on `main`. Agent-mode drafting deferred |
+| M10 Claude Code plugin | Built, on `main`. The manual test in a live Claude Code session is still to do, so it is not called done |
+| M11 Pilot and release | **Not started**. Needs the pass rule agreed first |
+
+Each milestone below was reviewed with the code-review skill before it was merged; fixes are in the commit "Address code review findings" on each PR.
+
 Rules for implementers:
 - Write the named tests first, see them fail, then implement.
 - A milestone is done only when its acceptance criteria are verified by running the commands, not by inspection.
