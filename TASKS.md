@@ -318,6 +318,8 @@ Tests:
 - `test_check_when_purpose_edited_and_index_not_rewritten_then_index_drift`
 - `test_config_when_module_verify_list_then_parsed`
 - `test_cli_outline_impact_sync_when_json_flag_then_output_parses`
+- `test_kb_outline_impact_sync_when_no_milepost_toml_then_still_work`
+- `test_cli_impact_and_sync_when_no_milepost_toml_then_work`
 - `test_sync_when_several_files_change_in_one_module_then_next_steps_has_every_route`
 - `test_sync_when_module_has_no_note_then_next_steps_says_to_draft`
 - `test_sync_when_note_exists_but_is_invalid_then_not_reported_as_missing`

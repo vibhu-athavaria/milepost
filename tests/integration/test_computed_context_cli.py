@@ -1,4 +1,5 @@
 import json
+from pathlib import Path
 
 import pytest
 from support.kb_repo import KbRepo
@@ -77,3 +78,19 @@ def test_cli_impact_when_file_missing_then_exit_two(repo: KbRepo) -> None:
     result = runner.invoke(cli.app, ["impact", "nope.py", "--repo", str(repo.root)])
 
     assert result.exit_code == 2
+
+
+def test_cli_impact_and_sync_when_no_milepost_toml_then_work(tmp_path: Path) -> None:
+    bare = KbRepo(tmp_path / "bare")
+    bare.write("app/charge.py", "def charge(card):\n    return card\n")
+    bare.write("app/routes.py", "from app.charge import charge\n")
+    bare.git("config", "user.name", "t")
+    bare.git("config", "user.email", "t@example.com")
+    bare.commit("base")
+    bare.write("app/charge.py", "def charge(card):\n    return 1\n")
+
+    impact = runner.invoke(cli.app, ["impact", "app/charge.py", "--repo", str(bare.root)])
+    sync = runner.invoke(cli.app, ["sync", "--repo", str(bare.root)])
+
+    assert impact.exit_code == 0 and "app/routes.py" in impact.output
+    assert sync.exit_code == 0 and "app/charge.py" in sync.output

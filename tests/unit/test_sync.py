@@ -228,3 +228,21 @@ def test_sync_when_repo_has_no_commits_then_everything_counts_as_added(tmp_path:
 
     assert {c.status for c in result.changes} == {"added"}
     assert "app/billing/a.py" in [c.path for c in result.changes]
+
+
+def test_sync_when_milepost_toml_has_no_modules_but_kb_exists_then_normal_guidance(
+    tmp_path: Path,
+) -> None:
+    repo = KbRepo(tmp_path / "configured")
+    repo.write("app/x.py", "x = 1\n")
+    repo.write_config()
+    repo.write("kb/modules/.keep", "")
+    repo.git("config", "user.name", "t")
+    repo.git("config", "user.email", "t@example.com")
+    repo.commit("base")
+    repo.write("app/x.py", "x = 2\n")
+
+    result = run(repo)
+
+    assert result.uncovered == ["app/x.py"]
+    assert not any("No knowledge base" in step for step in result.next_steps)

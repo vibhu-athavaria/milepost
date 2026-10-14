@@ -167,9 +167,9 @@ KB-Waive: dir:app/payments scratch code, a module comes later
 | `milepost rehash NOTE_ID [--yes]` | Record the current source hash on a note whose prose you have just read |
 | `milepost index [--rebuild]` | Write `INDEX.md` and build or update the local search index |
 | `milepost search QUERY [--level L] [--k N] [--json]` | Search the notes (keyword and meaning) |
-| `milepost outline PATH [--json]` | Symbols, signatures and line ranges of one file, computed now (Python, TypeScript, JavaScript) |
-| `milepost impact PATH [--json]` | Files that import a file and the tests likely to cover it, computed now. A static import graph |
-| `milepost sync [--base REF] [--json]` | What changed and which notes to update, and how |
+| `milepost outline PATH [--json]` | Symbols, signatures and line ranges of one file, computed now (Python, TypeScript, JavaScript). Works in any git repository, no setup |
+| `milepost impact PATH [--json]` | Files that import a file and the tests likely to cover it, computed now. A static import graph. Works with no `milepost.toml` |
+| `milepost sync [--base REF] [--json]` | What changed and which notes to update, and how. With no `milepost.toml` it lists the changed files only |
 | `milepost status [--json]` | Per module: who reviewed its note, and how many lines, commits and agent-authored commits have changed since. Never-reviewed modules first |
 | `milepost report --base REF [--format markdown\|json]` | A review aid for a change range. Always exits 0 |
 | `milepost hooks install\|uninstall` | Manage the git hooks and the merge driver. Never overwrites a hook it did not write |

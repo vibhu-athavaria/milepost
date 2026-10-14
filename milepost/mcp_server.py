@@ -21,7 +21,8 @@ INSTRUCTIONS = (
     "module that owns your task, kb_outline for the files you will read, and kb_impact for the "
     "files you will change. After a change, call kb_sync and kb_update each note it lists, then "
     "kb_check. Every response has next_steps; follow them. You cannot mark a note reviewed; "
-    "only a person can."
+    "only a person can. kb_outline, kb_impact and kb_sync work in any git repository, even "
+    "before a knowledge base exists."
 )
 
 
