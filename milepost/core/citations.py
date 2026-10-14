@@ -50,3 +50,17 @@ def cited_bullets(body: str) -> list[Bullet]:
             if paths:
                 found.append(Bullet(name, bullet, list(dict.fromkeys(paths))))
     return found
+
+
+def citing_changed(body: str, candidates: set[str], changed: set[str]) -> list[tuple[Bullet, str]]:
+    """Bullets whose cited path is one of the `changed` files.
+
+    A citation matches a candidate file when it equals the path or is a suffix after a "/",
+    and exactly one candidate has that suffix; an ambiguous citation is skipped, not guessed."""
+    found = []
+    for bullet in cited_bullets(body):
+        for cited in bullet.paths:
+            matches = [p for p in candidates if p == cited or p.endswith("/" + cited)]
+            if len(matches) == 1 and matches[0] in changed:
+                found.append((bullet, matches[0]))
+    return found

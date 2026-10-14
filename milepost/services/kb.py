@@ -170,7 +170,7 @@ def kb_overview(root: Path) -> dict[str, Any]:
     if not index_path.is_file():
         raise KbToolError("NOT_FOUND", "no knowledge base yet; the user can run /kb-init")
     index = index_path.read_text(encoding="utf-8")
-    findings = run_check(root, config).findings
+    findings = run_check(root, config, with_churn=False).findings
     stale = sum(1 for f in findings if f.code == "STALE_NOTE")
     drafts = 0
     for module_id in config.modules:
@@ -414,7 +414,7 @@ def kb_update(
     rel = f"{config.project.kb_dir}/{path.relative_to(kb).as_posix()}"
     findings = [
         {"severity": f.severity, "code": f.code, "message": f.message}
-        for f in run_check(root, config).findings
+        for f in run_check(root, config, with_churn=False).findings
         if f.path == rel
     ]
     return {

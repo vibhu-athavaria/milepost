@@ -1,6 +1,6 @@
 # milepost Specification
 
-Status: v1 spec. Milestones M0 to M10 (except M8b) are built; see the status table at the top of TASKS.md. Items that are specified but not built are marked "not built". Companion to PROPOSAL.md (the "why"). This file is the "what to build."
+Status: v1 spec. Milestones M0 to M10 are built; see the status table at the top of TASKS.md. Items that are specified but not built are marked "not built". Companion to PROPOSAL.md (the "why"). This file is the "what to build."
 
 Audience: the developer implementing milepost, and reviewers checking it against the proposal.
 
@@ -121,11 +121,11 @@ fail_on = "stale"                      # "stale" (default) or "none" (report onl
 max_detail_notes = 50                  # warn when L3 plus L4 notes exceed this; a placeholder to tune in the pilot
 
 [visibility]
-agent_trailers = ["Co-Authored-By: Claude", "Generated with"]   # regexes matched against commit messages to count agent-authored commits
+agent_trailers = ["(?im)^Co-Authored-By:.*noreply@anthropic\\.com", "Generated with \\[?Claude Code"]   # regexes matched against commit messages to count agent-authored commits
 churn_warn_lines = 1000                # warn UNREVIEWED_CHURN above this many changed lines since the last review; a placeholder to tune in the pilot
 ```
 
-**Not implemented yet:** `draft.mode` and the `[visibility]` table are specified here but the loader does not accept them until M9 (agent mode) and M8b (visibility); until then they are rejected as unknown keys rather than silently ignored.
+**Not implemented yet:** `draft.mode` is specified here but the loader does not accept it until agent-mode drafting is built; until then it is rejected as an unknown key rather than silently ignored.
 
 Validation rules (fail fast, exit code 2):
 - Module ids are unique and match `^[a-z0-9][a-z0-9_-]*$`.
@@ -308,8 +308,8 @@ All commands accept `--repo <path>` (default: nearest ancestor with `milepost.to
 | `milepost outline <path> [--json]` | Symbols, signatures and line ranges of one file, computed now | Section 8.3 |
 | `milepost impact <path> [--json]` | Files that import this file and the tests likely to cover it, computed now | Section 8.3 |
 | `milepost sync [--base REF] [--json]` | What changed and which notes to update, and how | Section 8.3; read-only |
-| `milepost status [--json]` | Per module: review state and unreviewed churn | Section 8.4; read-only. **Not built (M8b)** |
-| `milepost report --base REF [--format markdown\|json]` | Review aid for a change range | Section 8.4; read-only, always exits 0. **Not built (M8b)** |
+| `milepost status [--json]` | Per module: review state and unreviewed churn | Section 8.4; read-only |
+| `milepost report --base REF [--format markdown\|json]` | Review aid for a change range | Section 8.4; read-only, always exits 0 |
 | `milepost rehash <note-id>` | Recompute `source_hash` for a note marked `CONFLICT` or intentionally updated | Prints the old and new hash and the current manifest (path and short digest; the old manifest cannot be recovered from a hash alone); asks for confirmation, and requires `--yes` in non-interactive shells (exit 2 otherwise) |
 | `milepost search <query> [--level L] [--k N]` | Hybrid search | Section 7.4 |
 | `milepost hooks install \| uninstall` | Manage git hooks and merge driver config | Section 10 |
@@ -364,7 +364,7 @@ Citation matching: a cited path matches a changed file when it equals the file's
 
 Both are derived from git and the notes, are read-only, and never fail a build. They exist so a person who did not write a change can see where attention is needed.
 
-**Review baseline.** For a note, the baseline is the most recent commit in the current history that changed the note file and left it with `status: reviewed`. This survives squash merges and rebases, unlike a stored commit id. No baseline means no person has reviewed the note.
+**Review baseline.** For a note, the baseline is the most recent commit in the current history that recorded a review: one that added or removed a `reviewed_at` line and left the note `status: reviewed` (notes reviewed by hand, without `reviewed_at`, fall back to the latest commit that touched the status line). A typo fix or a rehash on an already-reviewed note does not reset it. This survives squash merges and rebases, unlike a stored commit id. No baseline means no person has reviewed the note. Churn counts every file in the module's source globs that changed since the baseline, including files deleted or moved away since.
 
 **`status`.** One row per declared module: note status, `reviewed_by` and `reviewed_at` from the frontmatter, `commits_since` and `lines_changed_since` (added plus deleted lines in the module's source files since the baseline, from `git diff --numstat`), and `agent_commits_since` (commits since the baseline that touch those files and whose message matches any `visibility.agent_trailers` regex). A module with no baseline shows `never reviewed`. Rows are ordered by `lines_changed_since`, largest first, never-reviewed modules first. The agent count is a heuristic: it only sees commits that carry a trailer or phrase the team configured.
 
@@ -374,6 +374,8 @@ Both are derived from git and the notes, are read-only, and never fail a build. 
 3. **Changed files no module covers.**
 4. **Changed code the notes call risky:** each Invariants or Gotchas bullet whose cited path (matching rule in 8.3) is among the changed files, quoted with the note id.
 5. **Unreviewed churn:** modules over `visibility.churn_warn_lines`.
+
+The report reads the "before" status from the fork point (`git merge-base`), lists only changed files under `structure.roots` in a configured language, and prints "Report unavailable: ..." and exits 0 when git cannot answer (for example an unknown base ref), so it never fails a pull request.
 
 The CI workflow writes this report to the job summary (`$GITHUB_STEP_SUMMARY`), which needs no extra permission. Posting it as a pull request comment needs `pull-requests: write` and is documented as optional in USAGE.md.
 

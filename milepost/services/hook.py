@@ -134,7 +134,7 @@ def stop(root: Path, payload: dict[str, Any]) -> str:
         return ""
     try:
         config = load_config(root / CONFIG_NAME)
-        findings = run_check(root, config).findings
+        findings = run_check(root, config, with_churn=False).findings
         changed = {
             path
             for path in working_tree_changes(root).all | changed_in_head(root)

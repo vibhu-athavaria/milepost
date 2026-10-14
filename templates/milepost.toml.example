@@ -42,3 +42,10 @@ exclude = ["**/.env*", "**/*secret*", "**/*.pem", "**/*.key", "**/credentials*"]
 fail_on = "stale"
 # Warn when L3 plus L4 notes exceed this count. A placeholder; tune it in the pilot.
 max_detail_notes = 50
+
+[visibility]
+# Regexes matched against commit messages to count agent-authored commits in `milepost status`.
+agent_trailers = ["(?im)^Co-Authored-By:.*noreply@anthropic\\.com", "Generated with \\[?Claude Code"]
+# `milepost check` warns (never fails) when a reviewed note's sources changed by more than this
+# many lines since the note was last reviewed.
+churn_warn_lines = 1000

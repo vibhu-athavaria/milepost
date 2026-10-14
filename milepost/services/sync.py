@@ -7,7 +7,7 @@ from dataclasses import dataclass, field
 from pathlib import Path
 
 from milepost.config import Config
-from milepost.core.citations import cited_bullets
+from milepost.core.citations import citing_changed
 from milepost.core.glob import expand_sources, matches_any
 from milepost.core.hashing import compute_source_hash
 from milepost.core.notes import HASHED_LEVELS, Note, parse_note
@@ -112,15 +112,13 @@ def _route(status: str, note: _KbNote, path: str) -> str:
 def _cited_for(root: Path, config: Config, note: _KbNote, changed: set[str]) -> list[CitedBullet]:
     if note.module_id is None:
         return []
-    candidates = set(expand_sources(root, config.modules[note.module_id].sources, []))
-    candidates |= {p for p in changed if matches_any(p, config.modules[note.module_id].sources)}
-    found = []
-    for bullet in cited_bullets(note.note.body):
-        for cited in bullet.paths:
-            matches = [p for p in candidates if p == cited or p.endswith("/" + cited)]
-            if len(matches) == 1 and matches[0] in changed:
-                found.append(CitedBullet(note.id, bullet.section, bullet.text, matches[0]))
-    return found
+    sources = config.modules[note.module_id].sources
+    candidates = set(expand_sources(root, sources, []))
+    candidates |= {p for p in changed if matches_any(p, sources)}
+    return [
+        CitedBullet(note.id, bullet.section, bullet.text, path)
+        for bullet, path in citing_changed(note.note.body, candidates, changed)
+    ]
 
 
 def sync(root: Path, config: Config, base: str | None = None) -> SyncResult:

@@ -120,20 +120,20 @@ In the Claude Code plugin there is a single command, `/milepost:kb-init` (the pl
 
 Drafting is the only step that sends source to a model, and only the model you configure. Files that look like secrets (`.env*`, keys, credentials) are never read for drafting, a scan aborts a module if it finds credentials in what it was about to send, and `milepost init --dry-run` lists every file before any network call. Model names and keys come from environment variables or a git-ignored `.env` file, never from committed files.
 
-### 9. Keeps people in the loop (partly built)
+### 9. Keeps people in the loop (works today)
 
 The aim is that a developer who did not write a change can still see what it did. Notes are in the pull request, so a reviewer reads a few lines of prose about each module instead of a long diff. On top of that:
 
 - **Agent edits don't count as reviewed (works today).** Only `milepost review`, run by a person, marks a note reviewed and records who and when. An agent's edit flips it back to `draft`, and the flip shows in the diff. A merge that mixes in someone else's prose also returns a reviewed note to `draft`.
-- **`milepost status` (planned)** will rank modules by how much their code has changed since a person last reviewed their note, and how many of those commits look agent-authored.
-- **`milepost report` (planned)** will summarise a pull request: which notes changed, which are stale, which changed files nothing covers, and which changed files a note cites as an invariant or a gotcha. CI would write it to the job summary.
+- **`milepost status`** ranks modules by how much their code has changed since a person last reviewed their note, and how many of those commits look agent-authored.
+- **`milepost report`** summarises a pull request: which notes changed (and whether any flipped from reviewed to draft), which are stale, which changed files nothing covers, and which changed files a note cites as an invariant or a gotcha. The generated CI workflow writes it to the job summary. `milepost check` also warns (never fails) when a reviewed note's code has changed by more than a threshold since its review.
 - **A named owner (a template exists).** A one-line `CODEOWNERS` entry makes a person or team the required reviewer for `kb/`; a snippet is in `templates/CODEOWNERS.snippet`. `milepost init` does not write it because it can't know your team names.
 
 This shows people where to look. It doesn't find bugs or check that a note is true, and it can't make anyone read it.
 
 ## A walkthrough
 
-*What a team's experience is meant to be, and what the Claude Code plugin does today, apart from the `status` and `report` views. It has not been run on a real team yet.*
+*What a team's experience is meant to be, and what the Claude Code plugin does today. It has not been run on a real team yet.*
 
 **Setting up (once).** A developer installs the plugin and runs `/kb-init` on a FastAPI-and-React repository. It proposes `ai`, `api`, `core`, `models`, `services` and `tasks`; the developer drops `tests` and confirms. Six draft notes appear under `kb/modules/`. The developer reads each, corrects two, and approves them with `milepost review`. They commit `milepost.toml`, `kb/` and the CI workflow.
 
@@ -262,12 +262,12 @@ Built test-first. Milestones are defined in [TASKS.md](TASKS.md).
 | M7 | Model drafting, `milepost init`, `milepost doctor`, `.env` support | Done, on `main` |
 | M8 | Review and rehash commands, git hooks, merge driver | Done, on `main` |
 | M8a | Computed context: `outline`, `impact`, `sync`, the one-line purpose in the index | Done, on `main` |
-| M8b | Human visibility: `status`, `report`, unreviewed-churn warning, CODEOWNERS | Specified, not started |
+| M8b | Human visibility: `status`, `report`, unreviewed-churn warning, CODEOWNERS | Done, on `main` |
 | M9 | MCP server for agents (ten tools, model-mode drafting) | Done, on `main` |
 | M10 | Claude Code plugin: one `/kb-init` command, hooks, usage skill | Built, on `main`. Loads from a local checkout; not yet tried in a live session |
 | M11 | Pilot: token cost, review effort, and the release decision (and publishing to PyPI) | Not started |
 
-**What is left.** `status` and `report` (M8b), agent-mode drafting (the coding agent writes the first draft instead of a separate model, so no API key is needed), the `AGENTS.md` route for other agents, publishing to PyPI so the plugin can be installed from a marketplace, and the pilot that decides whether it is worth releasing. **[USAGE.md](USAGE.md)** covers installing it, trying the plugin, and a command reference.
+**What is left.** Agent-mode drafting (the coding agent writes the first draft instead of a separate model, so no API key is needed), the `AGENTS.md` route for other agents, publishing to PyPI so the plugin can be installed from a marketplace, and the pilot that decides whether it is worth releasing. **[USAGE.md](USAGE.md)** covers installing it, trying the plugin, and a command reference.
 
 ## Documents
 

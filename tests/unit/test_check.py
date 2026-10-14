@@ -193,3 +193,44 @@ def test_check_when_purpose_edited_and_index_not_rewritten_then_index_drift(tmp_
     repo.refresh_index()
 
     assert check(repo).findings == []
+
+
+def test_check_when_reviewed_note_churn_over_threshold_then_warns_unreviewed_churn(
+    tmp_path: Path,
+) -> None:
+    repo = make_repo(tmp_path, extra_config="\n[visibility]\nchurn_warn_lines = 1\n")
+    repo.git("config", "user.name", "t")
+    repo.git("config", "user.email", "t@example.com")
+    repo.commit("base")
+    repo.write("app/services/a.py", "x = 1\ny = 2\nz = 3\n")
+    repo.commit("big change")
+
+    result = check(repo)
+
+    assert "UNREVIEWED_CHURN" in codes(result.findings, "warning")
+
+
+def test_check_when_note_never_reviewed_then_no_unreviewed_churn_warning(tmp_path: Path) -> None:
+    repo = KbRepo(tmp_path, "\n[visibility]\nchurn_warn_lines = 0\n")
+    repo.add_module("services", SERVICES, {"app/services/a.py": "x = 1\n"}, status="draft")
+    repo.git("config", "user.name", "t")
+    repo.git("config", "user.email", "t@example.com")
+    repo.commit("base")
+    repo.write("app/services/a.py", "x = 1\ny = 2\n")
+    repo.commit("change")
+
+    assert "UNREVIEWED_CHURN" not in codes(check(repo).findings)
+
+
+def test_check_when_churn_over_threshold_then_still_exit_zero(tmp_path: Path) -> None:
+    repo = make_repo(tmp_path, extra_config="\n[visibility]\nchurn_warn_lines = 0\n")
+    repo.git("config", "user.name", "t")
+    repo.git("config", "user.email", "t@example.com")
+    repo.commit("base")
+    repo.write("app/services/a.py", "x = 1\ny = 2\n")
+    repo.commit("change")
+    repo.write("kb/modules/services.md", (repo.root / "kb/modules/services.md").read_text())
+    repo.set_hash("kb/modules/services.md", repo.hash_of(SERVICES))
+    repo.commit("note refreshed")
+
+    assert check(repo).exit_code == 0

@@ -22,6 +22,9 @@ jobs:
         run: uv tool install "milepost==0.1.0"
       - name: Check knowledge base
         run: milepost check --ci --base "origin/${{ github.base_ref }}"
+      - name: Review aid (job summary)
+        if: always()
+        run: milepost report --base "origin/${{ github.base_ref }}" >> "$GITHUB_STEP_SUMMARY" || true
 
   index:
     if: github.event_name == 'push'

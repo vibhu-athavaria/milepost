@@ -74,6 +74,22 @@ class Check(_Model):
     max_detail_notes: NonNegativeInt = 50
 
 
+def _valid_regex(value: str) -> str:
+    try:
+        re.compile(value)
+    except re.error as error:
+        raise ValueError(f"not a valid regular expression: {error}") from error
+    return value
+
+
+class Visibility(_Model):
+    agent_trailers: list[Annotated[str, AfterValidator(_valid_regex)]] = [
+        r"(?im)^Co-Authored-By:.*noreply@anthropic\.com",
+        r"Generated with \[?Claude Code",
+    ]
+    churn_warn_lines: NonNegativeInt = 1000
+
+
 class Config(_Model):
     project: Project
     modules: dict[ModuleId, Module] = {}
@@ -81,6 +97,7 @@ class Config(_Model):
     index: Index = Index()
     draft: Draft = Draft()
     check: Check = Check()
+    visibility: Visibility = Visibility()
 
     @model_validator(mode="after")
     def _default_titles(self) -> "Config":

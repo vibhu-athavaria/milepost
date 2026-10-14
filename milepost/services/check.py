@@ -10,10 +10,11 @@ from milepost.core.findings import Finding
 from milepost.core.glob import FLAGS
 from milepost.core.hashing import compute_source_hash
 from milepost.core.notes import Note, parse_note, validate_note
-from milepost.errors import NoteInvalid
+from milepost.errors import NoteInvalid, UsageError
 from milepost.services.coverage import uncovered_candidates
 from milepost.services.gitinfo import Changes, changed_files, files_at, read_waivers
 from milepost.services.render import render_index
+from milepost.services.status import module_statuses
 from milepost.structure.candidates import Candidate
 
 NOTE_DIRS = ("modules", "files", "passages")
@@ -168,6 +169,32 @@ def _check_detail_count(config: Config, notes: list[_LoadedNote], findings: list
         )
 
 
+def _check_unreviewed_churn(root: Path, config: Config, findings: list[Finding]) -> None:
+    try:
+        statuses = module_statuses(root, config)
+    except UsageError:
+        return  # not a git repository, or git failed: churn is only a hint
+    for status in statuses:
+        if (
+            status.never_reviewed
+            or status.lines_changed_since <= config.visibility.churn_warn_lines
+        ):
+            continue
+        note_path = f"{config.project.kb_dir}/modules/{status.module_id}.md"
+        findings.append(
+            Finding(
+                "warning",
+                "UNREVIEWED_CHURN",
+                note_path,
+                f"{status.lines_changed_since} lines of module/{status.module_id} changed since "
+                f"its note was last reviewed ({status.commits_since} commit(s), "
+                f"{status.agent_commits_since} look agent-authored); read it and run "
+                f"`milepost review module/{status.module_id}`",
+                f"module/{status.module_id}",
+            )
+        )
+
+
 def _apply_ci_scope(
     root: Path,
     base: str,
@@ -210,13 +237,17 @@ def _apply_ci_scope(
     return scoped
 
 
-def run_check(root: Path, config: Config, base: str | None = None) -> CheckResult:
+def run_check(
+    root: Path, config: Config, base: str | None = None, with_churn: bool = True
+) -> CheckResult:
     findings: list[Finding] = []
     notes = _load_notes(root, config, findings)
     _check_staleness(root, config, notes, findings)
     _check_modules_and_index(root, config, findings)
     uncovered = _check_coverage(root, config, findings)
     _check_detail_count(config, notes, findings)
+    if with_churn:
+        _check_unreviewed_churn(root, config, findings)
     if base is not None:
         findings = _apply_ci_scope(root, base, config, findings, notes, uncovered)
     findings.sort(key=lambda f: (f.path, f.code, f.subject, f.message))
