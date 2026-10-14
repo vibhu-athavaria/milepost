@@ -1,6 +1,6 @@
 # Using Milepost
 
-Milepost is an MVP. It works end to end as a Claude Code plugin loaded from a local checkout, and as a command-line tool. It is not published to PyPI, and nobody has yet measured whether it saves agent effort or keeps developers closer to their code (that is the pilot, TASKS M11). A few things in the design are not built; they are listed in [What is not built yet](#what-is-not-built-yet).
+Milepost is an MVP. It works end to end as a Claude Code plugin loaded from a local checkout, and as a command-line tool. It is not published to PyPI, and nobody has yet measured whether it saves agent effort or keeps developers closer to their code (that is the pilot, TASKS M11). A few things are not built; they are listed in [What is not built yet](#what-is-not-built-yet).
 
 ## Contents
 
@@ -130,6 +130,8 @@ Reminders do not depend on the agent remembering: each tool response says what t
 | `milepost impact PATH [--json]` | Files that import a file and the tests likely to cover it, computed now. A static import graph |
 | `milepost sync [--base REF] [--json]` | What changed and which notes to update, and how |
 | `milepost hooks install\|uninstall` | Manage the git hooks and the merge driver. Never overwrites a hook it did not write |
+| `milepost status [--json]` | Per module: who reviewed its note, and how many lines and commits (and how many agent-authored) have changed since. Never-reviewed modules first |
+| `milepost report --base REF [--format markdown\|json]` | A review aid for a change range: notes changed, stale notes, uncovered files, invariants and gotchas that cite changed files, unreviewed churn. Always exits 0 |
 | `milepost doctor [--json]` | Report the environment milepost needs. Exit 3 when a drafting variable is missing |
 | `milepost serve` | Run the MCP server on stdio. Started by the plugin, not by hand |
 | `milepost hook session-start\|post-edit\|stop` | Called by the plugin hooks, with JSON on stdin. Always exit 0 |
@@ -149,6 +151,7 @@ The git hooks `milepost hooks install` adds are `post-merge` and `post-checkout`
 | `UNCOVERED_DIR` | warning | A source directory is covered by no module |
 | `ORPHAN_NOTE` | warning | A file note describes a file that no longer exists |
 | `DETAIL_NOTE_COUNT` | warning | Too many file and passage notes; prefer module notes |
+| `UNREVIEWED_CHURN` | warning | A reviewed note's source files changed by more than `visibility.churn_warn_lines` since the review. Never a failure |
 
 **CI mode** (`milepost check --ci --base origin/main`) judges a pull request by what it changes. A stale note fails only if a file it covers changed in the PR; stale notes the PR does not touch stay warnings, so existing debt does not block unrelated changes. A new source directory with no module, or a deleted file that a file note described, also fails. Any of these can be waived with a trailer in a commit message, and a waiver without a reason is an error:
 
@@ -171,6 +174,7 @@ With `fail_on = "none"` in the config, the exit status is `0` regardless (report
 | `[index]` | Search index location and the embedding model and its dimension (these must agree) |
 | `[draft]` | Drafting limits (`max_source_bytes`, default 200000 per module; larger modules are partly sent as outlines and the note says so) and files that are never sent to the model (`**/.env*`, keys, credentials) |
 | `[check]` | `fail_on` (`stale` or `none`) and `max_detail_notes` |
+| `[visibility]` | `agent_trailers` (regexes that mark a commit as agent-authored, default: Claude Code's `Co-Authored-By ... noreply@anthropic.com` trailer and its "Generated with Claude Code" line) and `churn_warn_lines` (default 1000) |
 
 Module ids are lowercase letters, digits, `_` and `-`. Globs must be relative and must not contain `..`. Invalid configuration is reported with the exact field path and exits with status 2.
 
@@ -199,7 +203,6 @@ Drafting sends the source of a module to the configured model provider. Files ma
 
 ## What is not built yet
 
-- **`milepost status` and `milepost report`** (M8b): the views that rank modules by unreviewed change and summarise a pull request. The `reviewed`/`draft` rules they depend on are built.
 - **Agent-mode drafting** (`[draft] mode = "agent"`): letting the coding agent write the first draft instead of a separate model, so no API key is needed. Today `init`, `draft` and `kb_draft_module` need `MILEPOST_MODEL`.
 - **Installing the plugin from a marketplace**, `uvx milepost`, and a working generated CI workflow: all need a published release (M11).
 - **Other agents:** the MCP server is standard, and `templates/AGENTS.md.snippet` carries the playbook, but only Claude Code has been considered and nothing has been tested with another agent.

@@ -34,8 +34,10 @@ from milepost.services.index import run_index
 from milepost.services.init import InitReport, run_init
 from milepost.services.merge_driver import run_merge_driver
 from milepost.services.outline import outline_file
+from milepost.services.report import build_report, render_markdown, report_as_dict
 from milepost.services.review import plan_rehash, rehash_note, review_note
 from milepost.services.search import search as run_search
+from milepost.services.status import module_statuses
 from milepost.services.sync import sync as run_sync
 
 app = typer.Typer(
@@ -401,6 +403,51 @@ def sync(
     typer.echo("Next:")
     for step in result.next_steps:
         typer.echo(f"  - {step}")
+
+
+@app.command()
+@handle_errors
+def status(repo: RepoOption = None, json_output: JsonOption = False) -> None:
+    """Show, per module, how far the code has moved since a person last reviewed its note."""
+    root = _repo_root(repo)
+    statuses = module_statuses(root, load_config(root / CONFIG_NAME))
+    if json_output:
+        typer.echo(json.dumps([asdict(s) for s in statuses], indent=2))
+        return
+    typer.echo(f"{'module':<20} {'note':<9} {'lines':>6} {'commits':>7} {'agent':>5}  reviewed by")
+    for entry in statuses:
+        if entry.never_reviewed:
+            typer.echo(f"{entry.module_id:<20} {entry.note_status:<9} {'never reviewed':>21}")
+            continue
+        typer.echo(
+            f"{entry.module_id:<20} {entry.note_status:<9} {entry.lines_changed_since:>6} "
+            f"{entry.commits_since:>7} {entry.agent_commits_since:>5}  "
+            f"{entry.reviewed_by} {entry.reviewed_at}"
+        )
+
+
+@app.command()
+@handle_errors
+def report(
+    base: Annotated[str, typer.Option("--base", help="Base git ref, e.g. origin/main.")],
+    repo: RepoOption = None,
+    output_format: Annotated[str, typer.Option("--format", help="markdown or json.")] = "markdown",
+) -> None:
+    """Summarise a change range for a reviewer: what to look at first. Always exits 0."""
+    if output_format not in ("markdown", "json"):
+        raise UsageError(f"--format must be 'markdown' or 'json', got '{output_format}'")
+    root = _repo_root(repo)
+    try:
+        built = build_report(root, load_config(root / CONFIG_NAME), base)
+    except MilepostError as error:
+        # A review aid must never fail a pull request: say what went wrong and exit 0.
+        message = f"Report unavailable: {error}"
+        typer.echo(json.dumps({"error": message}) if output_format == "json" else message)
+        return
+    if output_format == "json":
+        typer.echo(json.dumps(report_as_dict(built), indent=2))
+    else:
+        typer.echo(render_markdown(built))
 
 
 @app.command(name="merge-driver")

@@ -10,7 +10,7 @@ Companion to SPEC.md. Each milestone lists the work, the test functions to write
 | M7 Drafting, init, doctor, `.env` | Done, on `main` |
 | M8 Review, rehash, hooks, merge driver | Done, on `main` |
 | M8a Computed context (outline, impact, sync, L1 purpose) | Done, on `main` |
-| M8b Human visibility (status, report, churn, CODEOWNERS) | **Not started** |
+| M8b Human visibility (status, report, churn, CODEOWNERS) | Done, on `main` |
 | M9 MCP server | Done, on `main`. Agent-mode drafting deferred |
 | M10 Claude Code plugin | Built, on `main`. The manual test in a live Claude Code session is still to do, so it is not called done |
 | M11 Pilot and release | **Not started**. Needs the pass rule agreed first |
