@@ -31,7 +31,6 @@ def review(repo: KbRepo) -> None:
         status="reviewed", reviewed_by="Jane <j@example.com>", reviewed_at="2026-10-01T00:00:00Z"
     )
     write_note(note, repo.root / "kb/modules/billing.md")
-    repo.refresh_index()
     repo.commit("Jane reviews the billing note")
 
 
@@ -74,7 +73,6 @@ def test_status_when_reviewed_note_later_edited_by_agent_then_baseline_is_last_r
     note.meta.pop("reviewed_by")
     note.meta.pop("reviewed_at")
     write_note(note, repo.root / "kb/modules/billing.md")
-    repo.refresh_index()
     repo.commit("agent edits the note")
     repo.write("app/billing/charge.py", "def charge(card):\n    return None\n")
     repo.commit("code change after the review")

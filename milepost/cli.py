@@ -34,6 +34,7 @@ from milepost.services.index import run_index
 from milepost.services.init import InitReport, run_init
 from milepost.services.merge_driver import run_merge_driver
 from milepost.services.outline import outline_file
+from milepost.services.render import render_index
 from milepost.services.report import build_report, render_markdown, report_as_dict
 from milepost.services.review import plan_rehash, rehash_note, review_note
 from milepost.services.search import search as run_search
@@ -267,13 +268,21 @@ def check(
 
 @app.command()
 @handle_errors
+def overview(repo: RepoOption = None) -> None:
+    """Print the module index (one line per module), built from the notes."""
+    root = _repo_root(repo)
+    typer.echo(render_index(root, load_config(root / CONFIG_NAME)), nl=False)
+
+
+@app.command()
+@handle_errors
 def index(
     repo: RepoOption = None,
     rebuild: Annotated[
         bool, typer.Option("--rebuild", help="Drop and rebuild everything.")
     ] = False,
 ) -> None:
-    """Write INDEX.md and build or update the local search index."""
+    """Build or update the local search index."""
     root = _repo_root(repo)
     config = load_config(root / CONFIG_NAME)
     report = run_index(root, config, _embedder(config), rebuild=rebuild)
@@ -315,7 +324,7 @@ def review(
     config = load_config(root / CONFIG_NAME)
     review_note(root, config, note_id, _now())
     typer.echo(f"{note_id} marked reviewed")
-    typer.echo("Next: commit the note and kb/INDEX.md.")
+    typer.echo("Next: commit the note.")
 
 
 @app.command()

@@ -15,7 +15,7 @@ written_at: <UTC ISO-8601, e.g. 2026-10-07T09:12:00Z>
 
 ## Purpose
 
-One or two sentences: what this module is responsible for. The first sentence becomes the module's line in kb/INDEX.md.
+One or two sentences: what this module is responsible for. The first sentence becomes the module's line in the index.
 
 ## Entry points
 

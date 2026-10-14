@@ -142,7 +142,7 @@ def test_run_merge_driver_when_body_conflicts_then_returns_nonzero(tmp_path: Pat
     assert "<<<<<<<" in paths["ours"].read_text()
 
 
-def test_run_merge_driver_when_index_md_then_keeps_ours_untouched(tmp_path: Path) -> None:
+def test_run_merge_driver_when_leftover_index_md_then_keeps_ours_untouched(tmp_path: Path) -> None:
     paths = {name: tmp_path / name for name in ("base", "ours", "theirs")}
     paths["base"].write_text("# Codebase index\n| a |\n")
     paths["ours"].write_text("# Codebase index\n| a | b |\n")

@@ -1,7 +1,9 @@
 from pathlib import Path
 
 from support.kb_repo import KbRepo
+from typer.testing import CliRunner
 
+from milepost import cli
 from milepost.config import load_config
 from milepost.services.render import render_index
 
@@ -79,3 +81,13 @@ def test_render_index_when_purpose_contains_pipe_then_table_not_broken(tmp_path:
     text = render_index(repo.root, load_config(repo.root / "milepost.toml"))
 
     assert "| a | Reads a / b. | reviewed |" in text
+
+
+def test_overview_cli_when_run_then_prints_the_rendered_index(tmp_path: Path) -> None:
+    repo = KbRepo(tmp_path)
+    repo.add_module("services", ["app/**/*.py"], {"app/a.py": "x\n"})
+
+    result = CliRunner().invoke(cli.app, ["overview", "--repo", str(repo.root)])
+
+    assert result.exit_code == 0
+    assert result.output == render_index(repo.root, load_config(repo.root / "milepost.toml"))

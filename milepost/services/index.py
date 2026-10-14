@@ -1,4 +1,4 @@
-"""`milepost index`: write INDEX.md and keep the search index current (SPEC section 7)."""
+"""`milepost index`: keep the local search index current (SPEC section 7)."""
 
 import hashlib
 from dataclasses import dataclass, field
@@ -37,7 +37,7 @@ def _sha(data: bytes) -> str:
 
 def _documents(root: Path, config: Config, report: IndexReport) -> list[_Document]:
     kb = root / config.project.kb_dir
-    index_text = (kb / "INDEX.md").read_text(encoding="utf-8")
+    index_text = render_index(root, config)
     documents = [
         _Document(
             NoteRecord(INDEX_NOTE_ID, "L1", "", "", _sha(index_text.encode())),
@@ -84,12 +84,6 @@ def _check_model(store: IndexStore, config: Config, rebuild: bool) -> None:
 
 
 def run_index(root: Path, config: Config, embedder: Embedder, rebuild: bool = False) -> IndexReport:
-    index_path = root / config.project.kb_dir / "INDEX.md"
-    fresh_index = render_index(root, config)
-    if not index_path.is_file() or index_path.read_text(encoding="utf-8") != fresh_index:
-        index_path.parent.mkdir(parents=True, exist_ok=True)
-        index_path.write_text(fresh_index, encoding="utf-8")
-
     report = IndexReport()
     store = SqliteStore(root / config.index.path, config.index.embedding_dim)
     try:

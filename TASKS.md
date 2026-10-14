@@ -17,6 +17,21 @@ Companion to SPEC.md. Each milestone lists the work, the test functions to write
 
 Each milestone below was reviewed with the code-review skill before it was merged; fixes are in the commit "Address code review findings" on each PR.
 
+## The trim (after the architecture review)
+
+An architecture review of the finished MVP found structural risks: one stored hash per module conflicts between concurrent pull requests, any byte change marks a note stale, a stored `INDEX.md` drifts and conflicts, the dependency footprint is large, and the value is unmeasured. The response is to cut back to the part with the least risk and keep a kill criterion. Each step is its own pull request with tests.
+
+| Step | Change | State |
+|---|---|---|
+| 1 | `outline`, `impact`, `sync` work in any git repository with no setup | Done |
+| 2 | Render the L1 index on demand; stop storing `INDEX.md` | Done |
+| 3 | Remove L3 and L4 notes: one note per module | Planned |
+| 4 | Staleness from git history, soft by default; remove the stored hash, `rehash` and the `CONFLICT` sentinel | Planned |
+| 5 | Heavy dependencies become optional extras; agent mode becomes the default | Planned |
+| 6 | Consolidate SPEC and README around the trimmed product | Planned |
+
+Kill criterion (decided before the pilot): stop, or ship only the computed tools as a small standalone server, if tokens after the first turn are not clearly lower (under about 20% savings), or if reviewers do not answer questions about a pull request faster or more accurately from the notes and `report` than from the diff.
+
 Rules for implementers:
 - Write the named tests first, see them fail, then implement.
 - A milestone is done only when its acceptance criteria are verified by running the commands, not by inspection.
@@ -335,7 +350,7 @@ Tests:
 Acceptance:
 - On a real repository, `milepost outline` on the largest route file (1,779 lines) lists the same 31 top-level definitions as `grep -nE "^(async )?def |^class "`. Whole-command time including `uv` startup was 1.1 s; the parse itself is not separately timed, so the 200 ms target in SPEC section 14 is not yet shown.
 - `milepost impact` on a service file of that repository lists its importers and test, checked by hand against `grep` (done for `analytics_service.py`: 2 route importers and 1 test; two other grep hits were docstring mentions, correctly not listed).
-- The existing INDEX fixtures and `milepost index` regenerate with the Purpose column and `check` passes.
+- The module index renders with the Purpose column (`milepost overview`); it is no longer a stored file (see the trim, below).
 
 ---
 

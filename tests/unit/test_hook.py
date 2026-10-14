@@ -49,8 +49,8 @@ def test_hook_session_start_when_kb_present_then_returns_index_cut_to_3000_chars
 
 def test_hook_session_start_when_index_is_huge_then_cut(tmp_path: Path) -> None:
     repo = make_repo(tmp_path)
-    index = repo.root / "kb/INDEX.md"
-    index.write_text(index.read_text() + "| x | " + "long " * 2000 + " |\n")
+    for i in range(150):
+        repo.add_module(f"m{i}", [f"app/m{i}/**/*.py"], {f"app/m{i}/x.py": "x = 1\n"})
 
     text = context_of(hook.session_start(repo.root))
 
@@ -198,7 +198,7 @@ def test_hook_stop_when_agent_committed_the_change_then_still_blocks(tmp_path: P
 
 def test_hook_stop_when_failure_is_not_a_stale_note_then_no_block(tmp_path: Path) -> None:
     repo = make_repo(tmp_path)
-    (repo.root / "kb/INDEX.md").write_text("drifted\n")
+    repo.write("kb/modules/billing.md", "not a note\n")
     repo.write("app/other/x.py", "x = 3\n")
 
     assert hook.stop(repo.root, {}) == ""

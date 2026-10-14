@@ -9,7 +9,6 @@ from milepost.config import Config
 from milepost.core.hashing import compute_source_hash
 from milepost.core.notes import HASHED_LEVELS, Note, note_path_for_id, read_note, write_note
 from milepost.errors import EnvironmentProblem, MilepostError, NoteInvalid, UsageError
-from milepost.services.render import render_index
 
 
 def git_identity(root: Path) -> str:
@@ -75,7 +74,6 @@ def review_note(
     note.meta["reviewed_by"] = reviewer
     note.meta["reviewed_at"] = now
     write_note(note, path)
-    (root / config.project.kb_dir / "INDEX.md").write_text(render_index(root, config))
 
 
 @dataclass

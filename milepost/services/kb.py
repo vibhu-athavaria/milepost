@@ -139,12 +139,6 @@ def _repo_relative(root: Path, path: str) -> str:
     return normal
 
 
-def _write_index_md(root: Path, config: Config) -> None:
-    index_path = root / config.project.kb_dir / "INDEX.md"
-    index_path.parent.mkdir(parents=True, exist_ok=True)
-    index_path.write_text(render_index(root, config), encoding="utf-8")
-
-
 def _note_summary(root: Path, config: Config, note_id: str, note: Note) -> dict[str, Any]:
     sources = _note_sources(note)
     now = _hash_now(root, config, sources) if sources else ""
@@ -176,17 +170,21 @@ def _status_steps(summary: dict[str, Any]) -> list[str]:
 @_tool
 def kb_overview(root: Path) -> dict[str, Any]:
     config = _config(root)
-    index_path = root / config.project.kb_dir / "INDEX.md"
-    if not index_path.is_file():
-        raise KbToolError("NOT_FOUND", "no knowledge base yet; the user can run /kb-init")
-    index = index_path.read_text(encoding="utf-8")
+    if not config.modules:
+        raise KbToolError("NOT_FOUND", "no modules are declared yet; the user can run /kb-init")
+    index = render_index(root, config)
     findings = run_check(root, config, with_churn=False).findings
     stale = sum(1 for f in findings if f.code == "STALE_NOTE")
     drafts = 0
     for module_id in config.modules:
         note = _read(root / config.project.kb_dir / "modules" / f"{module_id}.md")
         drafts += 1 if note is not None and note.meta.get("status") == "draft" else 0
+    missing = [m for m in config.modules if "(no note yet)" in index and f"| {m} |" in index]
     steps = ["call kb_module for the module that owns your task; do not grep the repo first"]
+    if missing:
+        steps.append(
+            f"{len(missing)} declared module(s) have no note yet; kb_draft_module drafts one"
+        )
     if stale:
         steps.append(f"{stale} note(s) are stale: kb_check lists them; do not trust a stale note")
     return {
@@ -446,7 +444,6 @@ def kb_update(
     meta.pop("reviewed_by", None)
     meta.pop("reviewed_at", None)
     write_note(Note(meta=meta, body="\n" + body.strip("\n") + "\n"), path)
-    _write_index_md(root, config)
 
     rel = f"{config.project.kb_dir}/{path.relative_to(kb).as_posix()}"
     findings = [
@@ -521,7 +518,6 @@ def kb_draft_module(
         draft_modules(root, config, [module_id], client, model, False, now, sleep)
     except ProviderError as error:
         raise _translate(error) from error
-    _write_index_md(root, config)
     return {
         "id": f"module/{module_id}",
         "status": "draft",

@@ -57,7 +57,6 @@ def test_report_when_note_changed_then_lists_it_with_status_before_and_after(
     note = read_note(repo.root / "kb/modules/billing.md")
     note.meta["status"] = "draft"
     write_note(note, repo.root / "kb/modules/billing.md")
-    repo.refresh_index()
     repo.commit("agent edits the note")
 
     (change,) = report(repo).notes_changed
@@ -195,7 +194,6 @@ def test_report_when_main_moved_on_then_before_status_comes_from_the_fork_point(
     note = read_note(repo.root / "kb/modules/billing.md")
     note.meta["status"] = "draft"
     write_note(note, repo.root / "kb/modules/billing.md")
-    repo.refresh_index()
     repo.commit("main flips the note to draft after the branch point")
     repo.checkout("feature")
     repo.write(
@@ -206,3 +204,11 @@ def test_report_when_main_moved_on_then_before_status_comes_from_the_fork_point(
     (change,) = report(repo).notes_changed
 
     assert change.before == "reviewed"
+
+
+def test_report_when_a_leftover_index_md_changed_then_not_listed_as_a_note(tmp_path: Path) -> None:
+    repo = make_repo(tmp_path)
+    repo.write("kb/INDEX.md", "# old index\n")
+    repo.commit("old index file")
+
+    assert report(repo).notes_changed == []

@@ -89,7 +89,7 @@ def build_server(
         """Write a note. For L2 and L3, pass read_hash=source_hash_now from kb_module or
         kb_file (kb_file's file_hash_now to create a new file note). In agent mode this also
         creates the L2 note of a declared module that has none. The note is saved as a draft
-        and kb/INDEX.md is regenerated; a person must run `milepost review`. Bodies that look
+        and a person must run `milepost review`. Bodies that look
         like they contain a credential are rejected."""
         return _guard(lambda: kb.kb_update(root, id, body, read_hash, _now()))
 

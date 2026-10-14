@@ -14,7 +14,7 @@ Milepost is an MVP: it works end to end as a Claude Code plugin loaded from a lo
 - A **note** is a markdown file with YAML frontmatter that records which source files it describes (`sources`) and a **source hash** of them.
 - A note is **stale** when its recorded hash no longer matches the hash of its source files now.
 - A note's **status** is `draft` (written by a model or an agent, unreviewed) or `reviewed` (a person ran `milepost review`). Every agent edit sets a note back to `draft`.
-- `kb/INDEX.md` (L1) is generated from the module notes, one row per module. You never edit it by hand; `milepost index` rewrites it.
+- The module index (L1) is not a file: it is built from the notes whenever it is needed, one row per module. `milepost overview` prints it.
 - File notes (L3, `kb/files/`) and passage notes (L4, `kb/passages/`) are rare, for a detail that doesn't fit a module note. `check` warns if there are too many (`DETAIL_NOTE_COUNT`) or if an L3's file disappears (`ORPHAN_NOTE`).
 - Per-file detail is not a note: `milepost outline` and `milepost impact` read it from the code when asked.
 
@@ -165,7 +165,8 @@ KB-Waive: dir:app/payments scratch code, a module comes later
 | `milepost draft ID [--force]` | Draft or redraft one module note with the configured model |
 | `milepost review NOTE_ID` | Mark a note reviewed by you (records your git identity and the time). Refuses a stale or `CONFLICT` note |
 | `milepost rehash NOTE_ID [--yes]` | Record the current source hash on a note whose prose you have just read |
-| `milepost index [--rebuild]` | Write `INDEX.md` and build or update the local search index |
+| `milepost overview` | Print the module index (one line per module), built from the notes |
+| `milepost index [--rebuild]` | Build or update the local search index |
 | `milepost search QUERY [--level L] [--k N] [--json]` | Search the notes (keyword and meaning) |
 | `milepost outline PATH [--json]` | Symbols, signatures and line ranges of one file, computed now (Python, TypeScript, JavaScript). Works in any git repository, no setup |
 | `milepost impact PATH [--json]` | Files that import a file and the tests likely to cover it, computed now. A static import graph. Works with no `milepost.toml` |
@@ -198,7 +199,7 @@ The git hooks `hooks install` adds are `post-merge` and `post-checkout` (run `in
 |---|---|---|
 | `STALE_NOTE` | failure | The note's source files changed since it was written |
 | `SOURCE_HASH_CONFLICT` | failure | A merge left the hash as `CONFLICT`; a person must review |
-| `INDEX_DRIFT` | failure | `kb/INDEX.md` differs from a fresh render. Run `milepost index`. Editing a note's Purpose changes the index, so this follows any such edit that did not go through `kb_update` or `review` |
+| `INDEX_OBSOLETE` | warning | A `kb/INDEX.md` from an older version is still in the repository. The index is no longer stored; delete the file |
 | `NOTE_INVALID`, `MISSING_KEY`, `INVALID_STATUS`, `ID_PATH_MISMATCH`, ... | failure | A note's frontmatter is missing or wrong |
 | `MISSING_NOTE` | warning | A declared module has no note yet |
 | `UNCOVERED_DIR` | warning | A source directory is covered by no module |
@@ -252,7 +253,6 @@ Start with `milepost doctor`. It checks Python, git, SQLite, your model settings
 | `MILEPOST_MODEL is not set` | Set it and the provider key in `.env` or your shell, or use agent mode |
 | `STALE_NOTE` after an ordinary edit | Expected: any byte of a covered file counts, comments included. Re-read the code, `kb_update` the note (an unchanged body is fine if it is still accurate), or waive it with a reason |
 | Pull requests keep conflicting on `source_hash` | Two PRs changed different files of one module, so both changed the same hash line. The merge driver writes `CONFLICT`; read the merged note and run `milepost rehash module/<id>`. This is the cost of one hash per module |
-| `INDEX_DRIFT` | Run `milepost index`. Editing a note's Purpose by hand changes the index |
 | `milepost review` refuses | The note is stale (update it first) or has a `CONFLICT` hash (rehash it first) |
 | `CITATION_BROKEN` | The note names a file or symbol that isn't there. Fix the note: it may be an invented detail |
 | CI fails at "Install milepost" | milepost isn't on PyPI yet. Edit `.github/workflows/milepost.yml` to install from a git URL |

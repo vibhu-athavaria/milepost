@@ -3,10 +3,9 @@
 import subprocess
 from pathlib import Path
 
-from milepost.config import Structure, load_config
+from milepost.config import Structure
 from milepost.core.hashing import compute_source_hash
 from milepost.core.notes import Note, read_note, write_note
-from milepost.services.render import render_index
 
 GIT = [
     "git",
@@ -51,10 +50,6 @@ class KbRepo:
             quoted = ", ".join(f'"{source}"' for source in sources)
             lines += [f"[modules.{module_id}]", f"sources = [{quoted}]", ""]
         self.write("milepost.toml", "\n".join(lines) + "\n" + self.extra_config)
-
-    def refresh_index(self) -> None:
-        config = load_config(self.root / "milepost.toml")
-        self.write("kb/INDEX.md", render_index(self.root, config))
 
     def hash_of(self, sources: list[str]) -> str:
         return compute_source_hash(self.root, sources, Structure().ignore).value
@@ -101,11 +96,9 @@ class KbRepo:
             self.write_note_file(
                 f"kb/modules/{module_id}.md", f"module/{module_id}", "L2", sources, status, body
             )
-        self.refresh_index()
 
     def add_file_note(self, path: str) -> None:
         self.write_note_file(f"kb/files/{path}.md", f"file/{path}", "L3", [path])
-        self.refresh_index()
 
     def set_hash(self, rel: str, value: str) -> None:
         note = read_note(self.root / rel)

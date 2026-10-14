@@ -53,18 +53,20 @@ def test_check_when_module_has_no_note_then_reports_warning_not_failure(tmp_path
     assert result.exit_code == 0
 
 
-def test_check_when_index_md_drifted_then_reports_failure(tmp_path: Path) -> None:
+def test_check_when_an_old_index_md_exists_then_warns_it_is_obsolete(tmp_path: Path) -> None:
     repo = make_repo(tmp_path)
-    repo.write("kb/INDEX.md", "# Codebase index\n\nhand edited\n")
+    repo.write("kb/INDEX.md", "# Codebase index\n\nleft over from an older version\n")
 
-    assert "INDEX_DRIFT" in codes(check(repo).findings, "failure")
+    result = check(repo)
+
+    assert "INDEX_OBSOLETE" in codes(result.findings, "warning")
+    assert result.exit_code == 0
 
 
-def test_check_when_index_md_missing_then_reports_failure(tmp_path: Path) -> None:
+def test_check_when_no_index_md_then_no_index_finding(tmp_path: Path) -> None:
     repo = make_repo(tmp_path)
-    (repo.root / "kb" / "INDEX.md").unlink()
 
-    assert "INDEX_DRIFT" in codes(check(repo).findings, "failure")
+    assert not [c for c in codes(check(repo).findings) if c.startswith("INDEX")]
 
 
 def test_check_when_source_hash_conflict_then_reports_failure_with_rehash_hint(
@@ -184,19 +186,6 @@ def test_check_when_run_twice_then_findings_identical(tmp_path: Path) -> None:
     assert check(repo).findings == check(repo).findings
 
 
-def test_check_when_purpose_edited_and_index_not_rewritten_then_index_drift(tmp_path: Path) -> None:
-    repo = make_repo(tmp_path)
-    note = read_note(repo.root / "kb/modules/services.md")
-    note.body = note.body.replace("Describes the thing.", "Now describes another thing.")
-    write_note(note, repo.root / "kb/modules/services.md")
-
-    assert "INDEX_DRIFT" in codes(check(repo).findings, "failure")
-
-    repo.refresh_index()
-
-    assert check(repo).findings == []
-
-
 def test_check_when_reviewed_note_churn_over_threshold_then_warns_unreviewed_churn(
     tmp_path: Path,
 ) -> None:
@@ -242,7 +231,6 @@ def citing_note(repo: KbRepo, body: str) -> None:
     note = read_note(repo.root / "kb/modules/services.md")
     note.body = body
     write_note(note, repo.root / "kb/modules/services.md")
-    repo.refresh_index()
     repo.commit("note with citations")
 
 
