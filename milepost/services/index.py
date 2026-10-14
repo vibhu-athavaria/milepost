@@ -56,9 +56,9 @@ def _documents(root: Path, config: Config, report: IndexReport) -> list[_Documen
             meta = note.meta
             record = NoteRecord(
                 note_id=str(meta.get("id") or expected_id(rel) or rel),
-                level=str(meta.get("level", "")),
+                level="L2",
                 status=str(meta.get("status", "")),
-                source_hash=str(meta.get("source_hash", "")),
+                source_hash="",
                 content_sha=_sha(data),
             )
             documents.append(_Document(record, chunk_note(note)))

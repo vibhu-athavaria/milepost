@@ -168,16 +168,6 @@ def test_search_when_keyword_present_then_note_ranks_in_results(tmp_path: Path) 
     assert len(results[0].snippet) <= 300
 
 
-def test_search_when_level_filter_then_only_that_level_returned(tmp_path: Path) -> None:
-    repo, embedder = indexed_repo(tmp_path)
-
-    only_l1 = search(repo.root, config_of(repo), embedder, "auth billing", level="L1", k=10)
-    only_l2 = search(repo.root, config_of(repo), embedder, "auth billing", level="L2", k=10)
-
-    assert only_l1 and {r.level for r in only_l1} == {"L1"}
-    assert only_l2 and {r.level for r in only_l2} == {"L2"}
-
-
 def test_search_when_query_has_punctuation_then_no_syntax_error(tmp_path: Path) -> None:
     repo, embedder = indexed_repo(tmp_path)
 

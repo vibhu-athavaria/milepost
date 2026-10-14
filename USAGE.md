@@ -11,12 +11,11 @@ Milepost is an MVP: it works end to end as a Claude Code plugin loaded from a lo
 ## Concepts in one minute
 
 - A **module** is a named part of your repository, declared in `milepost.toml` as a set of file globs. Each module gets one **module note** (L2) at `kb/modules/<id>.md`.
-- A **note** is a markdown file with YAML frontmatter that records which source files it describes (`sources`) and a **source hash** of them.
-- A note is **stale** when its recorded hash no longer matches the hash of its source files now.
+- A **note** is a markdown file with YAML frontmatter that records which source files it describes (`sources`, mirroring `milepost.toml`). There is one note per module. Nothing derived from the code is stored in it.
+- A note is **stale** when a file it covers changed after the note was last touched, judged from git history (and uncommitted edits). It is a warning by default.
 - A note's **status** is `draft` (written by a model or an agent, unreviewed) or `reviewed` (a person ran `milepost review`). Every agent edit sets a note back to `draft`.
 - The module index (L1) is not a file: it is built from the notes whenever it is needed, one row per module. `milepost overview` prints it.
-- File notes (L3, `kb/files/`) and passage notes (L4, `kb/passages/`) are rare, for a detail that doesn't fit a module note. `check` warns if there are too many (`DETAIL_NOTE_COUNT`) or if an L3's file disappears (`ORPHAN_NOTE`).
-- Per-file detail is not a note: `milepost outline` and `milepost impact` read it from the code when asked.
+- There are no per-file notes. Per-file detail is not a note: `milepost outline` and `milepost impact` read it from the code when asked.
 
 A complete note, with every frontmatter field, is in [templates/note.md.template](templates/note.md.template).
 
@@ -128,7 +127,7 @@ The playbook is [SPEC.md](SPEC.md) section 12.5. In short:
 | Starting a task | `kb_overview`, then `kb_module` for the owning module, `kb_outline` for the files to read (then read only those line ranges), `kb_impact` for the files to change |
 | After a change | the module's `verify` commands, then `kb_sync`, then `kb_update` on each note it lists, then `kb_check` |
 | A new module | add it to `milepost.toml`, then `kb_draft_module`; in agent mode write the note from the packet it returns and save it with `kb_update` |
-| A `CONFLICT` hash | stop; tell a person. Never rehash, never mark reviewed, never write a `KB-Waive` |
+| A note you cannot reconcile, or a merge conflict in a note | stop; tell a person. Never mark a note reviewed, never write a `KB-Waive` |
 
 Each tool's answer ends with `next_steps`: follow them.
 
@@ -137,7 +136,7 @@ Each tool's answer ends with `next_steps`: follow them.
 - **Once:** review each module note, then `milepost review module/<id>`.
 - **In pull requests:** read the note diff first. It should state invariants and gotchas, not restate the code. A note that flipped from `reviewed` to `draft` needs a person.
 - **When CI fails on a stale note:** update the note. Use a waiver (below) only when the note is still accurate, and say why.
-- **When a merge leaves a `CONFLICT` hash:** read the merged prose, fix it, run `milepost rehash module/<id>`.
+- **When a merge conflicts in a note:** resolve the markers in the prose like any other file. (Notes store no hash, so two pull requests touching different files of one module merge cleanly.)
 - **Now and then:** `milepost status` shows which modules have moved furthest since someone last reviewed their note.
 
 ### If you are the reviewer
@@ -163,11 +162,10 @@ KB-Waive: dir:app/payments scratch code, a module comes later
 | `milepost scan [--json]` | List candidate modules no declared module covers. Read-only |
 | `milepost check [--ci --base REF] [--format text\|json] [--no-churn]` | Validate notes and detect staleness. Exit 1 on failures. `--no-churn` skips the slower unreviewed-churn warning |
 | `milepost draft ID [--force]` | Draft or redraft one module note with the configured model |
-| `milepost review NOTE_ID` | Mark a note reviewed by you (records your git identity and the time). Refuses a stale or `CONFLICT` note |
-| `milepost rehash NOTE_ID [--yes]` | Record the current source hash on a note whose prose you have just read |
+| `milepost review NOTE_ID` | Mark a note reviewed by you (records your git identity and the time). Refuses a stale note |
 | `milepost overview` | Print the module index (one line per module), built from the notes |
 | `milepost index [--rebuild]` | Build or update the local search index |
-| `milepost search QUERY [--level L] [--k N] [--json]` | Search the notes (keyword and meaning) |
+| `milepost search QUERY [--k N] [--json]` | Search the notes (keyword and meaning) |
 | `milepost outline PATH [--json]` | Symbols, signatures and line ranges of one file, computed now (Python, TypeScript, JavaScript). Works in any git repository, no setup |
 | `milepost impact PATH [--json]` | Files that import a file and the tests likely to cover it, computed now. A static import graph. Works with no `milepost.toml` |
 | `milepost sync [--base REF] [--json]` | What changed and which notes to update, and how. With no `milepost.toml` it lists the changed files only |
@@ -197,18 +195,15 @@ The git hooks `hooks install` adds are `post-merge` and `post-checkout` (run `in
 
 | Finding | Severity | Meaning |
 |---|---|---|
-| `STALE_NOTE` | failure | The note's source files changed since it was written |
-| `SOURCE_HASH_CONFLICT` | failure | A merge left the hash as `CONFLICT`; a person must review |
+| `STALE_NOTE` | warning (failure if `[check] stale = "fail"`) | A file the note covers changed after the note was last touched. In CI mode: the pull request edits covered code and does not touch the note |
 | `INDEX_OBSOLETE` | warning | A `kb/INDEX.md` from an older version is still in the repository. The index is no longer stored; delete the file |
 | `NOTE_INVALID`, `MISSING_KEY`, `INVALID_STATUS`, `ID_PATH_MISMATCH`, ... | failure | A note's frontmatter is missing or wrong |
 | `MISSING_NOTE` | warning | A declared module has no note yet |
 | `UNCOVERED_DIR` | warning | A source directory is covered by no module |
-| `ORPHAN_NOTE` | warning | A file note describes a file that no longer exists |
-| `DETAIL_NOTE_COUNT` | warning | Too many file and passage notes; prefer module notes |
 | `CITATION_BROKEN` | warning | A note cites (in backticks, in Entry points, File map, Invariants or Gotchas) a file that is not in the repository, or a `file::symbol` whose name does not appear in the file. Lenient on purpose: it flags only what is clearly absent |
 | `UNREVIEWED_CHURN` | warning | A reviewed note's source files changed by more than `visibility.churn_warn_lines` since the review. Never a failure |
 
-**CI mode** (`milepost check --ci --base origin/main`) judges a pull request by what it changes. A stale note fails only if a file it covers changed in the PR; stale notes the PR doesn't touch stay warnings, so existing debt doesn't block unrelated changes. A new source directory with no module, or a deleted file that a file note described, also fails. With `fail_on = "none"` in the config, the exit status is `0` regardless (report only).
+**CI mode** (`milepost check --ci --base origin/main`) judges a pull request by what it changes. A pull request that edits code a note covers, without touching that note, gets a `STALE_NOTE` finding (a failure only if `[check] stale = "fail"`, otherwise a warning). Stale notes the pull request doesn't touch are old debt and stay warnings. A new source directory with no module also fails. With `fail_on = "none"` in the config, the exit status is `0` regardless (report only).
 
 ---
 
@@ -223,7 +218,7 @@ The git hooks `hooks install` adds are `post-merge` and `post-checkout` (run `in
 | `[structure]` | `languages`, `ignore` globs, and `roots` where module candidates are looked for |
 | `[index]` | Search index location and the embedding model and its dimension (these must agree) |
 | `[draft]` | `mode` (`model` or `agent`), drafting limits (`max_source_bytes`, default 200000 per module; larger modules are partly sent as outlines and the note says so) and files that are never sent (`**/.env*`, keys, credentials) |
-| `[check]` | `fail_on` (`stale` or `none`) and `max_detail_notes` |
+| `[check]` | `stale` (`warn`, the default, or `fail`: a pull request that edits covered code without touching its note fails) and `fail_on` (`stale`, the default, or `none` for report-only) |
 | `[visibility]` | `agent_trailers` (regexes that mark a commit as agent-authored; default: Claude Code's `Co-Authored-By ... noreply@anthropic.com` trailer and its "Generated with Claude Code" line) and `churn_warn_lines` (default 1000) |
 
 Module ids are lowercase letters, digits, `_` and `-`. Globs must be relative and must not contain `..`. Invalid configuration is reported with the exact field path and exits with status 2.
@@ -251,9 +246,8 @@ Start with `milepost doctor`. It checks Python, git, SQLite, your model settings
 | Hooks seem to do nothing | They fail open on purpose. Run one by hand: `echo '{}' \| uv run --project /path/to/milepost milepost hook session-start`, and read stderr |
 | `config file not found` | You are outside a repository with a `milepost.toml`. Run `/milepost:kb-init` or `milepost init`, or pass `--repo` |
 | `MILEPOST_MODEL is not set` | Set it and the provider key in `.env` or your shell, or use agent mode |
-| `STALE_NOTE` after an ordinary edit | Expected: any byte of a covered file counts, comments included. Re-read the code, `kb_update` the note (an unchanged body is fine if it is still accurate), or waive it with a reason |
-| Pull requests keep conflicting on `source_hash` | Two PRs changed different files of one module, so both changed the same hash line. The merge driver writes `CONFLICT`; read the merged note and run `milepost rehash module/<id>`. This is the cost of one hash per module |
-| `milepost review` refuses | The note is stale (update it first) or has a `CONFLICT` hash (rehash it first) |
+| `STALE_NOTE` after an ordinary edit | Expected: any commit that touches a covered file after the note was last touched counts, comments included. Re-read the code and touch the note (`kb_update`, or edit it; an unchanged body is fine if it still holds). It only warns unless you set `[check] stale = "fail"` |
+| `milepost review` refuses | The note is stale: update it first (any edit counts as touching it), then review |
 | `CITATION_BROKEN` | The note names a file or symbol that isn't there. Fix the note: it may be an invented detail |
 | CI fails at "Install milepost" | milepost isn't on PyPI yet. Edit `.github/workflows/milepost.yml` to install from a git URL |
 | The first search is slow | It is downloading the embedding model (about 130 MB) once |

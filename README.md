@@ -61,7 +61,7 @@ Four ideas carry the design:
 
 **1. Notes are plain markdown in git.** One file per module: purpose, entry points, a file map, owned data, the rules that must hold, and the traps. They are reviewed, diffed and merged like code. There is no service to run. The search index is a local cache you can delete.
 
-**2. Each note is fingerprinted to its code.** A note records a hash of the source files it describes. `milepost check` recomputes it; if the code changed and the note didn't, the note is *stale*, and in CI that fails the pull request unless someone records a reason.
+**2. Notes know when their code moved on.** A note names the source files it covers. `milepost check` asks git: did a covered file change after the note was last touched? If so the note is *stale*. By default that is a warning; set `[check] stale = "fail"` and a pull request that edits covered code without touching its note fails (unless someone records a reason). Nothing is stored in the note, so there is no hash to conflict.
 
 **3. Only what code can't tell you is written down.** A note holds purpose, contracts, rules and gotchas. Anything that can be worked out from the code is computed when asked and never stored, so it can't rot:
 
@@ -74,16 +74,15 @@ Four ideas carry the design:
 **4. Agents can write, but only a person can approve.** Every agent edit saves a note as `draft`. Only `milepost review`, run by a person, marks it `reviewed` and records who and when. The flip from `reviewed` to `draft` shows in the pull request diff, so an agent can't quietly change what a reviewer signed off.
 
 <details>
-<summary><b>Exactly how the source hash is defined</b></summary>
+<summary><b>Exactly how staleness is judged</b></summary>
 
-It is specified precisely so two machines always agree:
+Per module, using only git:
 
-1. Expand the note's globs against the repository root and keep regular files.
-2. Sort the paths.
-3. For each file, normalise line endings (CRLF and CR become LF, except in binary files) and take a SHA-256 of its contents.
-4. Join `path<TAB>digest` lines and take a SHA-256 of that.
+1. If the note has uncommitted edits, it is fresh (someone just touched it).
+2. Otherwise, if a covered file has uncommitted changes, it is stale.
+3. Otherwise it is stale unless the latest commit touching a covered file is the same as, or an ancestor of, the latest commit touching the note.
 
-Any change to a covered file, including whitespace or a comment, makes the note stale. The hash proves the note was written against the code *as it is now*. It does not prove the prose is true; review does.
+This is an approximation of "the note was written against this code": it cannot tell whether the author read the new code. Re-saving a note unchanged counts as touching it. Review is what vouches for the prose. In a pull request the rule is simpler: it edits covered code and does not touch the note.
 </details>
 
 ## What a note looks like
@@ -92,12 +91,10 @@ Any change to a covered file, including whitespace or a comment, makes the note 
 ---
 kb_schema: 1
 id: module/ai
-level: L2
 title: AI tutoring
 status: reviewed                     # draft until a person signs off
 sources:
   - backend/app/ai/**/*.py           # the files this note describes
-source_hash: sha256:9f2c1a...        # filled in by the tool, never by hand
 related: [services, core]
 written_by: agent
 written_at: 2026-10-07T09:12:00Z
@@ -128,9 +125,9 @@ Files and symbols cited in backticks are checked: `milepost check` warns when a 
 
 | Capability | State |
 |---|---|
-| Notes as markdown in git, with a drift hash per note | Works |
-| `check` and a CI gate: a stale note fails the PR only if its code changed; waivers need a written reason | Works |
-| A merge driver that never silently picks a hash (it writes `CONFLICT`); a merge that mixes in other people's prose returns a reviewed note to `draft` | Works |
+| Notes as markdown in git, one per module, with staleness judged from git history | Works |
+| `check` and a CI gate: a pull request that edits covered code without touching its note is flagged (a warning by default, a failure if you choose); waivers need a written reason | Works |
+| A merge driver for notes: bodies merge line by line, and a merge that mixes in other people's prose returns a reviewed note to `draft` | Works |
 | MCP server with ten `kb_*` tools; each response says what to do next | Works |
 | Claude Code plugin: `/milepost:kb-init`, a usage skill, and hooks (index at session start, covering notes after each edit, one stop if a note is stale) | Works, loaded from a local checkout |
 | Computed context: `outline`, `impact`, `sync` | Works (Python, TypeScript, JavaScript) |
@@ -157,9 +154,9 @@ Proven: the pieces do what they say. The test suite passes on Linux and macOS in
 
 - **It doesn't understand your code.** It lists symbols, follows imports statically, and nothing deeper. `impact` misses dynamic imports and framework wiring.
 - **It doesn't find bugs.** It shows people where to look. A wrong change still needs review and tests.
-- **It can't prove a note is true.** The hash proves a note matches the current code; a person reading it is what vouches for the content. If reviewers rubber-stamp, the `reviewed` badge means nothing.
-- **It can't see drift outside a note's file set**, and any change to a covered file, however small, makes the note stale. That is friction, and a fast-moving team may find the gate noisy.
-- **Two pull requests that change different files of one module will conflict on that module's hash.** The merge driver turns it into `CONFLICT` and a person resolves it with `milepost rehash`. This is a known cost of one hash per module.
+- **It can't prove a note is true.** Git can say a note is older than the code; only a person reading it vouches for the content. If reviewers rubber-stamp, the `reviewed` badge means nothing.
+- **It can't see drift outside a note's file set**, and any commit that touches a covered file after the note makes it stale, however small. That is friction, which is why a stale note only warns unless you opt in to failing.
+- **"Touched" is not "checked".** Because staleness comes from git, re-saving a note counts as updating it. An agent can silence the warning without reading the code; the read-receipt on `kb_update` and human review are the only defences.
 - **In agent mode the exclusion list and secret scan protect only what milepost hands the agent.** The agent can read any file with its own tools.
 
 ## How it is different
@@ -175,7 +172,7 @@ Several projects give agents better context. They differ in *where the knowledge
 | **Aider repo map** | A compact map of the most relevant symbols, rebuilt per request | Nothing stored | N/A (rebuilt every time) | [docs](https://aider.chat/docs/repomap.html) |
 | **Basic Memory** | General-purpose notes any assistant can read and write | Markdown on disk, with a database index | Not stated; not specific to source code | [repo](https://github.com/basicmachines-co/basic-memory) |
 | **ByteRover / Cipher** | A persistent, hierarchical "context tree" shared across agents and teammates | A tree with its own git-style versioning, optional cloud sync | Not stated | [docs](https://docs.byterover.dev/cipher/overview) |
-| **Milepost** | Reviewed prose notes about *why* modules work as they do, plus computed outlines and impact | Markdown in your own git repo | **Yes**: a hash per note, a check, a CI gate | this repo |
+| **Milepost** | Reviewed prose notes about *why* modules work as they do, plus computed outlines and impact | Markdown in your own git repo | **Yes**: staleness judged from git history, a check, an optional CI gate | this repo |
 
 Code-graph and retrieval tools tell an agent *what the code is*. Milepost's niche is the layer they don't claim to cover: the prose a team wants to keep ("this module owns these tables", "never call this before that"), plus a mechanism that stops that prose from quietly rotting. It is meant to sit **alongside** a code-graph tool, not replace one.
 
@@ -223,8 +220,8 @@ Built test-first. Details and the named tests for each milestone are in [TASKS.m
 
 | Milestone | State |
 |---|---|
-| Notes, config, source hash, structure scanners, `check` and the CI gate | Done |
-| Local search; drafting, `init`, `doctor`, `.env`; review, rehash, git hooks, merge driver | Done |
+| Notes, config, structure scanners, `check` and the CI gate | Done |
+| Local search; drafting, `init`, `doctor`, `.env`; review, git hooks, merge driver | Done |
 | Computed context (`outline`, `impact`, `sync`); human-visibility views; agent-mode drafting | Done |
 | MCP server (ten tools) and the Claude Code plugin | Done; live-session test is next |
 | Pilot: token cost, review effort, and the release decision | **Next.** Needs the pass rule agreed |
@@ -235,7 +232,7 @@ Built test-first. Details and the named tests for each milestone are in [TASKS.m
 | File | What it is |
 |---|---|
 | [USAGE.md](USAGE.md) | Trying the plugin, day to day, every command, configuration, troubleshooting |
-| [SPEC.md](SPEC.md) | What is built: every file format, command, hash rule and tool contract |
+| [SPEC.md](SPEC.md) | What is built: every file format, command, staleness rule and tool contract |
 | [PROPOSAL.md](PROPOSAL.md) | Why the project exists and the alternatives considered |
 | [TASKS.md](TASKS.md) | The build order, with named tests per milestone |
 | [PILOT.md](PILOT.md) | How to measure whether it helps |

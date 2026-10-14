@@ -161,7 +161,7 @@ def test_draft_when_provider_fails_three_times_then_exit_four_and_progress_saved
 
 def test_draft_when_note_reviewed_and_no_force_then_refuses(tmp_path: Path) -> None:
     repo, _ = make_repo(tmp_path)
-    repo.write_note_file("kb/modules/billing.md", "module/billing", "L2", ["app/billing/**"])
+    repo.write_note_file("kb/modules/billing.md", "module/billing", ["app/billing/**"])
     config = load_config(repo.root / "milepost.toml")
     client = FakeClient()
 
@@ -195,7 +195,7 @@ def test_draft_when_run_then_frontmatter_written_by_milepost_not_model(tmp_path:
     assert note.meta["written_at"] == NOW
     assert note.meta["id"] == "module/billing"
     assert note.meta["sources"] == ["app/billing/**"]
-    assert note.meta["source_hash"] == repo.hash_of(["app/billing/**"])
+    assert "source_hash" not in note.meta  # the model's claim is ignored, and nothing is stored
     assert "Bills customers" in note.body
     assert "sha256:fake" not in note.body
 
@@ -278,6 +278,4 @@ def test_build_draft_packet_when_called_then_matches_what_draft_modules_would_se
 
     _, system, user = client.calls[0]
     assert (packet.system_prompt, packet.sources_text) == (system, user)
-    assert (
-        packet.source_hash_now == read_note(repo.root / "kb/modules/billing.md").meta["source_hash"]
-    )
+    assert packet.source_hash_now == repo.hash_of(["app/billing/**"])

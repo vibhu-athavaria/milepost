@@ -10,9 +10,9 @@ runner = CliRunner()
 SERVICES = ["app/services/**/*.py"]
 
 
-def base_repo(tmp_path: Path) -> KbRepo:
+def base_repo(tmp_path: Path, stale_fails: bool = True) -> KbRepo:
     """A repo on `main` with one module, one reviewed note, and a clean check."""
-    repo = KbRepo(tmp_path)
+    repo = KbRepo(tmp_path, '\n[check]\nstale = "fail"\n' if stale_fails else "")
     repo.add_module("services", SERVICES, {"app/services/a.py": "x = 1\n"})
     repo.commit("base")
     return repo
@@ -47,7 +47,7 @@ def test_check_ci_when_note_updated_in_same_pr_then_passes(tmp_path: Path) -> No
     repo = base_repo(tmp_path)
     repo.checkout("feature", create=True)
     repo.write("app/services/a.py", "x = 2\n")
-    repo.write_note_file("kb/modules/services.md", "module/services", "L2", SERVICES)
+    repo.touch_note("services")
     repo.commit("change source and note")
 
     code, findings, _ = ci(repo)
@@ -83,10 +83,11 @@ def test_check_ci_when_waiver_without_reason_then_exit_two(tmp_path: Path) -> No
 
 
 def test_check_ci_when_stale_note_untouched_by_pr_then_warning_only(tmp_path: Path) -> None:
-    repo = KbRepo(tmp_path)
+    repo = KbRepo(tmp_path, '\n[check]\nstale = "fail"\n')
     repo.add_module("services", SERVICES, {"app/services/a.py": "x = 1\n"})
-    repo.write("app/services/a.py", "x = 2\n")  # stale before the PR starts
-    repo.commit("base with existing debt")
+    repo.commit("base")
+    repo.write("app/services/a.py", "x = 2\n")  # the note is stale before the PR starts
+    repo.commit("code changed on main without touching the note")
     repo.checkout("feature", create=True)
     repo.write("README.md", "docs\n")
     repo.commit("unrelated change")
@@ -140,21 +141,30 @@ def test_check_ci_when_dir_waiver_trailer_present_then_downgrades_uncovered_dir(
     assert find(findings, "UNCOVERED_DIR")[0]["severity"] == "warning"
 
 
-def test_check_ci_when_l3_source_deleted_in_range_then_fails_orphan_note(tmp_path: Path) -> None:
-    repo = KbRepo(tmp_path)
-    repo.add_module(
-        "services", SERVICES, {"app/services/a.py": "x = 1\n", "app/services/b.py": "y = 1\n"}
-    )
-    repo.add_file_note("app/services/b.py")
-    repo.commit("base")
+def test_check_ci_when_stale_mode_is_warn_then_untouched_note_only_warns(tmp_path: Path) -> None:
+    repo = base_repo(tmp_path, stale_fails=False)
     repo.checkout("feature", create=True)
-    (repo.root / "app/services/b.py").unlink()
-    repo.commit("delete b")
+    repo.write("app/services/a.py", "x = 2\n")
+    repo.commit("change source")
 
     code, findings, _ = ci(repo)
 
-    assert code == 1
-    assert find(findings, "ORPHAN_NOTE")[0]["severity"] == "failure"
+    assert code == 0
+    assert find(findings, "STALE_NOTE")[0]["severity"] == "warning"
+
+
+def test_check_ci_when_two_prs_each_touch_code_and_note_then_both_pass(tmp_path: Path) -> None:
+    repo = base_repo(tmp_path)
+    repo.write("app/services/b.py", "y = 1\n")
+    repo.commit("second file")
+    repo.checkout("feature", create=True)
+    repo.write("app/services/b.py", "y = 2\n")
+    repo.touch_note("services", "\nAlso covers b.\n")
+    repo.commit("pr: code and note")
+
+    code, findings, _ = ci(repo)
+
+    assert code == 0 and find(findings, "STALE_NOTE") == []
 
 
 def test_check_ci_when_declared_module_has_no_note_then_still_warning_in_ci(

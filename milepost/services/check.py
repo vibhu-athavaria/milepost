@@ -3,23 +3,24 @@
 import re
 from dataclasses import dataclass, replace
 from pathlib import Path
+from typing import Literal
 
 from wcmatch import glob
 
 from milepost.config import Config
 from milepost.core.citations import all_citations, path_matches
 from milepost.core.findings import Finding
-from milepost.core.glob import FLAGS
-from milepost.core.hashing import compute_source_hash
+from milepost.core.glob import FLAGS, expand_sources
 from milepost.core.notes import Note, parse_note, validate_note
 from milepost.errors import NoteInvalid, UsageError
 from milepost.services.coverage import uncovered_candidates
 from milepost.services.gitinfo import Changes, changed_files, files_at, read_waivers, repo_files
+from milepost.services.staleness import module_staleness
 from milepost.services.status import module_statuses
 from milepost.structure.candidates import Candidate
 
-NOTE_DIRS = ("modules", "files", "passages")
-WAIVABLE = {"STALE_NOTE", "ORPHAN_NOTE", "UNCOVERED_DIR"}
+NOTE_DIRS = ("modules",)
+WAIVABLE = {"STALE_NOTE", "UNCOVERED_DIR"}
 
 
 @dataclass
@@ -66,44 +67,50 @@ def _load_notes(root: Path, config: Config, findings: list[Finding]) -> list[_Lo
     return loaded
 
 
+def _stale_severity(config: Config) -> Literal["failure", "warning"]:
+    return "failure" if config.check.stale == "fail" else "warning"
+
+
+def _stale_finding(config: Config, module_id: str, reason: str) -> Finding:
+    return Finding(
+        _stale_severity(config),
+        "STALE_NOTE",
+        f"{config.project.kb_dir}/modules/{module_id}.md",
+        f"{reason}; re-read the code and update the note (or confirm it still holds) with "
+        "kb_update or by editing it",
+        f"module/{module_id}",
+    )
+
+
 def _check_staleness(
     root: Path, config: Config, notes: list[_LoadedNote], findings: list[Finding]
 ) -> None:
+    try:
+        staleness = module_staleness(root, config)
+    except UsageError:
+        findings.append(
+            Finding(
+                "warning",
+                "STALENESS_UNAVAILABLE",
+                config.project.kb_dir,
+                "this is not a git repository (or git failed), so staleness cannot be judged",
+            )
+        )
+        return
+    for module_id, state in staleness.items():
+        if state.stale:
+            findings.append(_stale_finding(config, module_id, state.reason))
     for loaded in notes:
-        meta = loaded.note.meta
-        level, recorded = meta.get("level"), meta.get("source_hash")
-        if level not in ("L2", "L3") or not recorded or recorded == "CONFLICT":
-            continue
-        note_id = str(meta.get("id"))
-        result = compute_source_hash(root, loaded.sources, config.structure.ignore)
-        if result.value != recorded:
+        if not expand_sources(root, loaded.sources, config.structure.ignore):
             findings.append(
                 Finding(
-                    "failure",
-                    "STALE_NOTE",
+                    "warning",
+                    "EMPTY_SOURCE_SET",
                     loaded.rel_path,
-                    "source files changed since the note was written; re-read them and call "
-                    f"kb_update, or run `milepost rehash {note_id}` after review",
-                    note_id,
+                    f"source set matches no files: {loaded.sources}",
+                    str(loaded.note.meta.get("id")),
                 )
             )
-        if not result.manifest:
-            if level == "L3":
-                findings.append(
-                    Finding(
-                        "warning",
-                        "ORPHAN_NOTE",
-                        loaded.rel_path,
-                        "the file this note describes no longer exists; delete or replace the note",
-                        note_id,
-                    )
-                )
-            else:
-                findings.append(
-                    Finding(
-                        "warning", "EMPTY_SOURCE_SET", loaded.rel_path, result.warnings[0], note_id
-                    )
-                )
 
 
 def _check_modules(root: Path, config: Config, findings: list[Finding]) -> None:
@@ -149,20 +156,6 @@ def _check_coverage(root: Path, config: Config, findings: list[Finding]) -> list
     return uncovered
 
 
-def _check_detail_count(config: Config, notes: list[_LoadedNote], findings: list[Finding]) -> None:
-    count = sum(1 for loaded in notes if loaded.note.meta.get("level") in ("L3", "L4"))
-    if count > config.check.max_detail_notes:
-        findings.append(
-            Finding(
-                "warning",
-                "DETAIL_NOTE_COUNT",
-                config.project.kb_dir,
-                f"{count} L3/L4 notes exceed check.max_detail_notes "
-                f"({config.check.max_detail_notes}); prefer updating module notes",
-            )
-        )
-
-
 MAX_CITATIONS_CHECKED = 200
 _IDENTIFIER = re.compile(r"[A-Za-z_][A-Za-z0-9_]*$")
 
@@ -180,8 +173,6 @@ def _check_citations(root: Path, notes: list[_LoadedNote], findings: list[Findin
         by_name.setdefault(path.rsplit("/", 1)[-1], []).append(path)
     texts: dict[str, str] = {}
     for loaded in notes:
-        if loaded.note.meta.get("level") not in ("L2", "L3"):
-            continue
         note_id = str(loaded.note.meta.get("id"))
         for path, symbol in all_citations(loaded.note.body)[:MAX_CITATIONS_CHECKED]:
             try:
@@ -245,6 +236,13 @@ def _check_unreviewed_churn(root: Path, config: Config, findings: list[Finding])
         )
 
 
+def _waived(finding: Finding, waivers: dict[str, str]) -> Finding:
+    if finding.code in WAIVABLE and finding.severity == "failure" and finding.subject in waivers:
+        reason = waivers[finding.subject]
+        return replace(finding, severity="warning", message=f"{finding.message} (waived: {reason})")
+    return finding
+
+
 def _apply_ci_scope(
     root: Path,
     base: str,
@@ -257,7 +255,6 @@ def _apply_ci_scope(
     waivers = read_waivers(root, base)
     changes: Changes = changed_files(root, base)
     ignore = config.structure.ignore
-    sources_by_id = {str(n.note.meta.get("id")): n.sources for n in notes}
     new_dirs = {
         f"dir:{c.path}"
         for c in uncovered
@@ -267,23 +264,32 @@ def _apply_ci_scope(
     def touches(patterns: list[str], paths: set[str]) -> bool:
         return any(_matches_any(p, patterns) and not _matches_any(p, ignore) for p in paths)
 
-    scoped = []
+    note_paths = {n.note.meta.get("id"): n.rel_path for n in notes}
+    kb_dir = config.project.kb_dir
+    scoped: list[Finding] = []
+    # STALE_NOTE in a pull request means: it changes covered code and does not touch the note.
+    # That needs no stored hash and cannot conflict. Stale notes the range does not touch are old
+    # debt and stay warnings.
+    for module_id, module in config.modules.items():
+        note_rel = f"{kb_dir}/modules/{module_id}.md"
+        if f"module/{module_id}" not in note_paths:
+            continue
+        if touches(module.sources, changes.all) and note_rel not in changes.all:
+            scoped.append(
+                _stale_finding(config, module_id, "this change edits code the note describes")
+            )
+    in_range = {f.subject for f in scoped}
     for finding in findings:
-        failing = finding.severity == "failure"
         if finding.code == "STALE_NOTE":
-            failing = touches(sources_by_id.get(finding.subject, []), changes.all)
-        elif finding.code == "ORPHAN_NOTE":
-            failing = touches(sources_by_id.get(finding.subject, []), changes.deleted)
+            if finding.subject in in_range:
+                continue
+            finding = replace(finding, severity="warning")
         elif finding.code == "UNCOVERED_DIR":
-            failing = finding.subject in new_dirs
-        if finding.code in WAIVABLE:
-            finding = replace(finding, severity="failure" if failing else "warning")
-            if failing and finding.subject in waivers:
-                reason = waivers[finding.subject]
-                finding = replace(
-                    finding, severity="warning", message=f"{finding.message} (waived: {reason})"
-                )
+            finding = replace(
+                finding, severity="failure" if finding.subject in new_dirs else "warning"
+            )
         scoped.append(finding)
+    scoped = [_waived(finding, waivers) for finding in scoped]
     return scoped
 
 
@@ -295,7 +301,6 @@ def run_check(
     _check_staleness(root, config, notes, findings)
     _check_modules(root, config, findings)
     uncovered = _check_coverage(root, config, findings)
-    _check_detail_count(config, notes, findings)
     _check_citations(root, notes, findings)
     if with_churn:
         _check_unreviewed_churn(root, config, findings)

@@ -58,7 +58,6 @@ class KbRepo:
         self,
         rel: str,
         note_id: str,
-        level: str,
         sources: list[str],
         status: str = "reviewed",
         body: str = "\n## Purpose\n\nDescribes the thing.\n",
@@ -67,11 +66,9 @@ class KbRepo:
             meta={
                 "kb_schema": 1,
                 "id": note_id,
-                "level": level,
                 "title": note_id,
                 "status": status,
                 "sources": sources,
-                "source_hash": self.hash_of(sources),
                 "written_by": "agent",
                 "written_at": "2026-10-07T09:12:00Z",
             },
@@ -94,13 +91,12 @@ class KbRepo:
         self.write_config()
         if with_note:
             self.write_note_file(
-                f"kb/modules/{module_id}.md", f"module/{module_id}", "L2", sources, status, body
+                f"kb/modules/{module_id}.md", f"module/{module_id}", sources, status, body
             )
 
-    def add_file_note(self, path: str) -> None:
-        self.write_note_file(f"kb/files/{path}.md", f"file/{path}", "L3", [path])
-
-    def set_hash(self, rel: str, value: str) -> None:
-        note = read_note(self.root / rel)
-        note.meta["source_hash"] = value
-        write_note(note, self.root / rel)
+    def touch_note(self, module_id: str, text: str = "\nUpdated.\n") -> None:
+        """Edit a module's note (any edit counts as touching it, which clears staleness)."""
+        path = self.root / f"kb/modules/{module_id}.md"
+        note = read_note(path)
+        note.body = note.body + text
+        write_note(note, path)

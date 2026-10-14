@@ -25,8 +25,8 @@ An architecture review of the finished MVP found structural risks: one stored ha
 |---|---|---|
 | 1 | `outline`, `impact`, `sync` work in any git repository with no setup | Done |
 | 2 | Render the L1 index on demand; stop storing `INDEX.md` | Done |
-| 3 | Remove L3 and L4 notes: one note per module | Planned |
-| 4 | Staleness from git history, soft by default; remove the stored hash, `rehash` and the `CONFLICT` sentinel | Planned |
+| 3 | Remove L3 and L4 notes: one note per module | Done |
+| 4 | Staleness from git history, soft by default; remove the stored hash, `rehash` and the `CONFLICT` sentinel | Done |
 | 5 | Heavy dependencies become optional extras; agent mode becomes the default | Planned |
 | 6 | Consolidate SPEC and README around the trimmed product | Planned |
 

@@ -7,7 +7,7 @@ description: Use the milepost knowledge base to find the right module, the exact
 
 Use this skill when a repository has a `kb/` folder and `milepost` tools are available.
 
-Notes are levels: L1 index, L2 module note, L3 file note (rare), L4 passage note (rare). Only L2 and L3 notes carry `sources` and a `source_hash`, so only they can go stale. Per-file detail is not a note: `kb_outline` computes it from the file each time.
+There is one note per module. The module index is built from the notes when you ask for it (`kb_overview`). A note is stale when code it covers changed after the note was last touched. Per-file detail is not a note: `kb_outline` computes it from the file each time.
 
 Each tool response includes `next_steps`. Follow them. The scenarios below are derived from the playbook in SPEC section 12.5. Token rule for every scenario: prefer `kb_outline` plus a ranged read to reading a whole file, and one `kb_module` call to grepping a module.
 
@@ -28,7 +28,7 @@ Find the scenario that matches what you are doing and follow its steps in order.
 - `draft`: its claims are unverified. Check them in the code and tell the user you relied on a draft note.
 - Stale: do not trust it. Read the current source, then call `kb_update` with a corrected body.
 
-`kb_module` and `kb_file` return `source_hash_now`. Pass it to `kb_update` as `read_hash` for L2 and L3 notes. If you get `STALE_READ`, the source changed after you read it: call `kb_module` or `kb_file` again, re-read the source, and retry.
+`kb_module` returns `source_hash_now`. Pass it to `kb_update` as `read_hash`. If you get `STALE_READ`, the source changed after you read it: call `kb_module` again, re-read the source, and retry.
 
 ### Changing an existing file
 
@@ -36,31 +36,28 @@ Find the scenario that matches what you are doing and follow its steps in order.
 2. Make the change.
 3. Run the module's `verify` commands.
 4. Call `kb_sync`. It lists every note that needs attention and what to update in it.
-5. For each listed note, call `kb_update` with a small, factual revision. If the note is still accurate, still call `kb_update` with the unchanged body after re-reading the source, so the hash is current.
+5. For each listed note, call `kb_update` with a small, factual revision. If the note is still accurate, still call `kb_update` with the unchanged body after re-reading the source: touching the note is how it stops being stale.
 6. Call `kb_check`. Fix every finding before you commit.
 
 ### Adding a file to an existing module
 
 1. Call `kb_module` for the owning module and read the new source.
-2. Call `kb_sync`, then `kb_update` on the L2: add the file to the File map, and to Entry points if it is a new place to start.
+2. Call `kb_sync`, then `kb_update` on the module note: add the file to the File map, and to Entry points if it is a new place to start.
 3. Call `kb_check`.
 
 ### Renaming or deleting a file
 
 1. Call `kb_impact` with the old path before the change, to see who imports it.
-2. After the change, call `kb_sync` and `kb_update` on each covering L2 note.
-3. If `kb_check` reports `ORPHAN_NOTE` for an L3 note, tell the user. Do not delete it yourself.
-4. Call `kb_check`.
+2. After the change, call `kb_sync` and `kb_update` on each covering module note.
+3. Call `kb_check`.
 
 ### You learned a gotcha or invariant
 
-- Add it to the L2 note's Gotchas or Invariants with `kb_update`, after reading the source it refers to. Cite the file in backticks, for example `` `routes/auth.py` ``.
-- Write an L3 note only when one file has gotchas, invariants, or behavior that do not fit in the module note. Do not write an L3 for every file you touch.
-- Use an L4 note only when the point is tied to one narrow passage.
+- Add it to the module note's Gotchas or Invariants with `kb_update`, after reading the source it refers to. Cite the file in backticks, for example `` `routes/auth.py` ``. There are no per-file or per-passage notes; keep it in the module note.
 
 ### A new module
 
-`kb_update` cannot create an L2 note unless the project is in agent mode and the module is declared.
+`kb_update` cannot create a module note unless the project is in agent mode and the module is declared.
 
 1. Add `[modules.<id>]` with `sources` to `milepost.toml`.
 2. Call `kb_draft_module` with the id. In model mode it writes the note as `draft`; if it returns `ENVIRONMENT`, tell the user which variable to set. In agent mode it returns a draft packet: write the note body from it and submit it with `kb_update`.
@@ -71,9 +68,9 @@ Find the scenario that matches what you are doing and follow its steps in order.
 
 If `kb_check` reports `UNCOVERED_DIR`, or you find source that no module's `sources` covers, follow "A new module" if a module should exist. Otherwise ask the user. Do not widen a module's globs to absorb it without asking.
 
-### A `CONFLICT` hash
+### A note with merge-conflict markers
 
-Stop. Do not edit the note and do not run `milepost rehash`. Tell the user the note needs review and a `milepost rehash <id>` run.
+If a note contains `<<<<<<<` markers, stop. Do not edit the note. Tell the user it needs a person to resolve the conflict.
 
 ### Before you commit
 
@@ -90,7 +87,6 @@ Stop. Do not edit the note and do not run `milepost rehash`. Tell the user the n
 
 ## Do not
 
-- Edit `source_hash` by hand.
 - Change `sources`, `id`, or `kb_schema` through `kb_update`.
-- Write a note you have not read the source for. `kb_update` records the hash of whatever is on disk, so a note written without reading the code is stored as current when it is not.
+- Write a note you have not read the source for. Touching a note clears its stale warning, so a note written without reading the code looks current when it is not.
 - Rewrite a whole note when a small edit will do. Small edits reduce merge conflicts and are easier for a person to review.

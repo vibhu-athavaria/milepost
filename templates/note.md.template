@@ -1,12 +1,10 @@
 ---
 kb_schema: 1
 id: module/<module-id>
-level: L2
 title: <Human-readable title>
 status: draft
 sources:
   - <glob relative to repo root, e.g. app/services/**/*.py>
-source_hash: <filled in by milepost; never write this by hand>
 related: []
 written_by: draft-command
 written_at: <UTC ISO-8601, e.g. 2026-10-07T09:12:00Z>

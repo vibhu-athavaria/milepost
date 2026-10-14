@@ -9,12 +9,10 @@ VALID = """\
 ---
 kb_schema: 1
 id: module/services
-level: L2
 title: Services
 status: draft
 sources:
   - backend/app/services/**/*.py
-source_hash: sha256:9f2c
 related: [ai, data]
 written_by: agent
 written_at: 2026-10-07T09:12:00Z
@@ -64,15 +62,6 @@ def test_validate_note_when_required_key_missing_then_reports_error() -> None:
     assert "MISSING_KEY" in codes(note)
 
 
-def test_validate_note_when_l1_or_l4_has_no_sources_then_no_error() -> None:
-    text = (
-        "---\nkb_schema: 1\nid: passage/slug\nlevel: L4\ntitle: T\nstatus: draft\n"
-        "written_by: agent\nwritten_at: 2026-10-07T09:12:00Z\n---\nbody\n"
-    )
-
-    assert codes(parse_note(text), "passages/slug.md") == []
-
-
 def test_validate_note_when_kb_schema_not_one_then_reports_error() -> None:
     note = parse_note(VALID.replace("kb_schema: 1", "kb_schema: 2"))
 
@@ -89,22 +78,6 @@ def test_validate_note_when_id_mismatches_path_then_reports_error() -> None:
     note = parse_note(VALID)
 
     assert "ID_PATH_MISMATCH" in codes(note, "modules/other.md")
-
-
-def test_validate_note_when_file_note_then_id_derived_from_nested_path() -> None:
-    text = VALID.replace("module/services", "file/app/x.py").replace("L2", "L3")
-
-    assert codes(parse_note(text), "files/app/x.py.md") == []
-
-
-def test_validate_note_when_source_hash_conflict_then_reports_conflict_code() -> None:
-    note = parse_note(VALID.replace("sha256:9f2c", "CONFLICT"))
-
-    findings = validate_note(note, "modules/services.md")
-
-    conflict = [f for f in findings if f.code == "SOURCE_HASH_CONFLICT"]
-    assert len(conflict) == 1
-    assert "milepost rehash module/services" in conflict[0].message
 
 
 def test_validate_note_when_body_empty_then_reports_error() -> None:
@@ -142,7 +115,6 @@ def test_write_note_when_keys_written_then_order_is_stable() -> None:
             "title": "Services",
             "id": "module/services",
             "kb_schema": 1,
-            "level": "L2",
             "status": "draft",
             "written_by": "agent",
             "aaa_extra": 2,
@@ -150,12 +122,11 @@ def test_write_note_when_keys_written_then_order_is_stable() -> None:
         body="\nbody\n",
     )
 
-    keys = [line.split(":")[0] for line in render_note(shuffled).splitlines()[1:10]]
+    keys = [line.split(":")[0] for line in render_note(shuffled).splitlines()[1:9]]
 
     assert keys == [
         "kb_schema",
         "id",
-        "level",
         "title",
         "status",
         "written_by",
@@ -163,3 +134,20 @@ def test_write_note_when_keys_written_then_order_is_stable() -> None:
         "aaa_extra",
         "zzz_extra",
     ]
+
+
+def test_render_note_when_legacy_keys_present_then_dropped_on_write() -> None:
+    note = parse_note(
+        VALID.replace("title: Services", "level: L2\ntitle: Services\nsource_hash: sha256:abc")
+    )
+
+    text = render_note(note)
+
+    assert "level:" not in text and "source_hash" not in text
+    assert codes(note) == []  # tolerated when reading
+
+
+def test_validate_note_when_note_is_not_under_modules_then_id_path_mismatch() -> None:
+    text = VALID.replace("module/services", "file/app/x.py")
+
+    assert "ID_PATH_MISMATCH" in codes(parse_note(text), "files/app/x.py.md")

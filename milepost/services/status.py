@@ -48,7 +48,7 @@ def _reviewed_baseline(root: Path, note_rel: str) -> tuple[str, str, str] | None
     """(commit, reviewed_by, reviewed_at) of the latest commit that recorded a review.
 
     A review event is a commit that added or removed a `reviewed_at` line, so a typo fix or a
-    rehash on an already-reviewed note does not reset the baseline. Only those events are
+    edit that does not touch the review fields does not reset the baseline. Only those events are
     inspected, newest first, so the cost does not grow with the note's whole history. Notes
     reviewed by hand, without `reviewed_at`, fall back to commits that touched the status line."""
     for pattern in ("^reviewed_at:", "^status: reviewed"):

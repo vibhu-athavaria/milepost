@@ -10,8 +10,9 @@ runner = CliRunner()
 
 
 def make_repo(tmp_path: Path) -> KbRepo:
-    repo = KbRepo(tmp_path)
+    repo = KbRepo(tmp_path, '\n[check]\nstale = "fail"\n')
     repo.add_module("services", ["app/services/**/*.py"], {"app/services/a.py": "x = 1\n"})
+    repo.commit("base")
     return repo
 
 

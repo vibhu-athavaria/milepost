@@ -42,7 +42,7 @@ def test_sync_when_nothing_changed_then_empty_and_says_so(tmp_path: Path) -> Non
     assert result.next_steps == ["No changed files; nothing to update."]
 
 
-def test_sync_when_file_modified_in_module_then_routes_to_l2_with_stale_flag(
+def test_sync_when_file_modified_in_module_then_routes_to_the_note_with_stale_flag(
     tmp_path: Path,
 ) -> None:
     repo = make_repo(tmp_path)
@@ -57,7 +57,7 @@ def test_sync_when_file_modified_in_module_then_routes_to_l2_with_stale_flag(
         ["billing"],
     )
     (note,) = change.notes
-    assert (note.id, note.level, note.stale) == ("module/billing", "L2", True)
+    assert (note.id, note.stale) == ("module/billing", True)
     assert note.source_hash_now == repo.hash_of(SOURCES)
     assert "re-read app/billing/charge.py" in change.routes[0]
 
@@ -72,29 +72,14 @@ def test_sync_when_file_added_then_routes_to_l2_file_map(tmp_path: Path) -> None
     assert "File map" in change.routes[0]
 
 
-def test_sync_when_file_deleted_then_routes_to_l2_and_flags_orphan_l3(tmp_path: Path) -> None:
+def test_sync_when_file_deleted_then_routes_to_the_file_map(tmp_path: Path) -> None:
     repo = make_repo(tmp_path)
-    repo.add_file_note("app/billing/refund.py")
-    repo.commit("add l3")
     (repo.root / "app/billing/refund.py").unlink()
 
     (change,) = run(repo).changes
 
-    routes = " | ".join(change.routes)
     assert change.status == "deleted"
-    assert "remove or rename app/billing/refund.py in the File map" in routes
-    assert "ORPHAN_NOTE" in routes
-
-
-def test_sync_when_file_covered_by_l3_then_l3_also_listed(tmp_path: Path) -> None:
-    repo = make_repo(tmp_path)
-    repo.add_file_note("app/billing/charge.py")
-    repo.commit("add l3")
-    repo.write("app/billing/charge.py", "def charge(card):\n    return 1\n")
-
-    (change,) = run(repo).changes
-
-    assert [n.id for n in change.notes] == ["module/billing", "file/app/billing/charge.py"]
+    assert "remove or rename app/billing/refund.py in the File map" in change.routes[0]
 
 
 def test_sync_when_path_uncovered_then_uncovered_dir_guidance(tmp_path: Path) -> None:

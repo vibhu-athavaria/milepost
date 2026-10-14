@@ -37,29 +37,6 @@ def test_review_cli_when_unknown_note_then_exit_two(repo: KbRepo) -> None:
     assert result.exit_code == 2
 
 
-def test_rehash_when_non_interactive_and_no_yes_then_exit_two(repo: KbRepo) -> None:
-    repo.set_hash("kb/modules/billing.md", "CONFLICT")
-
-    result = runner.invoke(cli.app, ["rehash", "module/billing", "--repo", str(repo.root)])
-
-    assert result.exit_code == 2
-    assert "--yes" in result.output
-    assert read_note(repo.root / "kb/modules/billing.md").meta["source_hash"] == "CONFLICT"
-
-
-def test_rehash_when_conflict_then_sets_hash_and_prints_manifest_diff(repo: KbRepo) -> None:
-    repo.set_hash("kb/modules/billing.md", "CONFLICT")
-
-    result = runner.invoke(cli.app, ["rehash", "module/billing", "--repo", str(repo.root), "--yes"])
-
-    assert result.exit_code == 0, result.output
-    assert "old hash: CONFLICT" in result.output
-    assert "app/billing/api.py" in result.output
-    assert read_note(repo.root / "kb/modules/billing.md").meta["source_hash"] == repo.hash_of(
-        ["app/billing/**/*.py"]
-    )
-
-
 def test_hooks_cli_when_install_then_uninstall_then_hooks_come_and_go(repo: KbRepo) -> None:
     installed = runner.invoke(cli.app, ["hooks", "install", "--repo", str(repo.root)])
     present = (repo.root / ".git/hooks/pre-commit").is_file()

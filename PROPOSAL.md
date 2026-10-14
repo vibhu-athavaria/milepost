@@ -52,14 +52,13 @@ It is not worth it for small repos. A good `CLAUDE.md` plus a short architecture
 |---|---|---|---|
 | L1 | Index | One line per module, plus module dependency map | Generated from structure, prose reviewed |
 | L2 | Module note | Purpose, entry points, owned data, invariants, related modules | Agent drafts, human reviews on first write |
-| L3 | File note | Gotchas that do not fit the module note. Rare. Per-file symbols come from the computed `outline`, not from notes | Agent or person, exceptions only |
-| L4 | Passage note | Line-range notes for a specific behavior | Created on demand |
+| L3, L4 | (removed) | There are no per-file or per-passage notes; per-file detail is computed by `outline` | n/a |
 
 **Structure is derived, prose is written.** Imports, call paths, routes, and ownership come from the structural graph or a deterministic scan. Only prose (purpose, invariants, gotchas) is authored by an agent. Derived data can always be regenerated; prose is the part that can drift.
 
-**Every prose note carries source hashes.** Frontmatter lists the source files a note describes and a hash of each. A check recomputes hashes and reports notes whose sources changed since the note was written. Drift is visible, not silent.
+**Notes know when their code moved on.** Frontmatter lists the source files a note describes. A check asks git whether a covered file changed after the note was last touched and reports the note as stale if so. Drift is visible, not silent. (An earlier design stored a hash of the sources in each note; it conflicted between concurrent pull requests and was replaced.)
 
-**Notes are files in git.** Markdown with frontmatter, one note per module or file, committed next to the code. The index (keyword and embedding search) is a local, rebuildable cache, git-ignored, never the source of truth.
+**Notes are files in git.** Markdown with frontmatter, one note per module, committed next to the code. The index (keyword and embedding search) is a local, rebuildable cache, git-ignored, never the source of truth.
 
 **Agent read path:** L1 index → relevant L2 note → the computed outline of the files it names, then only the line ranges needed. The agent does not grep the whole repo first.
 

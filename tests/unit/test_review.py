@@ -6,7 +6,7 @@ from support.kb_repo import KbRepo
 from milepost.config import load_config
 from milepost.core.notes import read_note
 from milepost.errors import EnvironmentProblem, MilepostError, UsageError
-from milepost.services.review import git_identity, plan_rehash, rehash_note, review_note
+from milepost.services.review import git_identity, review_note
 
 NOW = "2026-10-12T09:00:00Z"
 SOURCES = ["app/billing/**/*.py"]
@@ -24,12 +24,15 @@ def make_repo(tmp_path: Path, status: str = "draft") -> KbRepo:
         {"app/billing/api.py": "def charge(card):\n    return card\n"},
         status=status,
     )
+    repo.git("config", "user.name", "t")
+    repo.git("config", "user.email", "t@example.com")
+    repo.commit("base")
     return repo
 
 
-def test_review_when_draft_then_status_reviewed_and_hash_unchanged(tmp_path: Path) -> None:
+def test_review_when_draft_then_status_reviewed_and_body_unchanged(tmp_path: Path) -> None:
     repo = make_repo(tmp_path)
-    before = read_note(repo.root / "kb/modules/billing.md").meta["source_hash"]
+    before = read_note(repo.root / "kb/modules/billing.md").body
 
     review_note(
         repo.root, load_config(repo.root / "milepost.toml"), "module/billing", NOW, identity
@@ -37,7 +40,7 @@ def test_review_when_draft_then_status_reviewed_and_hash_unchanged(tmp_path: Pat
 
     meta = read_note(repo.root / "kb/modules/billing.md").meta
     assert meta["status"] == "reviewed"
-    assert meta["source_hash"] == before
+    assert read_note(repo.root / "kb/modules/billing.md").body == before
 
 
 def test_review_when_run_then_records_reviewer_and_time_from_git_identity(tmp_path: Path) -> None:
@@ -64,6 +67,8 @@ def test_review_when_git_identity_missing_then_exit_three(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     repo = make_repo(tmp_path)
+    repo.git("config", "user.name", "")
+    repo.git("config", "user.email", "")
     monkeypatch.setenv("HOME", str(tmp_path))
     monkeypatch.setenv("GIT_CONFIG_GLOBAL", "/dev/null")
     monkeypatch.setenv("GIT_CONFIG_NOSYSTEM", "1")
@@ -87,14 +92,17 @@ def test_review_when_note_stale_then_refused_and_unchanged(tmp_path: Path) -> No
     assert read_note(repo.root / "kb/modules/billing.md").meta["status"] == "draft"
 
 
-def test_review_when_hash_conflict_then_refused_pointing_at_rehash(tmp_path: Path) -> None:
+def test_review_when_note_is_touched_after_the_code_then_allowed(tmp_path: Path) -> None:
     repo = make_repo(tmp_path)
-    repo.set_hash("kb/modules/billing.md", "CONFLICT")
+    repo.write("app/billing/api.py", "def charge(card):\n    return None\n")
+    repo.commit("code change")
+    repo.touch_note("billing")
 
-    with pytest.raises(MilepostError, match="rehash"):
-        review_note(
-            repo.root, load_config(repo.root / "milepost.toml"), "module/billing", NOW, identity
-        )
+    review_note(
+        repo.root, load_config(repo.root / "milepost.toml"), "module/billing", NOW, identity
+    )
+
+    assert read_note(repo.root / "kb/modules/billing.md").meta["status"] == "reviewed"
 
 
 def test_review_when_unknown_id_then_usage_error(tmp_path: Path) -> None:
@@ -104,38 +112,3 @@ def test_review_when_unknown_id_then_usage_error(tmp_path: Path) -> None:
         review_note(
             repo.root, load_config(repo.root / "milepost.toml"), "module/nope", NOW, identity
         )
-
-
-def test_rehash_when_conflict_then_sets_hash_and_returns_manifest(tmp_path: Path) -> None:
-    repo = make_repo(tmp_path)
-    repo.set_hash("kb/modules/billing.md", "CONFLICT")
-    config = load_config(repo.root / "milepost.toml")
-
-    result = rehash_note(repo.root, config, "module/billing")
-
-    assert result.old_hash == "CONFLICT"
-    assert result.new_hash == repo.hash_of(SOURCES)
-    assert list(result.manifest) == ["app/billing/api.py"]
-    assert read_note(repo.root / "kb/modules/billing.md").meta["source_hash"] == result.new_hash
-
-
-def test_plan_rehash_when_called_then_note_not_modified(tmp_path: Path) -> None:
-    repo = make_repo(tmp_path)
-    repo.set_hash("kb/modules/billing.md", "CONFLICT")
-    config = load_config(repo.root / "milepost.toml")
-
-    plan_rehash(repo.root, config, "module/billing")
-
-    assert read_note(repo.root / "kb/modules/billing.md").meta["source_hash"] == "CONFLICT"
-
-
-def test_rehash_when_note_has_no_sources_then_usage_error(tmp_path: Path) -> None:
-    repo = make_repo(tmp_path)
-    repo.write(
-        "kb/passages/gotcha.md",
-        "---\nkb_schema: 1\nid: passage/gotcha\nlevel: L4\ntitle: g\nstatus: draft\n"
-        "written_by: agent\nwritten_at: '2026-10-12T09:00:00Z'\n---\n\nA point.\n",
-    )
-
-    with pytest.raises(UsageError):
-        rehash_note(repo.root, load_config(repo.root / "milepost.toml"), "passage/gotcha")

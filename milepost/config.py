@@ -1,5 +1,6 @@
 """Configuration loaded from milepost.toml (SPEC section 3)."""
 
+import os
 import re
 import tomllib
 from collections.abc import Mapping
@@ -15,6 +16,7 @@ from pydantic import (
     PositiveInt,
     StringConstraints,
     ValidationError,
+    field_validator,
     model_validator,
 )
 
@@ -41,6 +43,15 @@ class _Model(BaseModel):
 class Project(_Model):
     name: str
     kb_dir: str = "kb"
+
+    @field_validator("kb_dir")
+    @classmethod
+    def _normalise_kb_dir(cls, value: str) -> str:
+        """`kb/`, `./kb` and `kb` all mean the same folder; keep one spelling."""
+        cleaned = os.path.normpath(value).replace(os.sep, "/")
+        if cleaned in (".", "") or cleaned.startswith(("/", "..")):
+            raise ValueError("must be a folder inside the repository, for example 'kb'")
+        return cleaned
 
 
 class Module(_Model):
@@ -72,7 +83,9 @@ class Draft(_Model):
 
 class Check(_Model):
     fail_on: Literal["stale", "none"] = "stale"
-    max_detail_notes: NonNegativeInt = 50
+    # "warn" (default): a stale note is reported but never fails a check or a pull request.
+    # "fail": a pull request that edits covered code without touching its note fails.
+    stale: Literal["warn", "fail"] = "warn"
 
 
 def _valid_regex(value: str) -> str:
