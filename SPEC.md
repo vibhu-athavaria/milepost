@@ -1,6 +1,6 @@
 # milepost Specification
 
-Status: v1 spec. Milestones M0 to M10 are built; see the status table at the top of TASKS.md. Items that are specified but not built are marked "not built". Companion to PROPOSAL.md (the "why"). This file is the "what to build."
+Status: v1 spec, as built and as trimmed (see "The trim" in TASKS.md). Milestones M0 to M10 are built; the pilot (M11) is next. This file describes what exists. Companion to PROPOSAL.md (the "why"). This file is the "what to build."
 
 Audience: the developer implementing milepost, and reviewers checking it against the proposal.
 
@@ -291,7 +291,7 @@ All commands accept `--repo <path>` (default: nearest ancestor with `milepost.to
 | `milepost index [--rebuild]` | Build or update the local search index (section 7) | Safe to run from git hooks |
 | `milepost overview` | Print the L1 module index, rendered from the notes (section 8.2) | Read-only |
 | `milepost draft <module-id> [--force]` | (Re)draft one module note with `status: draft` | Refuses to overwrite `reviewed` unless `--force`; `model` mode only (agent mode drafts through `kb_draft_module`) |
-| `milepost review <note-id>` | Set `status: reviewed` after human sign-off | Records `reviewed_by` and `reviewed_at` from the git identity (exit 3 if it is not set); refuses a stale note and a `CONFLICT` note |
+| `milepost review <note-id>` | Set `status: reviewed` after human sign-off | Records `reviewed_by` and `reviewed_at` from the git identity (exit 3 if it is not set); refuses a stale note |
 | `milepost outline <path> [--json]` | Symbols, signatures and line ranges of one file, computed now | Section 8.3 |
 | `milepost impact <path> [--json]` | Files that import this file and the tests likely to cover it, computed now | Section 8.3 |
 | `milepost sync [--base REF] [--json]` | What changed and which notes to update, and how | Section 8.3; read-only |
@@ -337,7 +337,7 @@ These read the working tree and git at call time. Nothing they return is stored 
 
 | Change | What to update |
 |---|---|
-| File modified in a module | The module note: re-read the file, edit Purpose, File map, Invariants or Gotchas if the change affects them, otherwise call `kb_update` with the unchanged body to refresh the hash. Any L3 covering the file: same |
+| File modified in a module | The module note: re-read the file, edit Purpose, File map, Invariants or Gotchas if the change affects them, otherwise call `kb_update` with the unchanged body to confirm it still holds (that touches the note, so it is no longer stale) |
 | File added in a module | The note's File map (add a line); Entry points if it is a new starting point |
 | File deleted or renamed | The note's File map (remove or rename the line) |
 | Path covered by no module | `UNCOVERED_DIR` guidance: declare a module (playbook 8) or ask the user |
@@ -503,7 +503,7 @@ Tool errors return a structured error `{code, message}` with codes `NOT_FOUND`, 
 
 ### 11.3 `kb_draft_module`
 
-Lets an agent create the L2 note for a new module in the same change as the code, without a CLI round trip.
+Lets an agent create the note for a new module in the same change as the code, without a CLI round trip.
 
 - Precondition: the module id is declared in `milepost.toml`. The tool never edits config; the agent adds the `[modules.<id>]` entry as an ordinary file edit first. An undeclared id returns `NOT_FOUND` with `next_steps` naming the config entry to add.
 - Refuses with `CONFLICT` if a note for the module already exists. Redrafting stays a human action (`milepost draft --force`).
@@ -568,7 +568,7 @@ This table is normative. The skill (`plugin/skills/kb-usage/SKILL.md`) and the C
 | 3 | Note is stale | Read current source; `kb_update` with corrected body and `read_hash` from the last `kb_module` or `kb_file` | `STALE_READ`: call `kb_module` or `kb_file` again and retry |
 | 4 | Change an existing file | Read the relevant lines; change it; run the module's `verify` commands; `kb_sync`; `kb_update` on every note it lists; `kb_check` | A finding the agent cannot fix: report it, do not waive |
 | 5 | Add a file to an existing module | `kb_module`; read the new source; `kb_sync`; `kb_update` on the note (File map, and Entry points if it is a new starting point); `kb_check` | none |
-| 6 | Rename or delete a file | `kb_impact` on the old path before the change (who imports it); after the change, `kb_sync` and `kb_update` on each covering note; `kb_check` | `ORPHAN_NOTE` for an L3: tell the user, do not delete the note |
+| 6 | Rename or delete a file | `kb_impact` on the old path before the change (who imports it); after the change, `kb_sync` and `kb_update` on each covering note; `kb_check` | none |
 | 7 | Learned a gotcha or invariant | `kb_update` on the note (Gotchas or Invariants, citing the file in backticks) after reading the source it refers to | none |
 | 8 | New module | Add `[modules.<id>]` to `milepost.toml`; `kb_draft_module` (in agent mode, write the body from the packet and submit it with `kb_update`); `kb_check`; tell the user to run `milepost review <id>` | `ENVIRONMENT` (`MILEPOST_MODEL` unset, model mode): tell the user which variable to set |
 | 9 | Code no module covers | `kb_check` shows `UNCOVERED_DIR`; follow scenario 8 if a module should exist; otherwise ask the user | Do not widen another module's globs without asking |
@@ -600,7 +600,7 @@ Core (always installed):
 - `mcp>=2,<3` (the MCP Python SDK)
 - `tree-sitter`, `tree-sitter-typescript`, `tree-sitter-javascript`
 
-Optional extras (about 70 fewer packages without them; the core install is 43 packages):
+Optional extras (the core install has no machine-learning libraries and is roughly a third the size):
 - `milepost[search]`: `fastembed` and `numpy`, for meaning-based search. Without it, notes are indexed and searched by keyword only (SQLite FTS5), and `doctor` says so.
 - `milepost[model]`: `litellm`, for drafting with a separate model (`draft.mode = "model"`). Not needed in the default agent mode.
 - `milepost[all]`: both.
