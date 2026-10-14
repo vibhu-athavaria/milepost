@@ -682,3 +682,48 @@ def test_kb_update_when_agent_mode_and_sources_truncated_then_notice_added_autom
 
     body = read_note(repo.root / "kb/modules/other.md").body
     assert "Truncated draft" in body and "app/other/y.py" in body
+
+
+def bare_repo(tmp_path: Path) -> KbRepo:
+    """A git repository with source files and no milepost.toml at all."""
+    repo = KbRepo(tmp_path / "bare")
+    repo.write("app/charge.py", "def charge(card):\n    return card\n")
+    repo.write("app/routes.py", "from app.charge import charge\n")
+    repo.write("tests/test_charge.py", "from app.charge import charge\n")
+    repo.git("config", "user.name", "t")
+    repo.git("config", "user.email", "t@example.com")
+    repo.commit("base")
+    return repo
+
+
+def test_kb_outline_impact_sync_when_no_milepost_toml_then_still_work(tmp_path: Path) -> None:
+    repo = bare_repo(tmp_path)
+    repo.write("app/charge.py", "def charge(card):\n    return None\n")
+
+    assert kb_outline(repo.root, "app/charge.py")["symbols"][0]["name"] == "charge"
+    impact = kb_impact(repo.root, "app/charge.py")
+    assert impact["importers"] == ["app/routes.py", "tests/test_charge.py"]
+    assert [t["path"] for t in impact["tests"]] == ["tests/test_charge.py"]
+    sync = kb_sync(repo.root)
+    assert [c["path"] for c in sync["changes"]] == ["app/charge.py"]
+    assert "/kb-init" in " ".join(sync["next_steps"])
+    assert sync["uncovered"] == []
+
+
+def test_kb_overview_when_no_milepost_toml_then_still_points_at_kb_init(tmp_path: Path) -> None:
+    repo = bare_repo(tmp_path)
+
+    with pytest.raises(KbToolError) as error:
+        kb_overview(repo.root)
+
+    assert error.value.code == "ENVIRONMENT" and "/kb-init" in error.value.message
+
+
+def test_kb_impact_when_milepost_toml_is_invalid_then_environment_error(tmp_path: Path) -> None:
+    repo = bare_repo(tmp_path)
+    repo.write("milepost.toml", "this is not toml [[[\n")
+
+    with pytest.raises(KbToolError) as error:
+        kb_impact(repo.root, "app/charge.py")
+
+    assert error.value.code == "ENVIRONMENT"

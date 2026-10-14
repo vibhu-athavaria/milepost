@@ -130,6 +130,15 @@ def load_config(path: Path) -> Config:
     return config
 
 
+def load_config_or_default(path: Path) -> Config:
+    """The config at `path`, or defaults when there is no milepost.toml, so the computed tools
+    (outline, impact, sync) work in any git repository with no setup. An existing but invalid
+    file is still an error."""
+    if path.exists() or path.is_symlink():
+        return load_config(path)
+    return Config(project=Project(name=path.resolve().parent.name))
+
+
 _ENV_REFERENCE = re.compile(r"\$\{(\w+)\}")
 
 

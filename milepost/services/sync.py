@@ -133,6 +133,15 @@ def sync(root: Path, config: Config, base: str | None = None) -> SyncResult:
         result.next_steps = ["No changed files; nothing to update."]
         return result
 
+    if not config.modules and not (root / config.project.kb_dir / "modules").is_dir():
+        # No knowledge base at all (typically no milepost.toml): report the changes and stop.
+        result.changes = [FileChange(path, _status_of(path, changes)) for path in paths]
+        result.next_steps = [
+            f"{len(paths)} changed file(s). No knowledge base is set up in this repository, so "
+            "there are no notes to update; the user can run /kb-init to start keeping notes"
+        ]
+        return result
+
     kb_notes = _load_kb_notes(root, config)
     hash_cache: dict[str, str] = {}
     affected: dict[str, list[str]] = {}

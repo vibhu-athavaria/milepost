@@ -13,7 +13,7 @@ from dataclasses import asdict
 from pathlib import Path
 from typing import Any
 
-from milepost.config import Config, load_config, resolve_model
+from milepost.config import Config, load_config, load_config_or_default, resolve_model
 from milepost.core.glob import matches_any
 from milepost.core.hashing import compute_source_hash
 from milepost.core.notes import (
@@ -78,9 +78,13 @@ def _tool[**P](func: Callable[P, dict[str, Any]]) -> Callable[P, dict[str, Any]]
     return wrapper
 
 
-def _config(root: Path) -> Config:
+def _config(root: Path, required: bool = True) -> Config:
+    """The repository's config. With required=False (the computed tools), a missing
+    milepost.toml gives defaults instead of an error."""
     try:
-        return load_config(root / CONFIG_NAME)
+        if required:
+            return load_config(root / CONFIG_NAME)
+        return load_config_or_default(root / CONFIG_NAME)
     except ConfigNotFound as error:
         raise KbToolError(
             "ENVIRONMENT", "no milepost.toml in this repository; the user can run /kb-init"
@@ -323,7 +327,7 @@ def kb_outline(root: Path, path: str) -> dict[str, Any]:
 
 @_tool
 def kb_impact(root: Path, path: str) -> dict[str, Any]:
-    config = _config(root)
+    config = _config(root, required=False)
     try:
         result = file_impact(root, config, path)
     except MilepostError as error:
@@ -335,7 +339,7 @@ def kb_impact(root: Path, path: str) -> dict[str, Any]:
 
 @_tool
 def kb_sync(root: Path, base: str | None = None) -> dict[str, Any]:
-    config = _config(root)
+    config = _config(root, required=False)
     try:
         result = run_sync(root, config, base)
     except MilepostError as error:

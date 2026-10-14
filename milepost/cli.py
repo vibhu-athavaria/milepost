@@ -14,7 +14,7 @@ from typing import Annotated, Any
 
 import typer
 
-from milepost.config import Config, Index, load_config, resolve_model
+from milepost.config import Config, Index, load_config, load_config_or_default, resolve_model
 from milepost.embeddings import FastembedEmbedder
 from milepost.env import load_env
 from milepost.errors import MilepostError, UsageError
@@ -395,7 +395,7 @@ def impact(
 ) -> None:
     """List who imports a file and which tests likely cover it, computed now."""
     root = _repo_root(repo)
-    result = file_impact(root, load_config(root / CONFIG_NAME), path)
+    result = file_impact(root, load_config_or_default(root / CONFIG_NAME), path)
     if json_output:
         typer.echo(json.dumps(asdict(result), indent=2))
         return
@@ -426,7 +426,7 @@ def sync(
 ) -> None:
     """Show what changed and which notes to update, and how."""
     root = _repo_root(repo)
-    result = run_sync(root, load_config(root / CONFIG_NAME), base)
+    result = run_sync(root, load_config_or_default(root / CONFIG_NAME), base)
     if json_output:
         typer.echo(json.dumps(asdict(result), indent=2))
         return
