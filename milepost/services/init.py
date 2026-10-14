@@ -10,7 +10,7 @@ from pathlib import Path
 
 from milepost.config import Config, Module, Project, Structure, load_config, resolve_model
 from milepost.embeddings import Embedder
-from milepost.errors import EnvironmentProblem, UsageError
+from milepost.errors import EnvironmentProblem, MilepostError, UsageError
 from milepost.llm.client import LlmClient
 from milepost.services.coverage import CONFIG_NAME, uncovered_candidates, undeclared_candidates
 from milepost.services.draft import collect_sources, draft_modules
@@ -34,6 +34,8 @@ class InitReport:
     estimated_tokens: int = 0
     indexed: int = 0
     hooks: HooksReport | None = None
+    agent_pending: list[str] = field(default_factory=list)
+    agent_mode: bool = False
 
 
 def _require_git_repo(root: Path) -> None:
@@ -61,7 +63,9 @@ def _module_table(candidate: Candidate, commented: bool) -> str:
     return "\n".join(f"{prefix}{line}" for line in lines) + "\n"
 
 
-def _render_config(name: str, active: list[Candidate], suggested: list[Candidate]) -> str:
+def _render_config(
+    name: str, active: list[Candidate], suggested: list[Candidate], agent_mode: bool = False
+) -> str:
     defaults = Structure()
     parts = [
         "# milepost configuration. Commit this file.\n"
@@ -78,6 +82,9 @@ def _render_config(name: str, active: list[Candidate], suggested: list[Candidate
     )
     parts.append(
         "[draft]\n"
+        '# "model": milepost calls the model named by MILEPOST_MODEL. "agent": your coding agent '
+        "writes the notes itself (no key needed).\n"
+        f'mode = "{"agent" if agent_mode else "model"}"\n'
         "# Resolved from the MILEPOST_MODEL environment variable (shell or .env). "
         "Never put a model name or key here.\n"
         'provider_model = "${MILEPOST_MODEL}"\n'
@@ -102,6 +109,14 @@ def _workflow_text() -> str:
     return re.sub(
         r"milepost==[\w.]+", f"milepost=={version('milepost')}", WORKFLOW_TEMPLATE.read_text()
     )
+
+
+def _existing_agent_mode(root: Path) -> bool:
+    """True when the config that --force-config is about to replace uses agent mode."""
+    try:
+        return load_config(root / CONFIG_NAME).draft.mode == "agent"
+    except MilepostError:
+        return False
 
 
 def _plan_config(
@@ -147,12 +162,22 @@ def run_init(
     now: str,
     sleep: Callable[[float], None],
     install_hooks_flag: bool = False,
+    agent_mode: bool = False,
 ) -> InitReport:
     _require_git_repo(root)
     config, newly, suggested, config_exists = _plan_config(root, modules, force_config)
+    if agent_mode and config_exists and config.draft.mode != "agent":
+        raise UsageError(
+            'milepost.toml already exists in model mode; set [draft] mode = "agent" in it yourself'
+        )
+    if agent_mode and not config_exists:
+        config.draft.mode = "agent"
+    agent_drafts = config.draft.mode == "agent" or (force_config and _existing_agent_mode(root))
+    if agent_drafts:
+        config.draft.mode = "agent"
     kb = root / config.project.kb_dir
     to_draft = [m for m in config.modules if not (kb / "modules" / f"{m}.md").is_file()]
-    report = InitReport(dry_run=dry_run, declared=[c.id for c in newly])
+    report = InitReport(dry_run=dry_run, declared=[c.id for c in newly], agent_mode=agent_drafts)
 
     if dry_run:
         for module_id in to_draft:
@@ -163,11 +188,13 @@ def run_init(
             report.estimated_tokens += collected.estimated_tokens
         return report
 
-    model = resolve_model(config, environ) if to_draft else ""
+    model = "" if agent_drafts or not to_draft else resolve_model(config, environ)
 
     config_path = root / CONFIG_NAME
     if not config_exists:
-        config_path.write_text(_render_config(config.project.name, newly, suggested))
+        config_path.write_text(
+            _render_config(config.project.name, newly, suggested, agent_mode=agent_drafts)
+        )
         report.created.append(CONFIG_NAME)
     elif newly:
         existing = config_path.read_text(encoding="utf-8")
@@ -191,7 +218,9 @@ def run_init(
         report.hooks = install_hooks(root)
 
     final = load_config(config_path)
-    if to_draft:
+    if to_draft and agent_drafts:
+        report.agent_pending = to_draft
+    elif to_draft:
         report.drafted = draft_modules(root, final, to_draft, client, model, False, now, sleep)
     index_report = run_index(root, final, embedder)
     report.indexed = index_report.indexed

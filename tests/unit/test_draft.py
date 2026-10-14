@@ -10,6 +10,7 @@ from milepost.errors import ProviderError, SecretDetected, UsageError
 from milepost.llm.client import complete_with_retries
 from milepost.services.draft import (
     PROMPT_PATH,
+    build_draft_packet,
     collect_sources,
     draft_modules,
     scan_for_secrets,
@@ -264,3 +265,19 @@ def test_draft_prompt_when_loaded_then_has_l2_sections_in_order_including_file_m
         "## Gotchas",
         "## Related modules",
     ]
+
+
+def test_build_draft_packet_when_called_then_matches_what_draft_modules_would_send(
+    tmp_path: Path,
+) -> None:
+    repo, config = make_repo(tmp_path)
+    client = FakeClient()
+
+    packet = build_draft_packet(repo.root, config, "billing")
+    draft_modules(repo.root, config, ["billing"], client, "m", False, NOW, no_sleep)
+
+    _, system, user = client.calls[0]
+    assert (packet.system_prompt, packet.sources_text) == (system, user)
+    assert (
+        packet.source_hash_now == read_note(repo.root / "kb/modules/billing.md").meta["source_hash"]
+    )

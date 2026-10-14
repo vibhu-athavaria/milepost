@@ -139,6 +139,13 @@ def init(
         bool, typer.Option("--force-config", help="Replace an existing milepost.toml.")
     ] = False,
     no_hooks: Annotated[bool, typer.Option("--no-hooks", help="Do not install git hooks.")] = False,
+    agent_mode: Annotated[
+        bool,
+        typer.Option(
+            "--agent-mode",
+            help="Write notes with your coding agent instead of a model (no API key needed).",
+        ),
+    ] = False,
 ) -> None:
     """Scaffold the knowledge base, declare modules, and draft their notes."""
     root = _repo_root(repo)
@@ -157,12 +164,14 @@ def init(
             now=_now(),
             sleep=time.sleep,
             install_hooks_flag=not no_hooks,
+            agent_mode=agent_mode,
         )
 
     if dry_run or not yes:
         plan = run(True)
+        verb = "show your coding agent" if plan.agent_mode else "send"
         for module_id, files in plan.planned_files.items():
-            typer.echo(f"{module_id}: would send {len(files)} file(s)")
+            typer.echo(f"{module_id}: would {verb} {len(files)} file(s)")
             for path in files:
                 typer.echo(f"  {path}")
         for module_id, outlined in plan.outline_only.items():
@@ -175,7 +184,12 @@ def init(
             return
         if not sys.stdin.isatty():
             raise UsageError("not an interactive shell; rerun with --yes to confirm")
-        if not typer.confirm("Send these files to the configured model and write the notes?"):
+        question = (
+            "Set up milepost and let your coding agent draft the notes?"
+            if plan.agent_mode
+            else "Send these files to the configured model and write the notes?"
+        )
+        if not typer.confirm(question):
             raise typer.Exit(code=1)
     report = run(False)
     for path in report.created:
@@ -188,6 +202,15 @@ def init(
             typer.echo(report.hooks.snippet)
     for module_id in report.drafted:
         typer.echo(f"drafted kb/modules/{module_id}.md (status: draft)")
+    if report.agent_pending:
+        typer.echo(
+            "draft.mode = agent: no notes were written. Ask your coding agent to call "
+            "kb_draft_module for each of: " + ", ".join(report.agent_pending)
+        )
+        typer.echo(
+            "Next: when it has written them, read each draft and run `milepost review <id>` "
+            "for each one that is right, then commit."
+        )
     if report.drafted:
         typer.echo(
             "Next: read each draft, run `milepost review <id>` for each one that is right, "
@@ -264,6 +287,11 @@ def draft(
     root = _repo_root(repo)
     load_env(root)
     config = load_config(root / CONFIG_NAME)
+    if config.draft.mode == "agent":
+        raise UsageError(
+            'draft.mode is "agent": ask your coding agent to call kb_draft_module '
+            f"{module_id} instead (this command needs a model)"
+        )
     model = resolve_model(config, os.environ)
     draft_modules(root, config, [module_id], _llm_client(), model, force, _now(), time.sleep)
     typer.echo(f"drafted kb/modules/{module_id}.md (status: draft)")

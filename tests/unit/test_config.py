@@ -173,3 +173,17 @@ def test_config_when_module_verify_list_then_parsed(tmp_path: Path) -> None:
 
 def test_config_when_no_verify_then_empty_list(tmp_path: Path) -> None:
     assert load_config(write_config(tmp_path, MINIMAL)).modules["services"].verify == []
+
+
+def test_config_when_draft_mode_invalid_then_exit_two(tmp_path: Path) -> None:
+    with pytest.raises(InvalidConfig) as error:
+        load_config(write_config(tmp_path, MINIMAL + '\n[draft]\nmode = "robot"\n'))
+
+    assert error.value.exit_code == 2 and error.value.field_path == "draft.mode"
+
+
+def test_config_when_draft_mode_agent_then_accepted_and_default_is_model(tmp_path: Path) -> None:
+    agent = load_config(write_config(tmp_path, MINIMAL + '\n[draft]\nmode = "agent"\n'))
+    default = load_config(write_config(tmp_path, MINIMAL))
+
+    assert agent.draft.mode == "agent" and default.draft.mode == "model"

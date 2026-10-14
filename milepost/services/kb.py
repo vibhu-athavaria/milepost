@@ -39,7 +39,13 @@ from milepost.errors import (
 from milepost.llm.client import LlmClient
 from milepost.services.check import run_check
 from milepost.services.coverage import CONFIG_NAME
-from milepost.services.draft import draft_modules
+from milepost.services.draft import (
+    build_draft_packet,
+    collect_sources,
+    draft_modules,
+    scan_for_secrets,
+    truncation_note,
+)
 from milepost.services.impact import file_impact
 from milepost.services.index import run_index
 from milepost.services.outline import outline_file
@@ -361,6 +367,12 @@ def kb_update(
         raise KbToolError("INVALID_INPUT", f"body is {len(body)} characters; the limit is 20000")
     if not body.strip():
         raise KbToolError("INVALID_INPUT", "body is empty")
+    if scan_for_secrets({"the note body": body}) is not None:
+        raise KbToolError(
+            "INVALID_INPUT",
+            "the body looks like it contains a credential (key, token or password); remove it "
+            "and describe the behavior instead",
+        )
     existing = _read(path) if path.is_file() else None
     if path.is_file() and existing is None:
         raise KbToolError(
@@ -369,7 +381,13 @@ def kb_update(
             "remove it, do not overwrite it",
         )
 
-    if level == "L2" and existing is None:
+    agent_mode_create = (
+        level == "L2"
+        and existing is None
+        and config.draft.mode == "agent"
+        and name in config.modules
+    )
+    if level == "L2" and existing is None and not agent_mode_create:
         raise KbToolError(
             "NOT_FOUND",
             f"{note_id} does not exist; new module notes come from kb_draft_module "
@@ -381,10 +399,25 @@ def kb_update(
     meta: dict[str, Any]
     if existing is not None:
         meta = dict(existing.meta)
+    elif agent_mode_create:
+        module = config.modules[name]
+        meta = {
+            "kb_schema": 1,
+            "id": note_id,
+            "level": "L2",
+            "title": module.title,
+            "sources": module.sources,
+            "related": module.related,
+        }
     elif level == "L3":
         meta = {"kb_schema": 1, "id": note_id, "level": "L3", "title": name, "sources": [name]}
     else:
         meta = {"kb_schema": 1, "id": note_id, "level": "L4", "title": name}
+
+    if agent_mode_create:
+        collected = collect_sources(root, config, name)
+        if collected.truncated and "Truncated draft" not in body:
+            body = truncation_note(collected.outline_only) + "\n" + body
 
     if level in HASHED_LEVELS:
         sources = _note_sources(Note(meta, ""))
@@ -451,6 +484,31 @@ def kb_draft_module(
         raise KbToolError(
             "CONFLICT", f"module/{module_id} already has a note; redrafting is a human action"
         )
+    if config.draft.mode == "agent":
+        packet = build_draft_packet(root, config, module_id)
+        return {
+            "id": f"module/{module_id}",
+            "mode": "agent",
+            "system_prompt": packet.system_prompt,
+            "sources": packet.sources_text,
+            "source_hash_now": packet.source_hash_now,
+            "files": packet.sent_files,
+            "outline_only": packet.outline_only,
+            "truncation_notice": packet.truncation_notice,
+            "estimated_tokens": packet.estimated_tokens,
+            "next_steps": [
+                "write the note body yourself, following system_prompt and using only the "
+                "sources above; start with the first section heading, no frontmatter",
+                *(
+                    ["put truncation_notice at the top of the body"]
+                    if packet.truncation_notice
+                    else []
+                ),
+                f"call kb_update with id=module/{module_id}, your body, and "
+                "read_hash=source_hash_now",
+                "tell the user a person must read it and run `milepost review`",
+            ],
+        }
     try:
         model = resolve_model(config, environ)
     except EnvironmentProblem as error:

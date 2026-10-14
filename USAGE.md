@@ -118,7 +118,7 @@ Reminders do not depend on the agent remembering: each tool response says what t
 
 | Command | Purpose |
 |---|---|
-| `milepost init [--dry-run] [--modules ID,...] [--yes] [--force-config] [--no-hooks]` | Scaffold the knowledge base, declare the named modules, draft their notes, install the git hooks, build the index. Writes nothing and sends nothing with `--dry-run` |
+| `milepost init [--dry-run] [--modules ID,...] [--yes] [--agent-mode] [--force-config] [--no-hooks]` | Scaffold the knowledge base, declare the named modules, draft their notes, install the git hooks, build the index. Writes nothing and sends nothing with `--dry-run` |
 | `milepost scan [--json]` | List candidate modules that no declared module covers. Read-only |
 | `milepost check [--ci --base REF] [--format text\|json]` | Validate notes and detect staleness. Exit 1 on failures |
 | `milepost draft ID [--force]` | Draft or redraft one module note with the configured model |
@@ -172,7 +172,7 @@ With `fail_on = "none"` in the config, the exit status is `0` regardless (report
 | `[modules.<id>]` | One table per module: `sources` (file globs, relative to the repo root), optional `title`, `related`, and `verify` (commands that check the module, shown to agents; write them yourself) |
 | `[structure]` | `languages`, `ignore` globs, and `roots` where module candidates are looked for |
 | `[index]` | Search index location and the embedding model and its dimension (these must agree) |
-| `[draft]` | Drafting limits (`max_source_bytes`, default 200000 per module; larger modules are partly sent as outlines and the note says so) and files that are never sent to the model (`**/.env*`, keys, credentials) |
+| `[draft]` | `mode` (`model` or `agent`), drafting limits (`max_source_bytes`, default 200000 per module; larger modules are partly sent as outlines and the note says so) and files that are never sent to the model (`**/.env*`, keys, credentials) |
 | `[check]` | `fail_on` (`stale` or `none`) and `max_detail_notes` |
 | `[visibility]` | `agent_trailers` (regexes that mark a commit as agent-authored, default: Claude Code's `Co-Authored-By ... noreply@anthropic.com` trailer and its "Generated with Claude Code" line) and `churn_warn_lines` (default 1000) |
 
@@ -180,7 +180,7 @@ Module ids are lowercase letters, digits, `_` and `-`. Globs must be relative an
 
 ## Environment variables
 
-Needed only for drafting notes with a model (`draft`, `init`, and the `kb_draft_module` tool). Nothing is stored in `milepost.toml` or any committed file.
+Needed only to draft notes with a separate model (`draft`, `init`, and `kb_draft_module` in model mode). In **agent mode** (`milepost init --agent-mode`, or `[draft] mode = "agent"`) your coding agent writes the notes itself, so no model or key is needed. Nothing is stored in `milepost.toml` or any committed file.
 
 | Variable | Purpose |
 |---|---|
@@ -203,7 +203,6 @@ Drafting sends the source of a module to the configured model provider. Files ma
 
 ## What is not built yet
 
-- **Agent-mode drafting** (`[draft] mode = "agent"`): letting the coding agent write the first draft instead of a separate model, so no API key is needed. Today `init`, `draft` and `kb_draft_module` need `MILEPOST_MODEL`.
 - **Installing the plugin from a marketplace**, `uvx milepost`, and a working generated CI workflow: all need a published release (M11).
 - **Other agents:** the MCP server is standard, and `templates/AGENTS.md.snippet` carries the playbook, but only Claude Code has been considered and nothing has been tested with another agent.
 - **Measurement:** whether any of this saves tokens or helps reviewers is untested.

@@ -558,3 +558,127 @@ def test_kb_overview_when_git_missing_or_detached_then_branch_is_explicit(tmp_pa
     repo.git("checkout", "-q", "--detach")
 
     assert "detached" in kb_overview(repo.root)["branch"]
+
+
+def agent_repo(tmp_path: Path) -> KbRepo:
+    repo = make_repo(tmp_path)
+    repo.add_module(
+        "other",
+        ["app/other/**/*.py"],
+        {"app/other/x.py": "def run():\n    return 1\n"},
+        with_note=False,
+    )
+    text = (repo.root / "milepost.toml").read_text()
+    (repo.root / "milepost.toml").write_text(text + '\n[draft]\nmode = "agent"\n')
+    return repo
+
+
+def test_kb_draft_module_when_mode_agent_then_returns_packet_and_calls_no_model(
+    tmp_path: Path,
+) -> None:
+    repo = agent_repo(tmp_path)
+    client = FakeClient()
+
+    result = kb_draft_module(repo.root, "other", client, {}, NOW, no_sleep)
+
+    assert client.calls == 0
+    assert result["mode"] == "agent"
+    assert "def run()" in result["sources"] and "## Purpose" in result["system_prompt"]
+    assert result["source_hash_now"] == repo.hash_of(["app/other/**/*.py"])
+    assert "kb_update" in " ".join(result["next_steps"])
+    assert not (repo.root / "kb/modules/other.md").exists()
+
+
+def test_kb_draft_module_when_mode_agent_and_secret_in_sources_then_packet_refused_naming_file(
+    tmp_path: Path,
+) -> None:
+    repo = agent_repo(tmp_path)
+    repo.write("app/other/x.py", 'KEY = "AKIAABCDEFGHIJKLMNOP"\n')
+
+    with pytest.raises(KbToolError) as error:
+        kb_draft_module(repo.root, "other", FakeClient(), {}, NOW, no_sleep)
+
+    assert error.value.code == "INVALID_INPUT" and "app/other/x.py" in error.value.message
+    assert "AKIAABCDEFGHIJKLMNOP" not in error.value.message
+
+
+def test_kb_draft_module_when_mode_agent_and_note_exists_then_conflict(tmp_path: Path) -> None:
+    repo = agent_repo(tmp_path)
+
+    with pytest.raises(KbToolError) as error:
+        kb_draft_module(repo.root, "billing", FakeClient(), {}, NOW, no_sleep)
+
+    assert error.value.code == "CONFLICT"
+
+
+def test_kb_update_when_mode_agent_and_declared_module_has_no_note_then_creates_draft_l2(
+    tmp_path: Path,
+) -> None:
+    repo = agent_repo(tmp_path)
+    packet = kb_draft_module(repo.root, "other", FakeClient(), {}, NOW, no_sleep)
+
+    kb_update(
+        repo.root, "module/other", "## Purpose\n\nRuns things.\n", packet["source_hash_now"], NOW
+    )
+
+    note = read_note(repo.root / "kb/modules/other.md")
+    assert note.meta["status"] == "draft" and note.meta["written_by"] == "agent"
+    assert note.meta["sources"] == ["app/other/**/*.py"]
+    assert note.meta["source_hash"] == repo.hash_of(["app/other/**/*.py"])
+    assert "| other | Runs things. | draft |" in (repo.root / "kb/INDEX.md").read_text()
+    assert kb_check(repo.root)["ok"] is True
+
+
+def test_kb_update_when_mode_agent_and_module_not_declared_then_rejects(tmp_path: Path) -> None:
+    repo = agent_repo(tmp_path)
+
+    with pytest.raises(KbToolError) as error:
+        kb_update(repo.root, "module/undeclared", "## Purpose\n\nx\n", "h", NOW)
+
+    assert error.value.code == "NOT_FOUND"
+
+
+def test_kb_update_when_mode_agent_and_stale_read_hash_then_stale_read(tmp_path: Path) -> None:
+    repo = agent_repo(tmp_path)
+    packet = kb_draft_module(repo.root, "other", FakeClient(), {}, NOW, no_sleep)
+    repo.write("app/other/x.py", "def run():\n    return 2\n")
+
+    with pytest.raises(KbToolError) as error:
+        kb_update(repo.root, "module/other", "## Purpose\n\nx\n", packet["source_hash_now"], NOW)
+
+    assert error.value.code == "STALE_READ"
+
+
+def test_kb_update_when_body_contains_a_credential_then_rejected(tmp_path: Path) -> None:
+    repo = make_repo(tmp_path)
+
+    with pytest.raises(KbToolError) as error:
+        kb_update(
+            repo.root,
+            "module/billing",
+            "## Purpose\n\nUses AKIAABCDEFGHIJKLMNOP to call S3.\n",
+            repo.hash_of(SOURCES),
+            NOW,
+        )
+
+    assert error.value.code == "INVALID_INPUT"
+    assert "AKIAABCDEFGHIJKLMNOP" not in error.value.message
+
+
+def test_kb_update_when_agent_mode_and_sources_truncated_then_notice_added_automatically(
+    tmp_path: Path,
+) -> None:
+    repo = agent_repo(tmp_path)
+    text = (
+        (repo.root / "milepost.toml")
+        .read_text()
+        .replace('[draft]\nmode = "agent"', '[draft]\nmode = "agent"\nmax_source_bytes = 20')
+    )
+    (repo.root / "milepost.toml").write_text(text)
+    repo.write("app/other/y.py", "def second():\n    return 2\n" * 5)
+    packet = kb_draft_module(repo.root, "other", FakeClient(), {}, NOW, no_sleep)
+
+    kb_update(repo.root, "module/other", "## Purpose\n\nRuns.\n", packet["source_hash_now"], NOW)
+
+    body = read_note(repo.root / "kb/modules/other.md").body
+    assert "Truncated draft" in body and "app/other/y.py" in body

@@ -317,3 +317,82 @@ def test_init_when_hooks_not_requested_then_no_hooks_written(tmp_path: Path) -> 
 
     assert report.hooks is None
     assert not (repo.root / ".git/hooks/pre-commit").exists()
+
+
+def test_init_when_mode_agent_then_scaffolds_and_skips_drafting_with_instruction(
+    tmp_path: Path,
+) -> None:
+    repo = make_repo(tmp_path)
+    client = FakeClient()
+
+    report = run_init(
+        repo.root,
+        modules=["billing"],
+        dry_run=False,
+        force_config=False,
+        client=client,
+        embedder=HashEmbedder(),
+        environ={},
+        now="2026-10-14T09:00:00Z",
+        sleep=no_sleep,
+        agent_mode=True,
+    )
+
+    config = load_config(repo.root / "milepost.toml")
+    assert config.draft.mode == "agent" and list(config.modules) == ["billing"]
+    assert client.calls == 0 and report.drafted == []
+    assert report.agent_pending == ["billing"]
+    assert not (repo.root / "kb/modules/billing.md").exists()
+    assert (repo.root / "kb/INDEX.md").is_file()
+
+
+def test_init_when_agent_mode_requested_but_config_exists_in_model_mode_then_usage_error(
+    tmp_path: Path,
+) -> None:
+    repo = make_repo(tmp_path)
+    init(repo, modules=["billing"])
+
+    with pytest.raises(UsageError, match="agent"):
+        run_init(
+            repo.root,
+            modules=None,
+            dry_run=False,
+            force_config=False,
+            client=FakeClient(),
+            embedder=HashEmbedder(),
+            environ=ENV,
+            now="2026-10-14T09:00:00Z",
+            sleep=no_sleep,
+            agent_mode=True,
+        )
+
+
+def test_init_when_force_config_on_agent_mode_repo_then_agent_mode_kept(tmp_path: Path) -> None:
+    repo = make_repo(tmp_path)
+    run_init(
+        repo.root,
+        modules=["billing"],
+        dry_run=False,
+        force_config=False,
+        client=FakeClient(),
+        embedder=HashEmbedder(),
+        environ={},
+        now="2026-10-14T09:00:00Z",
+        sleep=no_sleep,
+        agent_mode=True,
+    )
+
+    report = run_init(
+        repo.root,
+        modules=["billing"],
+        dry_run=False,
+        force_config=True,
+        client=FakeClient(),
+        embedder=HashEmbedder(),
+        environ={},
+        now="2026-10-14T09:00:00Z",
+        sleep=no_sleep,
+    )
+
+    assert load_config(repo.root / "milepost.toml").draft.mode == "agent"
+    assert report.agent_mode is True
