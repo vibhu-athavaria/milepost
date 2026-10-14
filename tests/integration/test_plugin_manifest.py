@@ -123,7 +123,7 @@ def test_playbook_when_spec_scenarios_listed_then_each_has_a_section_in_skill() 
         "Learned a gotcha or invariant": "### You learned a gotcha or invariant",
         "New module": "### A new module",
         "Code no module covers": "### Code that no note covers",
-        "Hash is `CONFLICT`": "### A `CONFLICT` hash",
+        "Note has merge-conflict markers": "### A note with merge-conflict markers",
         "Before commit": "### Before you commit",
         "Finish a task": "### Finishing a task",
     }

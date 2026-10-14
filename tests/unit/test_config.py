@@ -31,7 +31,7 @@ def test_load_config_when_valid_file_then_returns_models() -> None:
     assert config.modules["services"].title == "Services"
     assert config.modules["ai"].title == "ai"
     assert config.index.embedding_dim == 384
-    assert config.check.max_detail_notes == 10
+    assert config.check.stale == "fail"
 
 
 def test_load_config_when_minimal_file_then_defaults_applied(tmp_path: Path) -> None:
@@ -129,15 +129,17 @@ def test_load_config_when_roots_omitted_then_defaults_applied(tmp_path: Path) ->
     assert config.structure.roots == ["src", "app", "backend/app", "packages", "apps"]
 
 
-def test_load_config_when_max_detail_notes_negative_then_raises_invalid_config(
-    tmp_path: Path,
-) -> None:
-    text = MINIMAL + "\n[check]\nmax_detail_notes = -1\n"
+def test_load_config_when_stale_mode_invalid_then_raises_invalid_config(tmp_path: Path) -> None:
+    text = MINIMAL + '\n[check]\nstale = "sometimes"\n'
 
     with pytest.raises(InvalidConfig) as error:
         load_config(write_config(tmp_path, text))
 
-    assert error.value.field_path == "check.max_detail_notes"
+    assert error.value.field_path == "check.stale"
+
+
+def test_load_config_when_no_check_table_then_stale_notes_only_warn(tmp_path: Path) -> None:
+    assert load_config(write_config(tmp_path, MINIMAL)).check.stale == "warn"
 
 
 def test_load_config_when_missing_file_then_raises_config_not_found(tmp_path: Path) -> None:
@@ -187,3 +189,20 @@ def test_config_when_draft_mode_agent_then_accepted_and_default_is_model(tmp_pat
     default = load_config(write_config(tmp_path, MINIMAL))
 
     assert agent.draft.mode == "agent" and default.draft.mode == "model"
+
+
+@pytest.mark.parametrize("spelling", ["kb/", "./kb", "kb", "kb//"])
+def test_load_config_when_kb_dir_has_odd_spelling_then_normalised(
+    tmp_path: Path, spelling: str
+) -> None:
+    text = f'[project]\nname = "x"\nkb_dir = "{spelling}"\n'
+
+    assert load_config(write_config(tmp_path, text)).project.kb_dir == "kb"
+
+
+@pytest.mark.parametrize("bad", ["/abs", "../up", "."])
+def test_load_config_when_kb_dir_leaves_the_repo_then_invalid(tmp_path: Path, bad: str) -> None:
+    with pytest.raises(InvalidConfig) as error:
+        load_config(write_config(tmp_path, f'[project]\nname = "x"\nkb_dir = "{bad}"\n'))
+
+    assert error.value.field_path == "project.kb_dir"

@@ -42,10 +42,11 @@ max_source_bytes = 200000
 exclude = ["**/.env*", "**/*secret*", "**/*.pem", "**/*.key", "**/credentials*"]
 
 [check]
-# "stale" fails on stale notes (default). "none" reports only.
+# "stale" (default): errors such as an invalid note fail the check. "none": report only.
 fail_on = "stale"
-# Warn when L3 plus L4 notes exceed this count. A placeholder; tune it in the pilot.
-max_detail_notes = 50
+# "warn" (default): a note whose code changed after the note was last updated is reported but
+# never fails. "fail": a pull request that edits covered code without touching its note fails.
+stale = "warn"
 
 [visibility]
 # Regexes matched against commit messages to count agent-authored commits in `milepost status`.

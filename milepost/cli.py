@@ -36,7 +36,7 @@ from milepost.services.merge_driver import run_merge_driver
 from milepost.services.outline import outline_file
 from milepost.services.render import render_index
 from milepost.services.report import build_report, render_markdown, report_as_dict
-from milepost.services.review import plan_rehash, rehash_note, review_note
+from milepost.services.review import review_note
 from milepost.services.search import search as run_search
 from milepost.services.status import module_statuses
 from milepost.services.sync import sync as run_sync
@@ -258,10 +258,7 @@ def check(
         warnings = len(result.findings) - failures
         typer.echo(f"{failures} failure(s), {warnings} warning(s)")
         if result.exit_code:
-            typer.echo(
-                "Next: update each stale note (kb_update, or `milepost rehash <id>` after review), "
-                "then rerun `milepost check`."
-            )
+            typer.echo("Next: update each failing note, then rerun `milepost check`.")
     if result.exit_code:
         raise typer.Exit(code=result.exit_code)
 
@@ -329,44 +326,16 @@ def review(
 
 @app.command()
 @handle_errors
-def rehash(
-    note_id: Annotated[str, typer.Argument(help="Note id, for example module/services.")],
-    repo: RepoOption = None,
-    yes: Annotated[bool, typer.Option("--yes", help="Do not ask for confirmation.")] = False,
-) -> None:
-    """Record the current source hash on a note whose prose you have just read."""
-    root = _repo_root(repo)
-    config = load_config(root / CONFIG_NAME)
-    plan = plan_rehash(root, config, note_id)
-    typer.echo(f"old hash: {plan.old_hash}")
-    typer.echo(f"new hash: {plan.new_hash}")
-    typer.echo(
-        "sources now (path, short digest; the old manifest cannot be recovered from a hash):"
-    )
-    for path, digest in plan.manifest.items():
-        typer.echo(f"  {path}  {digest[:12]}")
-    if not yes:
-        if not sys.stdin.isatty():
-            raise UsageError("not an interactive shell; rerun with --yes to confirm")
-        if not typer.confirm("Does the note's prose match these sources?"):
-            raise typer.Exit(code=1)
-    rehash_note(root, config, note_id)
-    typer.echo(f"{note_id} rehashed")
-
-
-@app.command()
-@handle_errors
 def search(
     query: Annotated[str, typer.Argument(help="What to look for.")],
     repo: RepoOption = None,
-    level: Annotated[str | None, typer.Option("--level", help="Only L1, L2, L3 or L4.")] = None,
     k: Annotated[int, typer.Option("--k", help="Number of results.")] = 5,
     json_output: JsonOption = False,
 ) -> None:
     """Search the notes."""
     root = _repo_root(repo)
     config = load_config(root / CONFIG_NAME)
-    results = run_search(root, config, _embedder(config), query, level=level, k=k)
+    results = run_search(root, config, _embedder(config), query, k=k)
     if json_output:
         typer.echo(json.dumps([asdict(result) for result in results], indent=2))
         return

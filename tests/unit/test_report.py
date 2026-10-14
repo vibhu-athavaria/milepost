@@ -212,3 +212,18 @@ def test_report_when_a_leftover_index_md_changed_then_not_listed_as_a_note(tmp_p
     repo.commit("old index file")
 
     assert report(repo).notes_changed == []
+
+
+def test_report_when_old_stale_notes_exist_but_the_pr_does_not_touch_them_then_not_listed(
+    tmp_path: Path,
+) -> None:
+    repo = make_repo(tmp_path)
+    repo.checkout("main")
+    repo.write("app/billing/charge.py", "def charge(card):\n    return 'old debt'\n")
+    repo.commit("main: code change without the note")
+    repo.checkout("feature")
+    repo.git("merge", "--no-edit", "main")
+    repo.write("README.txt", "docs\n")
+    repo.commit("feature: unrelated")
+
+    assert report(repo).stale_notes == []

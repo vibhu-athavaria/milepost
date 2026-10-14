@@ -1,14 +1,13 @@
-"""`milepost review` and `milepost rehash` (SPEC sections 4.1 and 8)."""
+"""`milepost review` (SPEC sections 4.1 and 8)."""
 
 import subprocess
 from collections.abc import Callable
-from dataclasses import dataclass, field
 from pathlib import Path
 
 from milepost.config import Config
-from milepost.core.hashing import compute_source_hash
-from milepost.core.notes import HASHED_LEVELS, Note, note_path_for_id, read_note, write_note
+from milepost.core.notes import Note, note_path_for_id, read_note, write_note
 from milepost.errors import EnvironmentProblem, MilepostError, NoteInvalid, UsageError
+from milepost.services.staleness import module_staleness
 
 
 def git_identity(root: Path) -> str:
@@ -38,13 +37,6 @@ def _load(root: Path, config: Config, note_id: str) -> tuple[Path, Note]:
         raise UsageError(f"note '{note_id}' is not valid: {error}") from error
 
 
-def _hashed_sources(note: Note, note_id: str) -> list[str]:
-    sources = note.meta.get("sources")
-    if note.meta.get("level") not in HASHED_LEVELS or not isinstance(sources, list):
-        raise UsageError(f"note '{note_id}' has no source set, so it has no hash")
-    return [str(source) for source in sources]
-
-
 def review_note(
     root: Path,
     config: Config,
@@ -52,48 +44,20 @@ def review_note(
     now: str,
     identity: Callable[[Path], str] = git_identity,
 ) -> None:
-    """Mark a note reviewed by the person running the command. The source hash is not touched."""
+    """Mark a note reviewed by the person running the command."""
     path, note = _load(root, config, note_id)
-    recorded = note.meta.get("source_hash")
-    if recorded == "CONFLICT":
-        raise MilepostError(
-            f"note '{note_id}' has a CONFLICT hash; read the merged prose, fix it, then run "
-            f"`milepost rehash {note_id}` before reviewing"
-        )
-    if note.meta.get("level") in HASHED_LEVELS:
-        current = compute_source_hash(
-            root, _hashed_sources(note, note_id), config.structure.ignore
-        ).value
-        if current != recorded:
+    module_id = note_id.partition("/")[2]
+    if module_id in config.modules:
+        try:
+            state = module_staleness(root, config).get(module_id)
+        except UsageError:
+            state = None
+        if state is not None and state.stale:
             raise MilepostError(
-                f"note '{note_id}' is stale: its sources changed since it was written. "
-                "Update the note first, then review it"
+                f"note '{note_id}' is stale ({state.reason}). Update it first, then review it"
             )
     reviewer = identity(root)
     note.meta["status"] = "reviewed"
     note.meta["reviewed_by"] = reviewer
     note.meta["reviewed_at"] = now
     write_note(note, path)
-
-
-@dataclass
-class RehashResult:
-    old_hash: str
-    new_hash: str
-    manifest: dict[str, str] = field(default_factory=dict)
-
-
-def plan_rehash(root: Path, config: Config, note_id: str) -> RehashResult:
-    """What a rehash would write, without writing it."""
-    _, note = _load(root, config, note_id)
-    result = compute_source_hash(root, _hashed_sources(note, note_id), config.structure.ignore)
-    return RehashResult(str(note.meta.get("source_hash", "")), result.value, result.manifest)
-
-
-def rehash_note(root: Path, config: Config, note_id: str) -> RehashResult:
-    """Record the current source hash on a note whose prose a person has just read."""
-    path, note = _load(root, config, note_id)
-    plan = plan_rehash(root, config, note_id)
-    note.meta["source_hash"] = plan.new_hash
-    write_note(note, path)
-    return plan

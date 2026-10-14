@@ -11,8 +11,7 @@ from typing import Any
 
 from milepost.config import Config, load_config
 from milepost.core.glob import matches_any
-from milepost.core.notes import parse_note
-from milepost.errors import MilepostError, NoteInvalid
+from milepost.errors import MilepostError
 from milepost.services.check import run_check
 from milepost.services.coverage import CONFIG_NAME, uncovered_candidates
 from milepost.services.gitinfo import changed_in_head, working_tree_changes
@@ -110,19 +109,13 @@ def post_edit(root: Path, payload: dict[str, Any]) -> str:
     return ""
 
 
-def _note_sources(root: Path, config: Config, rel_path: str) -> list[str]:
-    """Source globs of the note at a repo-relative path: from config for module notes, from the
-    note's own frontmatter for file notes."""
+def _module_sources(config: Config, finding_path: str) -> list[str]:
+    """Source globs of the module whose note file is `finding_path`."""
     kb = config.project.kb_dir
     for module_id, module in config.modules.items():
-        if rel_path == f"{kb}/modules/{module_id}.md":
+        if finding_path == f"{kb}/modules/{module_id}.md":
             return module.sources
-    try:
-        note = parse_note((root / rel_path).read_text(encoding="utf-8"))
-    except (OSError, NoteInvalid):
-        return []
-    sources = note.meta.get("sources")
-    return [str(source) for source in sources] if isinstance(sources, list) else []
+    return []
 
 
 def stop(root: Path, payload: dict[str, Any]) -> str:
@@ -146,8 +139,7 @@ def stop(root: Path, payload: dict[str, Any]) -> str:
         f
         for f in findings
         if f.code == "STALE_NOTE"
-        and f.severity == "failure"
-        and any(matches_any(path, _note_sources(root, config, f.path)) for path in changed)
+        and any(matches_any(path, _module_sources(config, f.path)) for path in changed)
     ]
     if not relevant:
         return ""

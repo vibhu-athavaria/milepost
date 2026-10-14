@@ -96,8 +96,6 @@ def _importers(root: Path, files: list[str], target: str) -> list[str]:
 def _covering_notes(root: Path, config: Config, path: str, module_ids: list[str]) -> list[str]:
     kb = root / config.project.kb_dir
     notes = [f"module/{m}" for m in module_ids if (kb / "modules" / f"{m}.md").is_file()]
-    if (kb / "files" / f"{path}.md").is_file():
-        notes.append(f"file/{path}")
     return notes
 
 

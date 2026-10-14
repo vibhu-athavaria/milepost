@@ -12,7 +12,6 @@ from milepost.store.sqlite_store import SqliteStore
 CANDIDATES = 20
 RRF_K = 60
 SNIPPET_CHARS = 300
-LEVELS = {"L1", "L2", "L3", "L4"}
 
 
 @dataclass(frozen=True)
@@ -30,11 +29,8 @@ def search(
     config: Config,
     embedder: Embedder,
     query: str,
-    level: str | None = None,
     k: int = 5,
 ) -> list[SearchResult]:
-    if level is not None and level not in LEVELS:
-        raise UsageError(f"--level must be one of L1, L2, L3, L4, got '{level}'")
     if k < 1:
         raise UsageError("--k must be at least 1")
     index_path = root / config.index.path
@@ -48,8 +44,8 @@ def search(
                 "the index was built with a different embedding model; "
                 "run `milepost index --rebuild`"
             )
-        keyword = store.search_keyword(query, CANDIDATES, level)
-        vector = store.search_vector(embedder.embed([query])[0], CANDIDATES, level)
+        keyword = store.search_keyword(query, CANDIDATES, None)
+        vector = store.search_vector(embedder.embed([query])[0], CANDIDATES, None)
     finally:
         store.close()
 

@@ -204,18 +204,6 @@ def test_hook_stop_when_failure_is_not_a_stale_note_then_no_block(tmp_path: Path
     assert hook.stop(repo.root, {}) == ""
 
 
-def test_hook_stop_when_stale_l3_note_covers_untouched_file_then_no_block(tmp_path: Path) -> None:
-    repo = make_repo(tmp_path)
-    repo.add_file_note("app/billing/charge.py")
-    repo.commit("l3")
-    repo.write("app/billing/charge.py", "def charge(card):\n    return None\n")
-    repo.commit("someone changed it long ago")
-    repo.commit("another unrelated commit")
-    repo.write("app/other/x.py", "x = 4\n")
-
-    assert hook.stop(repo.root, {}) == ""
-
-
 def test_hook_stop_when_changed_file_is_ignored_then_no_block(tmp_path: Path) -> None:
     repo = make_repo(tmp_path)
     repo.write("app/billing/__pycache__/gen.py", "x = 1\n")

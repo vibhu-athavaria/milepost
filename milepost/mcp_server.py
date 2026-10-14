@@ -75,21 +75,20 @@ def build_server(
     def kb_file(
         path: Annotated[str, Field(description="Repo-relative file path")],
     ) -> dict[str, Any]:
-        """Every note covering a file, each with source_hash_now and a stale flag."""
+        """The note(s) covering a file, each with a stale flag and source_hash_now."""
         return _guard(lambda: kb.kb_file(root, path))
 
     @server.tool()
-    def kb_search(query: str, level: str | None = None, limit: int = 5) -> dict[str, Any]:
+    def kb_search(query: str, limit: int = 5) -> dict[str, Any]:
         """Search the notes (keyword and meaning). At most 10 results. Updates the local
         search index first if notes changed."""
-        return _guard(lambda: kb.kb_search(root, embedders, query, level, limit))
+        return _guard(lambda: kb.kb_search(root, embedders, query, limit))
 
     @server.tool()
     def kb_update(id: str, body: str, read_hash: str | None = None) -> dict[str, Any]:
-        """Write a note. For L2 and L3, pass read_hash=source_hash_now from kb_module or
-        kb_file (kb_file's file_hash_now to create a new file note). In agent mode this also
-        creates the L2 note of a declared module that has none. The note is saved as a draft
-        and a person must run `milepost review`. Bodies that look
+        """Write a module's note (id `module/<id>`). Pass read_hash=source_hash_now from
+        kb_module. In agent mode this also creates the note of a declared module that has none.
+        The note is saved as a draft and a person must run `milepost review`. Bodies that look
         like they contain a credential are rejected."""
         return _guard(lambda: kb.kb_update(root, id, body, read_hash, _now()))
 

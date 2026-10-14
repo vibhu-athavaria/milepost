@@ -177,7 +177,7 @@ def test_status_when_file_deleted_since_review_then_its_lines_count_as_churn(
     assert statuses(repo)["billing"].lines_changed_since == 50
 
 
-def test_status_when_review_is_followed_by_a_rehash_only_commit_then_baseline_not_reset(
+def test_status_when_review_is_followed_by_a_typo_fix_commit_then_baseline_not_reset(
     tmp_path: Path,
 ) -> None:
     repo = make_repo(tmp_path)
@@ -185,9 +185,9 @@ def test_status_when_review_is_followed_by_a_rehash_only_commit_then_baseline_no
     repo.write("app/billing/charge.py", "def charge(card):\n    return 1\n")
     repo.commit("code change")
     note = read_note(repo.root / "kb/modules/billing.md")
-    note.meta["source_hash"] = repo.hash_of(SOURCES)  # a rehash: status and reviewed_at unchanged
+    note.body = note.body + "\nA typo fix.\n"  # status and reviewed_at unchanged
     write_note(note, repo.root / "kb/modules/billing.md")
-    repo.commit("rehash only")
+    repo.commit("typo fix only")
 
     entry = statuses(repo)["billing"]
 

@@ -28,4 +28,4 @@ exclude = [".env*"]
 
 [check]
 fail_on = "stale"
-max_detail_notes = 10
+stale = "fail"

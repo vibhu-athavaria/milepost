@@ -7,6 +7,7 @@ codes NOT_FOUND, INVALID_INPUT, CONFLICT, STALE_READ, ENVIRONMENT.
 
 import functools
 import os
+import re
 import subprocess
 from collections.abc import Callable, Mapping
 from dataclasses import asdict
@@ -16,13 +17,7 @@ from typing import Any
 from milepost.config import Config, load_config, load_config_or_default, resolve_model
 from milepost.core.glob import matches_any
 from milepost.core.hashing import compute_source_hash
-from milepost.core.notes import (
-    HASHED_LEVELS,
-    Note,
-    note_path_for_id,
-    parse_note,
-    write_note,
-)
+from milepost.core.notes import Note, note_path_for_id, parse_note, write_note
 from milepost.embeddings import Embedder
 from milepost.errors import (
     ConfigNotFound,
@@ -51,11 +46,12 @@ from milepost.services.index import run_index
 from milepost.services.outline import outline_file
 from milepost.services.render import render_index
 from milepost.services.search import search as run_search
+from milepost.services.staleness import module_staleness
 from milepost.services.sync import sync as run_sync
 
 MAX_BODY_CHARS = 20_000
 MAX_SEARCH_RESULTS = 10
-LEVEL_BY_PREFIX = {"module": "L2", "file": "L3", "passage": "L4"}
+_MODULE_ID = re.compile(r"^[a-z0-9][a-z0-9_-]*$")
 
 
 class KbToolError(Exception):
@@ -139,16 +135,26 @@ def _repo_relative(root: Path, path: str) -> str:
     return normal
 
 
-def _note_summary(root: Path, config: Config, note_id: str, note: Note) -> dict[str, Any]:
-    sources = _note_sources(note)
-    now = _hash_now(root, config, sources) if sources else ""
-    recorded = str(note.meta.get("source_hash", ""))
+def _stale_ids(root: Path, config: Config, only: list[str] | None = None) -> dict[str, str]:
+    """module id -> why it is stale (for `only`, or every module). Empty outside a git
+    repository or in a shallow clone, where staleness is unknowable."""
+    try:
+        states = module_staleness(root, config, only)
+    except UsageError:
+        return {}
+    return {m: st.reason for m, st in states.items() if st.stale}
+
+
+def _note_summary(
+    root: Path, config: Config, module_id: str, note: Note, stale: dict[str, str]
+) -> dict[str, Any]:
+    sources = config.modules[module_id].sources
     return {
-        "id": note_id,
-        "level": note.meta.get("level"),
+        "id": f"module/{module_id}",
         "status": note.meta.get("status"),
-        "stale": bool(sources) and now != recorded,
-        "source_hash_now": now,
+        "stale": module_id in stale,
+        "stale_reason": stale.get(module_id, ""),
+        "source_hash_now": _hash_now(root, config, sources),
     }
 
 
@@ -173,8 +179,7 @@ def kb_overview(root: Path) -> dict[str, Any]:
     if not config.modules:
         raise KbToolError("NOT_FOUND", "no modules are declared yet; the user can run /kb-init")
     index = render_index(root, config)
-    findings = run_check(root, config, with_churn=False).findings
-    stale = sum(1 for f in findings if f.code == "STALE_NOTE")
+    stale = len(_stale_ids(root, config))
     drafts = 0
     for module_id in config.modules:
         note = _read(root / config.project.kb_dir / "modules" / f"{module_id}.md")
@@ -209,7 +214,7 @@ def kb_module(root: Path, module_id: str) -> dict[str, Any]:
         raise KbToolError(
             "NOT_FOUND", f"module '{module_id}' has no valid note; call kb_draft_module"
         )
-    summary = _note_summary(root, config, f"module/{module_id}", note)
+    summary = _note_summary(root, config, module_id, note, _stale_ids(root, config, [module_id]))
     related = []
     for other in module.related:
         other_note = _read(root / config.project.kb_dir / "modules" / f"{other}.md")
@@ -243,15 +248,15 @@ def kb_file(root: Path, path: str) -> dict[str, Any]:
     config = _config(root)
     relative = _repo_relative(root, path)
     kb = root / config.project.kb_dir
+    covering = [
+        m for m in sorted(config.modules) if matches_any(relative, config.modules[m].sources)
+    ]
+    stale = _stale_ids(root, config, covering)
     notes: list[dict[str, Any]] = []
-    for module_id in sorted(config.modules):
-        if matches_any(relative, config.modules[module_id].sources):
-            note = _read(kb / "modules" / f"{module_id}.md")
-            if note is not None:
-                notes.append(_note_summary(root, config, f"module/{module_id}", note))
-    l3 = _read(kb / "files" / f"{relative}.md")
-    if l3 is not None:
-        notes.append(_note_summary(root, config, f"file/{relative}", l3))
+    for module_id in covering:
+        note = _read(kb / "modules" / f"{module_id}.md")
+        if note is not None:
+            notes.append(_note_summary(root, config, module_id, note, stale))
     steps: list[str] = []
     if notes:
         steps.append(f"after changing {relative}, call kb_sync and kb_update each listed note")
@@ -259,14 +264,7 @@ def kb_file(root: Path, path: str) -> dict[str, Any]:
             steps += _status_steps(summary)
     else:
         steps.append(f"no note covers {relative}: it may be UNCOVERED; call kb_check")
-    absolute = root / relative
-    return {
-        "path": relative,
-        "notes": notes,
-        "covered": bool(notes),
-        "file_hash_now": _hash_now(root, config, [relative]) if absolute.is_file() else "",
-        "next_steps": steps,
-    }
+    return {"path": relative, "notes": notes, "covered": bool(notes), "next_steps": steps}
 
 
 @_tool
@@ -274,7 +272,6 @@ def kb_search(
     root: Path,
     embedder_for: Callable[[Config], Embedder],
     query: str,
-    level: str | None = None,
     limit: int = 5,
 ) -> dict[str, Any]:
     config = _config(root)
@@ -282,7 +279,7 @@ def kb_search(
     try:
         run_index(root, config, embedder)
         results = run_search(
-            root, config, embedder, query, level=level, k=min(max(limit, 1), MAX_SEARCH_RESULTS)
+            root, config, embedder, query, k=min(max(limit, 1), MAX_SEARCH_RESULTS)
         )
     except (IndexMissing, IndexRebuildRequired) as error:
         raise KbToolError("ENVIRONMENT", str(error)) from error
@@ -303,11 +300,17 @@ def kb_check(root: Path) -> dict[str, Any]:
         for f in result.findings
     ]
     failures = sum(1 for f in result.findings if f.severity == "failure")
-    steps = (
-        ["fix every failure: update the stale notes with kb_update; never write a KB-Waive"]
-        if failures
-        else ["no failures"]
-    )
+    stale = sum(1 for f in result.findings if f.code == "STALE_NOTE")
+    steps = []
+    if failures:
+        steps.append("fix every failure; never write a KB-Waive yourself")
+    if stale:
+        steps.append(
+            f"{stale} note(s) are stale: re-read the code they cover and update each with "
+            "kb_update, or confirm it still holds"
+        )
+    if not steps:
+        steps.append("no failures")
     return {"ok": result.exit_code == 0, "findings": findings, "next_steps": steps}
 
 
@@ -351,20 +354,17 @@ def kb_update(
 ) -> dict[str, Any]:
     config = _config(root)
     prefix, _, name = note_id.partition("/")
-    level = LEVEL_BY_PREFIX.get(prefix)
     kb = root / config.project.kb_dir
     path = note_path_for_id(kb, note_id)
-    if level is None or path is None:
-        raise KbToolError(
-            "INVALID_INPUT", f"'{note_id}' is not a note id (module/, file/, passage/)"
-        )
-    if not name or ".." in Path(name).parts or Path(name).is_absolute():
-        raise KbToolError("INVALID_INPUT", f"'{note_id}' must not contain '..' or start with '/'")
-    if level == "L3":
-        name = _repo_relative(root, name)
-        path = note_path_for_id(kb, f"{prefix}/{name}")
-    if path is None or not path.resolve().is_relative_to(kb.resolve()):
+    if prefix != "module" or path is None or not _MODULE_ID.match(name):
+        raise KbToolError("INVALID_INPUT", f"'{note_id}' is not a note id (module/<module-id>)")
+    if not path.resolve().is_relative_to(kb.resolve()):
         raise KbToolError("INVALID_INPUT", f"'{note_id}' resolves outside the knowledge base")
+    module = config.modules.get(name)
+    if module is None:
+        raise KbToolError(
+            "NOT_FOUND", f"module '{name}' is not declared; add [modules.{name}] to milepost.toml"
+        )
     if len(body) > MAX_BODY_CHARS:
         raise KbToolError("INVALID_INPUT", f"body is {len(body)} characters; the limit is 20000")
     if not body.strip():
@@ -382,61 +382,34 @@ def kb_update(
             f"{note_id} exists but its file is not a valid note; ask the user to fix or "
             "remove it, do not overwrite it",
         )
-
-    agent_mode_create = (
-        level == "L2"
-        and existing is None
-        and config.draft.mode == "agent"
-        and name in config.modules
-    )
-    if level == "L2" and existing is None and not agent_mode_create:
+    agent_mode_create = existing is None and config.draft.mode == "agent"
+    if existing is None and not agent_mode_create:
         raise KbToolError(
             "NOT_FOUND",
-            f"{note_id} does not exist; new module notes come from kb_draft_module "
-            "(declare the module in milepost.toml first)",
+            f"{note_id} does not exist; new module notes come from kb_draft_module",
         )
-    if level == "L3" and existing is None and not (root / name).is_file():
-        raise KbToolError("NOT_FOUND", f"{name} is not a file in this repository")
 
-    meta: dict[str, Any]
-    if existing is not None:
-        meta = dict(existing.meta)
-    elif agent_mode_create:
-        module = config.modules[name]
-        meta = {
-            "kb_schema": 1,
-            "id": note_id,
-            "level": "L2",
-            "title": module.title,
-            "sources": module.sources,
-            "related": module.related,
-        }
-    elif level == "L3":
-        meta = {"kb_schema": 1, "id": note_id, "level": "L3", "title": name, "sources": [name]}
-    else:
-        meta = {"kb_schema": 1, "id": note_id, "level": "L4", "title": name}
-
+    # `sources` mirrors milepost.toml, which is authoritative for what a module covers.
+    meta: dict[str, Any] = dict(existing.meta) if existing is not None else {}
+    meta.update({"kb_schema": 1, "id": note_id, "sources": module.sources})
+    meta.setdefault("title", module.title)
+    meta.setdefault("related", module.related)
     if agent_mode_create:
         collected = collect_sources(root, config, name)
         if collected.truncated and "Truncated draft" not in body:
             body = truncation_note(collected.outline_only) + "\n" + body
 
-    if level in HASHED_LEVELS:
-        sources = _note_sources(Note(meta, ""))
-        if not read_hash:
-            raise KbToolError(
-                "INVALID_INPUT",
-                "read_hash is required for L2 and L3 notes: pass source_hash_now from "
-                "kb_module or kb_file",
-            )
-        current = _hash_now(root, config, sources)
-        if read_hash != current:
-            raise KbToolError(
-                "STALE_READ",
-                "the sources changed after you read them; call kb_module or kb_file again, "
-                "re-read the source, and retry",
-            )
-        meta["source_hash"] = current
+    if not read_hash:
+        raise KbToolError(
+            "INVALID_INPUT",
+            "read_hash is required: pass source_hash_now from kb_module (or the draft packet)",
+        )
+    if read_hash != _hash_now(root, config, module.sources):
+        raise KbToolError(
+            "STALE_READ",
+            "the sources changed after you read them; call kb_module again, re-read the "
+            "source, and retry",
+        )
 
     meta["status"] = "draft"
     meta["written_by"] = "agent"
@@ -449,12 +422,11 @@ def kb_update(
     findings = [
         {"severity": f.severity, "code": f.code, "message": f.message}
         for f in run_check(root, config, with_churn=False).findings
-        if f.path == rel
+        if f.path == rel and f.code != "STALE_NOTE"
     ]
     return {
         "id": note_id,
         "status": "draft",
-        "source_hash": meta.get("source_hash", ""),
         "findings": findings,
         "next_steps": [
             f"tell the user {note_id} is now a draft and a person must run "

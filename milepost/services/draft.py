@@ -184,11 +184,9 @@ def draft_modules(
             meta={
                 "kb_schema": 1,
                 "id": f"module/{module_id}",
-                "level": "L2",
                 "title": module.title,
                 "status": "draft",
                 "sources": module.sources,
-                "source_hash": packet.source_hash_now,
                 "related": module.related,
                 "written_by": "draft-command",
                 "written_at": now,

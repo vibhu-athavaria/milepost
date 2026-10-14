@@ -10,11 +10,10 @@ def note(body: str = BODY, **overrides: object) -> str:
     meta: dict[str, object] = {
         "kb_schema": 1,
         "id": "module/billing",
-        "level": "L2",
         "title": "Billing",
         "status": "reviewed",
         "sources": ["app/billing/**/*.py"],
-        "source_hash": "sha256:base",
+        "related": ["a"],
         "written_by": "agent",
         "written_at": "2026-10-01T00:00:00Z",
         "reviewed_by": "Jane <j@example.com>",
@@ -32,26 +31,22 @@ def test_merge_driver_when_only_ours_changed_key_then_keeps_ours() -> None:
 
 
 def test_merge_driver_when_only_theirs_changed_key_then_takes_theirs() -> None:
-    result = merge_notes(note(), note(), note(source_hash="sha256:theirs"))
+    result = merge_notes(note(), note(), note(related=["a", "b"]))
 
-    assert parse_note(result.text).meta["source_hash"] == "sha256:theirs"
+    assert parse_note(result.text).meta["related"] == ["a", "b"]
 
 
-def test_merge_driver_when_both_changed_source_hash_then_writes_conflict() -> None:
-    result = merge_notes(note(), note(source_hash="sha256:ours"), note(source_hash="sha256:theirs"))
+def test_merge_driver_when_both_changed_a_key_differently_then_ours_wins_without_a_conflict() -> (
+    None
+):
+    result = merge_notes(note(), note(title="Ours"), note(title="Theirs"))
 
-    assert parse_note(result.text).meta["source_hash"] == "CONFLICT"
+    assert parse_note(result.text).meta["title"] == "Ours"
     assert result.body_conflict is False
 
 
-def test_merge_driver_when_both_changed_source_hash_to_same_value_then_keeps_it() -> None:
-    result = merge_notes(note(), note(source_hash="sha256:x"), note(source_hash="sha256:x"))
-
-    assert parse_note(result.text).meta["source_hash"] == "sha256:x"
-
-
 def test_merge_driver_when_reviewed_note_only_gets_key_changes_then_stays_reviewed() -> None:
-    result = merge_notes(note(), note(title="Billing v2"), note(source_hash="sha256:theirs"))
+    result = merge_notes(note(), note(title="Billing v2"), note(related=["a", "c"]))
     meta = parse_note(result.text).meta
 
     assert meta["status"] == "reviewed"

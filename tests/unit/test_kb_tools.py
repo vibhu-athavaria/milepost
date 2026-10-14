@@ -140,11 +140,10 @@ def test_kb_module_when_draft_then_next_steps_warn(tmp_path: Path) -> None:
 
 def test_kb_file_when_path_matches_sources_then_returns_covering_notes(tmp_path: Path) -> None:
     repo = make_repo(tmp_path)
-    repo.add_file_note("app/billing/charge.py")
 
     result = kb_file(repo.root, "app/billing/charge.py")
 
-    assert [n["id"] for n in result["notes"]] == ["module/billing", "file/app/billing/charge.py"]
+    assert [n["id"] for n in result["notes"]] == ["module/billing"]
     assert result["covered"] is True
 
 
@@ -230,9 +229,10 @@ def test_kb_update_when_read_hash_matches_working_tree_then_writes(tmp_path: Pat
     )
 
     meta = read_note(repo.root / "kb/modules/billing.md").meta
-    assert meta["source_hash"] == repo.hash_of(SOURCES)
+    assert "source_hash" not in meta  # nothing is stored; staleness comes from git
     assert meta["written_at"] == NOW and meta["written_by"] == "agent"
     assert result["findings"] == []
+    assert kb_module(repo.root, "billing")["stale"] is False
 
 
 def test_kb_update_when_reviewed_note_updated_then_status_draft_and_review_fields_removed(
@@ -273,27 +273,6 @@ def test_kb_update_when_body_unchanged_and_read_hash_current_then_refreshes_hash
 
     note = read_note(repo.root / "kb/modules/billing.md")
     assert note.body.strip("\n") == body and note.meta["written_at"] == NOW
-
-
-def test_kb_update_when_new_l3_for_existing_file_then_created_with_that_file_as_source(
-    tmp_path: Path,
-) -> None:
-    repo = make_repo(tmp_path)
-    file_hash = kb_file(repo.root, "app/billing/charge.py")["file_hash_now"]
-
-    kb_update(repo.root, "file/app/billing/charge.py", "## Gotchas\n\n- x\n", file_hash, NOW)
-
-    meta = read_note(repo.root / "kb/files/app/billing/charge.py.md").meta
-    assert meta["sources"] == ["app/billing/charge.py"] and meta["level"] == "L3"
-
-
-def test_kb_update_when_new_l4_then_created_without_hash(tmp_path: Path) -> None:
-    repo = make_repo(tmp_path)
-
-    kb_update(repo.root, "passage/retry-rules", "A narrow point.\n", None, NOW)
-
-    meta = read_note(repo.root / "kb/passages/retry-rules.md").meta
-    assert meta["level"] == "L4" and "source_hash" not in meta
 
 
 def test_kb_update_when_frontmatter_key_other_than_status_requested_then_not_changeable(
@@ -390,8 +369,10 @@ def test_kb_check_when_called_then_findings_and_ok_flag(tmp_path: Path) -> None:
 
     result = kb_check(repo.root)
 
-    assert result["ok"] is False
-    assert any(f["code"] == "STALE_NOTE" for f in result["findings"])
+    assert result["ok"] is True  # a stale note only warns unless [check] stale = "fail"
+    stale = [f for f in result["findings"] if f["code"] == "STALE_NOTE"]
+    assert stale and stale[0]["severity"] == "warning"
+    assert any("stale" in step for step in result["next_steps"])
 
 
 def test_kb_outline_impact_sync_when_called_then_match_services(tmp_path: Path) -> None:
@@ -472,7 +453,6 @@ def test_kb_file_when_dotfile_path_then_dot_kept(tmp_path: Path) -> None:
     result = kb_file(repo.root, "./.github/ci.yml")
 
     assert result["path"] == ".github/ci.yml"
-    assert result["file_hash_now"] != ""
 
 
 @pytest.mark.parametrize("path", ["../outside.py", "/etc/passwd", "a/../../outside.py"])
@@ -525,17 +505,6 @@ def test_kb_update_when_existing_l2_file_is_invalid_then_does_not_claim_missing(
     assert error.value.code == "INVALID_INPUT"
     assert "kb_draft_module" not in error.value.message
     assert (repo.root / "kb/modules/billing.md").read_text() == "not a note\n"
-
-
-def test_kb_update_when_existing_l3_file_is_invalid_then_not_overwritten(tmp_path: Path) -> None:
-    repo = make_repo(tmp_path)
-    repo.write("kb/files/app/billing/charge.py.md", "hand written junk\n")
-    file_hash = kb_file(repo.root, "app/billing/charge.py")["file_hash_now"]
-
-    with pytest.raises(KbToolError):
-        kb_update(repo.root, "file/app/billing/charge.py", "body", file_hash, NOW)
-
-    assert (repo.root / "kb/files/app/billing/charge.py.md").read_text() == "hand written junk\n"
 
 
 def test_kb_module_when_body_is_long_then_returned_in_full_with_a_shorten_step(
@@ -624,7 +593,7 @@ def test_kb_update_when_mode_agent_and_declared_module_has_no_note_then_creates_
     note = read_note(repo.root / "kb/modules/other.md")
     assert note.meta["status"] == "draft" and note.meta["written_by"] == "agent"
     assert note.meta["sources"] == ["app/other/**/*.py"]
-    assert note.meta["source_hash"] == repo.hash_of(["app/other/**/*.py"])
+    assert "source_hash" not in note.meta
     assert "| other | Runs things. | draft |" in kb_overview(repo.root)["index"]
     assert kb_check(repo.root)["ok"] is True
 
@@ -737,3 +706,49 @@ def test_kb_overview_when_modules_declared_but_no_notes_then_says_to_draft(tmp_p
 
     assert "(no note yet)" in result["index"]
     assert any("no note yet" in step and "kb_draft_module" in step for step in result["next_steps"])
+
+
+@pytest.mark.parametrize(
+    "note_id", ["file/app/billing/charge.py", "passage/retry-rules", "module/"]
+)
+def test_kb_update_when_id_is_not_a_module_note_then_invalid_input(
+    tmp_path: Path, note_id: str
+) -> None:
+    repo = make_repo(tmp_path)
+
+    with pytest.raises(KbToolError) as error:
+        kb_update(repo.root, note_id, "body", repo.hash_of(SOURCES), NOW)
+
+    assert error.value.code == "INVALID_INPUT"
+
+
+def test_kb_update_when_module_not_declared_then_not_found(tmp_path: Path) -> None:
+    repo = make_repo(tmp_path)
+
+    with pytest.raises(KbToolError) as error:
+        kb_update(repo.root, "module/ghost", "body", "h", NOW)
+
+    assert error.value.code == "NOT_FOUND"
+
+
+def test_kb_module_when_code_committed_after_the_note_then_stale_with_a_reason(
+    tmp_path: Path,
+) -> None:
+    repo = make_repo(tmp_path)
+    repo.write("app/billing/charge.py", "def charge(card):\n    return 7\n")
+    repo.commit("code only")
+
+    result = kb_module(repo.root, "billing")
+
+    assert result["stale"] is True and "after the note was last updated" in result["stale_reason"]
+
+
+def test_kb_update_when_note_was_retitled_by_a_person_then_title_is_kept(tmp_path: Path) -> None:
+    repo = make_repo(tmp_path)
+    note = read_note(repo.root / "kb/modules/billing.md")
+    note.meta["title"] = "Billing & invoicing"
+    write_note(note, repo.root / "kb/modules/billing.md")
+
+    kb_update(repo.root, "module/billing", "## Purpose\n\nx.\n", repo.hash_of(SOURCES), NOW)
+
+    assert read_note(repo.root / "kb/modules/billing.md").meta["title"] == "Billing & invoicing"

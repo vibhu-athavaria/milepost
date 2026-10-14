@@ -15,6 +15,9 @@ SERVICES = ["app/services/**/*.py"]
 def make_repo(tmp_path: Path, extra_config: str = "") -> KbRepo:
     repo = KbRepo(tmp_path, extra_config)
     repo.add_module("services", SERVICES, {"app/services/a.py": "x = 1\n"})
+    repo.git("config", "user.name", "t")
+    repo.git("config", "user.email", "t@example.com")
+    repo.commit("base")
     return repo
 
 
@@ -26,7 +29,7 @@ def codes(findings: list[Finding], severity: str | None = None) -> list[str]:
     return [f.code for f in findings if severity is None or f.severity == severity]
 
 
-def test_check_when_note_hash_matches_then_no_findings(tmp_path: Path) -> None:
+def test_check_when_note_is_current_then_no_findings(tmp_path: Path) -> None:
     assert check(make_repo(tmp_path)).findings == []
 
 
@@ -37,7 +40,7 @@ def test_check_when_source_changed_then_reports_stale_with_note_id(tmp_path: Pat
     stale = [f for f in check(repo).findings if f.code == "STALE_NOTE"]
 
     assert len(stale) == 1
-    assert stale[0].severity == "failure"
+    assert stale[0].severity == "warning"  # stale notes only warn unless [check] stale = "fail"
     assert stale[0].subject == "module/services"
     assert stale[0].path == "kb/modules/services.md"
 
@@ -69,22 +72,28 @@ def test_check_when_no_index_md_then_no_index_finding(tmp_path: Path) -> None:
     assert not [c for c in codes(check(repo).findings) if c.startswith("INDEX")]
 
 
-def test_check_when_source_hash_conflict_then_reports_failure_with_rehash_hint(
-    tmp_path: Path,
-) -> None:
+def test_check_when_stale_and_stale_mode_is_warn_then_exit_zero(tmp_path: Path) -> None:
     repo = make_repo(tmp_path)
-    repo.set_hash("kb/modules/services.md", "CONFLICT")
+    repo.write("app/services/a.py", "x = 2\n")
 
-    findings = check(repo).findings
+    result = check(repo)
 
-    conflict = [f for f in findings if f.code == "SOURCE_HASH_CONFLICT"]
-    assert len(conflict) == 1
-    assert "milepost rehash module/services" in conflict[0].message
-    assert "STALE_NOTE" not in codes(findings)
+    assert "STALE_NOTE" in codes(result.findings, "warning")
+    assert result.exit_code == 0
 
 
-def test_check_when_fail_on_none_then_exit_zero_despite_stale(tmp_path: Path) -> None:
-    repo = make_repo(tmp_path, '\n[check]\nfail_on = "none"\n')
+def test_check_when_stale_and_stale_mode_is_fail_then_exit_one(tmp_path: Path) -> None:
+    repo = make_repo(tmp_path, '\n[check]\nstale = "fail"\n')
+    repo.write("app/services/a.py", "x = 2\n")
+
+    result = check(repo)
+
+    assert "STALE_NOTE" in codes(result.findings, "failure")
+    assert result.exit_code == 1
+
+
+def test_check_when_fail_on_none_and_stale_mode_fail_then_exit_zero(tmp_path: Path) -> None:
+    repo = make_repo(tmp_path, '\n[check]\nfail_on = "none"\nstale = "fail"\n')
     repo.write("app/services/a.py", "x = 2\n")
 
     result = check(repo)
@@ -93,11 +102,18 @@ def test_check_when_fail_on_none_then_exit_zero_despite_stale(tmp_path: Path) ->
     assert result.exit_code == 0
 
 
-def test_check_when_stale_and_fail_on_stale_then_exit_one(tmp_path: Path) -> None:
-    repo = make_repo(tmp_path)
-    repo.write("app/services/a.py", "x = 2\n")
+def test_check_when_not_a_git_repository_then_says_staleness_cannot_be_judged(
+    tmp_path: Path,
+) -> None:
+    (tmp_path / "milepost.toml").write_text(
+        '[project]\nname = "x"\n\n[modules.a]\nsources = ["a/**/*.py"]\n'
+    )
+    (tmp_path / "a").mkdir()
+    (tmp_path / "a/x.py").write_text("x = 1\n")
 
-    assert check(repo).exit_code == 1
+    result = run_check(tmp_path, load_config(tmp_path / "milepost.toml"))
+
+    assert "STALENESS_UNAVAILABLE" in codes(result.findings, "warning")
 
 
 def test_check_when_note_has_no_frontmatter_then_reports_note_invalid(tmp_path: Path) -> None:
@@ -143,41 +159,6 @@ def test_check_when_dir_covered_by_module_then_no_uncovered_warning(tmp_path: Pa
     assert "UNCOVERED_DIR" not in codes(check(make_repo(tmp_path)).findings)
 
 
-def test_check_when_l3_sources_match_no_files_then_warns_orphan_note(tmp_path: Path) -> None:
-    repo = make_repo(tmp_path)
-    repo.write("app/services/b.py", "y\n")
-    repo.add_file_note("app/services/b.py")
-    (repo.root / "app/services/b.py").unlink()
-
-    orphan = [f for f in check(repo).findings if f.code == "ORPHAN_NOTE"]
-
-    assert [f.subject for f in orphan] == ["file/app/services/b.py"]
-    assert orphan[0].severity == "warning"
-
-
-def test_check_when_l3_and_l4_count_over_max_then_warns_detail_note_count(tmp_path: Path) -> None:
-    repo = make_repo(tmp_path, "\n[check]\nmax_detail_notes = 1\n")
-    for name in ["b.py", "c.py"]:
-        repo.write(f"app/services/{name}", "y\n")
-        repo.add_file_note(f"app/services/{name}")
-    repo.write_note_file("kb/passages/x.md", "passage/x", "L4", [])
-    # Hashes of the L2 note changed when files were added; refresh it so only the count remains.
-    repo.write_note_file("kb/modules/services.md", "module/services", "L2", SERVICES)
-
-    findings = check(repo).findings
-
-    assert [f.code for f in findings if f.code == "DETAIL_NOTE_COUNT"] == ["DETAIL_NOTE_COUNT"]
-
-
-def test_check_when_l3_and_l4_count_at_max_then_no_warning(tmp_path: Path) -> None:
-    repo = make_repo(tmp_path, "\n[check]\nmax_detail_notes = 1\n")
-    repo.write("app/services/b.py", "y\n")
-    repo.add_file_note("app/services/b.py")
-    repo.write_note_file("kb/modules/services.md", "module/services", "L2", SERVICES)
-
-    assert "DETAIL_NOTE_COUNT" not in codes(check(repo).findings)
-
-
 def test_check_when_run_twice_then_findings_identical(tmp_path: Path) -> None:
     repo = make_repo(tmp_path)
     repo.write("app/services/a.py", "x = 2\n")
@@ -215,14 +196,10 @@ def test_check_when_note_never_reviewed_then_no_unreviewed_churn_warning(tmp_pat
 
 def test_check_when_churn_over_threshold_then_still_exit_zero(tmp_path: Path) -> None:
     repo = make_repo(tmp_path, extra_config="\n[visibility]\nchurn_warn_lines = 0\n")
-    repo.git("config", "user.name", "t")
-    repo.git("config", "user.email", "t@example.com")
-    repo.commit("base")
     repo.write("app/services/a.py", "x = 1\ny = 2\n")
     repo.commit("change")
-    repo.write("kb/modules/services.md", (repo.root / "kb/modules/services.md").read_text())
-    repo.set_hash("kb/modules/services.md", repo.hash_of(SERVICES))
-    repo.commit("note refreshed")
+    repo.touch_note("services")
+    repo.commit("note touched")
 
     assert check(repo).exit_code == 0
 

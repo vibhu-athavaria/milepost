@@ -1,7 +1,8 @@
 """Git merge driver for note files (SPEC section 10.3).
 
-A merge never silently chooses a source hash: when both sides changed it, the result is the
-sentinel CONFLICT, which `milepost check` rejects until a person runs `milepost rehash`.
+Bodies are merged line by line (conflict markers where both sides edited the same place).
+Frontmatter keys are merged key by key, and a review only survives for the exact prose the
+reviewer read: a merge that mixes in the other side's edits returns the note to `draft`.
 """
 
 import subprocess
@@ -30,8 +31,6 @@ def _merge_value(key: str, base: Any, ours: Any, theirs: Any) -> Any:
         return theirs
     if theirs == base:
         return ours
-    if key == "source_hash":
-        return "CONFLICT"
     if key == "status":
         return "draft"
     return ours

@@ -10,7 +10,6 @@ from milepost.core.citations import citing_changed
 from milepost.core.glob import expand_sources, matches_any
 from milepost.core.notes import parse_note
 from milepost.errors import NoteInvalid
-from milepost.services.check import run_check
 from milepost.services.gitinfo import changed_files
 from milepost.services.status import module_statuses
 from milepost.structure.candidates import EXTENSIONS_BY_LANGUAGE
@@ -83,13 +82,6 @@ def build_report(root: Path, config: Config, base: str) -> Report:
         after = "(deleted)" if path in changes.deleted else _status_at(root, "HEAD", path)
         report.notes_changed.append(NoteChange(path, _status_at(root, fork_point, path), after))
 
-    result = run_check(root, config, base, with_churn=False)
-    report.stale_notes = [
-        f"{f.subject or f.path}: {f.message}"
-        for f in result.findings
-        if f.code == "STALE_NOTE" and f.severity == "failure"
-    ]
-
     source_changes = sorted(
         p
         for p in changes.all
@@ -107,6 +99,16 @@ def build_report(root: Path, config: Config, base: str) -> Report:
     ]
 
     changed = set(source_changes)
+    for module_id, module in sorted(config.modules.items()):
+        note_rel = f"{kb}modules/{module_id}.md"
+        if (
+            (root / note_rel).is_file()
+            and note_rel not in changes.all
+            and any(matches_any(p, module.sources) for p in source_changes)
+        ):
+            report.stale_notes.append(
+                f"module/{module_id}: this change edits code the note covers and does not touch it"
+            )
     for module_id, module in sorted(config.modules.items()):
         note_path = root / kb / "modules" / f"{module_id}.md"
         try:

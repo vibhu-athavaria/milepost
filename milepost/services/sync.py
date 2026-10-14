@@ -10,15 +10,15 @@ from milepost.config import Config
 from milepost.core.citations import citing_changed
 from milepost.core.glob import expand_sources, matches_any
 from milepost.core.hashing import compute_source_hash
-from milepost.core.notes import HASHED_LEVELS, Note, parse_note
-from milepost.errors import NoteInvalid
+from milepost.core.notes import Note, parse_note
+from milepost.errors import NoteInvalid, UsageError
 from milepost.services.gitinfo import Changes, changed_files, working_tree_changes
+from milepost.services.staleness import module_staleness
 
 
 @dataclass
 class NoteRef:
     id: str
-    level: str
     stale: bool
     source_hash_now: str
 
@@ -49,42 +49,16 @@ class SyncResult:
     next_steps: list[str] = field(default_factory=list)
 
 
-@dataclass
-class _KbNote:
-    id: str
-    level: str
-    note: Note
-    sources: list[str]
-    recorded: str
-    module_id: str | None
-
-
-def _load_kb_notes(root: Path, config: Config) -> list[_KbNote]:
-    kb = root / config.project.kb_dir
-    paths = [kb / "modules" / f"{m}.md" for m in sorted(config.modules)]
-    paths += sorted((kb / "files").rglob("*.md")) if (kb / "files").is_dir() else []
-    loaded = []
-    for path in paths:
-        if not path.is_file():
-            continue
-        try:
-            note = parse_note(path.read_text(encoding="utf-8"))
-        except NoteInvalid:
-            continue
-        sources = note.meta.get("sources")
-        if note.meta.get("level") not in HASHED_LEVELS or not isinstance(sources, list):
-            continue
-        module_id = path.stem if path.parent.name == "modules" else None
-        loaded.append(
-            _KbNote(
-                str(note.meta.get("id")),
-                str(note.meta.get("level")),
-                note,
-                [str(s) for s in sources],
-                str(note.meta.get("source_hash", "")),
-                module_id,
-            )
-        )
+def _load_notes(root: Path, config: Config) -> dict[str, Note]:
+    """module id -> parsed note, for modules whose note file exists and is valid."""
+    loaded = {}
+    for module_id in config.modules:
+        path = root / config.project.kb_dir / "modules" / f"{module_id}.md"
+        if path.is_file():
+            try:
+                loaded[module_id] = parse_note(path.read_text(encoding="utf-8"))
+            except NoteInvalid:
+                continue
     return loaded
 
 
@@ -94,31 +68,35 @@ def _status_of(path: str, changes: Changes) -> str:
     return "added" if path in changes.added else "modified"
 
 
-def _route(status: str, note: _KbNote, path: str) -> str:
-    if note.level == "L3":
-        if status == "deleted":
-            return f"{note.id}: ORPHAN_NOTE, {path} is gone; tell the user, do not delete the note"
-        return f"{note.id}: re-read {path}; edit the note if the change affects it, else refresh it"
+def _route(status: str, module_id: str, path: str) -> str:
+    note_id = f"module/{module_id}"
     if status == "added":
-        return f"{note.id}: add {path} to the File map (and Entry points if it is a new start)"
+        return f"{note_id}: add {path} to the File map (and Entry points if it is a new start)"
     if status == "deleted":
-        return f"{note.id}: remove or rename {path} in the File map"
+        return f"{note_id}: remove or rename {path} in the File map"
     return (
-        f"{note.id}: re-read {path}; edit Purpose, File map, Invariants or Gotchas if the "
-        "change affects them, otherwise kb_update with the unchanged body to refresh the hash"
+        f"{note_id}: re-read {path}; edit Purpose, File map, Invariants or Gotchas if the change "
+        "affects them, otherwise kb_update with the unchanged body to confirm it still holds"
     )
 
 
-def _cited_for(root: Path, config: Config, note: _KbNote, changed: set[str]) -> list[CitedBullet]:
-    if note.module_id is None:
-        return []
-    sources = config.modules[note.module_id].sources
+def _cited_for(
+    root: Path, config: Config, module_id: str, note: Note, changed: set[str]
+) -> list[CitedBullet]:
+    sources = config.modules[module_id].sources
     candidates = set(expand_sources(root, sources, []))
     candidates |= {p for p in changed if matches_any(p, sources)}
     return [
-        CitedBullet(note.id, bullet.section, bullet.text, path)
-        for bullet, path in citing_changed(note.note.body, candidates, changed)
+        CitedBullet(f"module/{module_id}", bullet.section, bullet.text, path)
+        for bullet, path in citing_changed(note.body, candidates, changed)
     ]
+
+
+def _stale_modules(root: Path, config: Config) -> set[str]:
+    try:
+        return {m for m, state in module_staleness(root, config).items() if state.stale}
+    except UsageError:
+        return set()
 
 
 def sync(root: Path, config: Config, base: str | None = None) -> SyncResult:
@@ -142,10 +120,10 @@ def sync(root: Path, config: Config, base: str | None = None) -> SyncResult:
         ]
         return result
 
-    kb_notes = _load_kb_notes(root, config)
-    hash_cache: dict[str, str] = {}
+    notes = _load_notes(root, config)
+    stale = _stale_modules(root, config)
+    hashes: dict[str, str] = {}
     affected: dict[str, list[str]] = {}
-    verify_modules: set[str] = set()
     missing_notes: dict[str, str] = {}
     changed = set(paths)
     for path in paths:
@@ -154,25 +132,20 @@ def sync(root: Path, config: Config, base: str | None = None) -> SyncResult:
             m for m in sorted(config.modules) if matches_any(path, config.modules[m].sources)
         ]
         change = FileChange(path, status, modules)
-        for note in kb_notes:
-            covers = (
-                note.module_id in modules if note.module_id else matches_any(path, note.sources)
-            )
-            if not covers:
-                continue
-            if note.id not in hash_cache:
-                hash_cache[note.id] = compute_source_hash(
-                    root, note.sources, config.structure.ignore
-                ).value
-            now = hash_cache[note.id]
-            change.notes.append(NoteRef(note.id, note.level, now != note.recorded, now))
-            route = _route(status, note, path)
-            change.routes.append(route)
-            affected.setdefault(note.id, []).append(route)
         for module_id in modules:
-            verify_modules.add(module_id)
-            note_file = root / config.project.kb_dir / "modules" / f"{module_id}.md"
-            if not note_file.exists():
+            if module_id in notes:
+                if module_id not in hashes:
+                    sources = config.modules[module_id].sources
+                    hashes[module_id] = compute_source_hash(
+                        root, sources, config.structure.ignore
+                    ).value
+                change.notes.append(
+                    NoteRef(f"module/{module_id}", module_id in stale, hashes[module_id])
+                )
+                route = _route(status, module_id, path)
+                change.routes.append(route)
+                affected.setdefault(module_id, []).append(route)
+            elif not (root / config.project.kb_dir / "modules" / f"{module_id}.md").exists():
                 text = f"module/{module_id} has no note yet: draft it (kb_draft_module)"
                 change.routes.append(text)
                 missing_notes.setdefault(module_id, text)
@@ -183,9 +156,9 @@ def sync(root: Path, config: Config, base: str | None = None) -> SyncResult:
             )
         result.changes.append(change)
 
-    for note in kb_notes:
-        if note.id in affected:
-            result.cited.extend(_cited_for(root, config, note, changed))
+    for module_id in sorted(affected):
+        result.cited.extend(_cited_for(root, config, module_id, notes[module_id], changed))
+    verify_modules = {m for change in result.changes for m in change.modules}
     result.verify = {
         m: config.modules[m].verify for m in sorted(verify_modules) if config.modules[m].verify
     }
