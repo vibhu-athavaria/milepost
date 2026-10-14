@@ -52,7 +52,7 @@ It is not worth it for small repos. A good `CLAUDE.md` plus a short architecture
 |---|---|---|---|
 | L1 | Index | One line per module, plus module dependency map | Generated from structure, prose reviewed |
 | L2 | Module note | Purpose, entry points, owned data, invariants, related modules | Agent drafts, human reviews on first write |
-| L3 | File note | Responsibilities, key symbols, gotchas | Agent, updated when the file changes |
+| L3 | File note | Gotchas that do not fit the module note. Rare. Per-file symbols come from the computed `outline`, not from notes | Agent or person, exceptions only |
 | L4 | Passage note | Line-range notes for a specific behavior | Created on demand |
 
 **Structure is derived, prose is written.** Imports, call paths, routes, and ownership come from the structural graph or a deterministic scan. Only prose (purpose, invariants, gotchas) is authored by an agent. Derived data can always be regenerated; prose is the part that can drift.
@@ -61,11 +61,11 @@ It is not worth it for small repos. A good `CLAUDE.md` plus a short architecture
 
 **Notes are files in git.** Markdown with frontmatter, one note per module or file, committed next to the code. The index (keyword and embedding search) is a local, rebuildable cache, git-ignored, never the source of truth.
 
-**Agent read path:** L1 index → relevant L2 note → only the L3 notes or files those point to. The agent does not grep the whole repo first.
+**Agent read path:** L1 index → relevant L2 note → the computed outline of the files it names, then only the line ranges needed. The agent does not grep the whole repo first.
 
 **Agent write path:** after a task, the agent updates each note whose source files it changed or whose behavior it learned. The write goes in the same commit as the code change.
 
-**Interfaces:** MCP tools `kb_overview`, `kb_module`, `kb_file`, `kb_search`, `kb_update`, `kb_check`, `kb_draft_module`. Plus a CLI: `milepost check` (staleness), `milepost index` (rebuild local search index), `milepost init` (section 11), `milepost scan` (undeclared module candidates). Tool responses carry the next step, and plugin hooks remind the agent of covering notes when it edits a file and run the check before it finishes, so the read and write paths do not depend on the agent remembering them. SPEC section 12.5 holds the scenario-by-scenario steps.
+**Interfaces:** MCP tools `kb_overview`, `kb_module`, `kb_file`, `kb_search`, `kb_update`, `kb_check`, `kb_draft_module`, and the computed `kb_outline`, `kb_impact`, `kb_sync`. Plus a CLI: `milepost check` (staleness), `milepost index` (rebuild local search index), `milepost init` (section 11), `milepost scan` (undeclared module candidates). Tool responses carry the next step, and plugin hooks remind the agent of covering notes when it edits a file and run the check before it finishes, so the read and write paths do not depend on the agent remembering them. SPEC section 12.5 holds the scenario-by-scenario steps.
 
 **Language and tooling:** repository-agnostic. Hashing and frontmatter are language-neutral. Structure comes from an adapter, so any language with a structural graph works.
 

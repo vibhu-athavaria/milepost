@@ -1,6 +1,6 @@
 # milepost Specification
 
-Status: v1 draft for build. Companion to PROPOSAL.md (the "why"). This file is the "what to build."
+Status: v1 spec. Milestones M0 to M10 (except M8b) are built; see the status table at the top of TASKS.md. Items that are specified but not built are marked "not built". Companion to PROPOSAL.md (the "why"). This file is the "what to build."
 
 Audience: the developer implementing milepost, and reviewers checking it against the proposal.
 
@@ -308,8 +308,8 @@ All commands accept `--repo <path>` (default: nearest ancestor with `milepost.to
 | `milepost outline <path> [--json]` | Symbols, signatures and line ranges of one file, computed now | Section 8.3 |
 | `milepost impact <path> [--json]` | Files that import this file and the tests likely to cover it, computed now | Section 8.3 |
 | `milepost sync [--base REF] [--json]` | What changed and which notes to update, and how | Section 8.3; read-only |
-| `milepost status [--json]` | Per module: review state and unreviewed churn | Section 8.4; read-only |
-| `milepost report --base REF [--format markdown\|json]` | Review aid for a change range | Section 8.4; read-only, always exits 0 |
+| `milepost status [--json]` | Per module: review state and unreviewed churn | Section 8.4; read-only. **Not built (M8b)** |
+| `milepost report --base REF [--format markdown\|json]` | Review aid for a change range | Section 8.4; read-only, always exits 0. **Not built (M8b)** |
 | `milepost rehash <note-id>` | Recompute `source_hash` for a note marked `CONFLICT` or intentionally updated | Prints the old and new hash and the current manifest (path and short digest; the old manifest cannot be recovered from a hash alone); asks for confirmation, and requires `--yes` in non-interactive shells (exit 2 otherwise) |
 | `milepost search <query> [--level L] [--k N]` | Hybrid search | Section 7.4 |
 | `milepost hooks install \| uninstall` | Manage git hooks and merge driver config | Section 10 |
@@ -317,6 +317,7 @@ All commands accept `--repo <path>` (default: nearest ancestor with `milepost.to
 | `milepost serve` | Run the MCP server on stdio | Section 11 |
 | `milepost doctor` | Print environment: Python, git, SQLite FTS5 available, fastembed model cached, `MILEPOST_MODEL` set, the provider key variables for that model present (via `litellm.validate_environment`, verified to name `OPENROUTER_API_KEY` and `ANTHROPIC_API_KEY`), and whether a `.env` file is git-ignored | Read-only; exit 3 when a variable needed for drafting is missing |
 | `milepost scan [--json]` | List candidate modules under `structure.roots` that no declared module covers (same scan as init step 3) | Read-only; never edits config |
+| `milepost hook session-start` | Print the index and a reminder as session context | Used by the plugin hook, section 12.4; always exits 0 |
 | `milepost hook post-edit` | Read Claude Code hook JSON on stdin, find the edited path, print the notes that cover it | Used by the plugin hook, section 12.4; always exits 0 |
 | `milepost hook stop` | Run `milepost check`, print findings in hook format | Used by the plugin hook, section 12.4 |
 
@@ -529,7 +530,7 @@ Yes. Claude Code plugins can bundle an MCP server, skills, and slash commands. T
 
 Python is the right language. The MCP server is the only code the plugin runs; it needs a Python runtime, and the Python ecosystem already provides the SDK, and fastembed. A TypeScript rewrite would add a second toolchain for no gain. Users run the server with `uvx milepost serve`, so they do not install anything globally first.
 
-Verify the plugin file layout (`.claude-plugin/plugin.json`, `.mcp.json`, `skills/`, `commands/`) against the current Claude Code plugin documentation before publishing. This spec was written without fetching those docs.
+The plugin layout (`.claude-plugin/plugin.json`, `.mcp.json`, `skills/`, `commands/`, `hooks/hooks.json`, with `${CLAUDE_PLUGIN_ROOT}` in paths) was verified against the Claude Code plugin documentation in October 2026, and `claude plugin validate ./plugin` passes.
 
 ### 12.2 Plugin contents
 
@@ -538,10 +539,10 @@ Shipped from `plugin/` in the milepost repository:
 ```
 plugin/
   .claude-plugin/plugin.json      # name, version, description
-  .mcp.json                       # starts `uvx milepost==<version> serve`
+  .mcp.json                       # starts the server. MVP: `uv run --project ${CLAUDE_PLUGIN_ROOT}/.. milepost serve` (loaded in place with --plugin-dir). Release: `uvx milepost==<version> serve`
   skills/kb-usage/SKILL.md        # read and write discipline for agents
   commands/kb-init.md             # /kb-init, the only slash command; flow in section 9.4
-  hooks/hooks.json                # PostToolUse and Stop hooks, section 12.4
+  hooks/hooks.json                # SessionStart, PostToolUse and Stop hooks, section 12.4
 ```
 
 The skill text is in `plugin/skills/kb-usage/SKILL.md`. It is derived from the playbook in section 12.5 and must name only tools that exist in the MCP server (section 11).
@@ -557,13 +558,13 @@ Hooks are run by the Claude Code harness, not by the model, so they work when th
 
 | Hook | Matcher | Command | Behavior |
 |---|---|---|---|
-| `PostToolUse` | `Edit`, `Write`, `MultiEdit` | `uvx milepost==<version> hook post-edit` | Reads the hook JSON on stdin, takes `tool_input.file_path`, and returns as added context the notes covering that path (id, status, stale flag) plus the instruction "update each covering note with `kb_update` before finishing". Prints nothing for paths under `kb/` and for paths no note covers, except one line naming `UNCOVERED_DIR` when the path is in an uncovered directory. Never blocks; exits 0. |
+| `PostToolUse` | `Edit`, `Write`, `MultiEdit`, `NotebookEdit` | `uvx milepost==<version> hook post-edit` (MVP: `uv run --project ${CLAUDE_PLUGIN_ROOT}/.. milepost hook post-edit`) | Reads the hook JSON on stdin, takes `tool_input.file_path` (or `notebook_path`), and returns as added context the notes covering that path (id, status, stale flag) plus the instruction "update each covering note with `kb_update` before finishing". Prints nothing for paths under `kb/` and for paths no note covers, except one line naming `UNCOVERED_DIR` when the path is in an uncovered directory. Never blocks; exits 0. |
 | `SessionStart` | none | `uvx milepost==<version> hook session-start` | Adds as context the L1 index (cut to 3,000 characters), the count of stale and draft notes, and a three-line reminder of playbook scenario 1. This puts orientation in front of the agent without a tool call. Prints nothing when the repository has no `kb/`. Never blocks; exits 0. |
-| `Stop` | none | `uvx milepost==<version> hook stop` | Runs `milepost check`. On failures, returns a block decision whose reason lists the findings and the playbook step to follow. Blocks at most once per stop sequence: if the hook input says a stop hook is already active, it exits 0, so a failure it cannot fix does not loop forever. |
+| `Stop` | none | `uvx milepost==<version> hook stop` | Runs `milepost check`, but blocks only on a `STALE_NOTE` whose sources match a file changed in this piece of work (the working tree against HEAD plus the latest commit, ignoring `structure.ignore`). Other failures and old debt are left to `check`, `pre-commit` and CI. The block reason lists the findings and the playbook step to follow. Blocks at most once per stop sequence: if the hook input says a stop hook is already active (`stop_hook_active`), it exits 0, so a failure it cannot fix does not loop forever. |
 
-Both hooks fail open: if `milepost` is not installed or errors, they exit 0 with a warning on stderr. Enforcement that cannot be bypassed stays with `pre-commit` and CI (section 10).
+All three hooks fail open: if `milepost` is not installed or errors, they exit 0 with a warning on stderr. Enforcement that cannot be bypassed stays with `pre-commit` and CI (section 10).
 
-The hook JSON field names, matcher syntax, and plugin hook file location are written from memory and not verified. Verify them against the current Claude Code hooks documentation before M10 acceptance, as with the rest of section 12.1.
+The hook JSON field names, matcher syntax, `stop_hook_active`, the `hookSpecificOutput.additionalContext` output and the `decision: "block"` output were verified against the Claude Code hooks documentation in October 2026.
 
 ### 12.5 Agent playbook
 

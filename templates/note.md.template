@@ -6,31 +6,36 @@ title: <Human-readable title>
 status: draft
 sources:
   - <glob relative to repo root, e.g. app/services/**/*.py>
-source_hash: <filled in by milepost draft or kb_update; never write this by hand>
+source_hash: <filled in by milepost; never write this by hand>
 related: []
 written_by: draft-command
 written_at: <UTC ISO-8601, e.g. 2026-10-07T09:12:00Z>
+# reviewed_by and reviewed_at are added by `milepost review`; do not write them by hand
 ---
 
 ## Purpose
 
-One or two sentences: what this module is responsible for.
+One or two sentences: what this module is responsible for. The first sentence becomes the module's line in kb/INDEX.md.
 
 ## Entry points
 
-- Routes, public functions, or services a caller uses first, with paths.
+- The few places to start reading, with paths. Cite files in backticks, e.g. `routes/auth.py::login`.
+
+## File map
+
+- `file.py`: what it does. One line per file, or per folder for large modules. Do not list functions; `milepost outline` does that.
 
 ## Owned data
 
-- Tables, files, or external resources this module reads or writes, and the owning side.
+- Tables, files, or external resources this module reads or writes, and which side owns them.
 
 ## Invariants
 
-- Rules that must hold. Cite the file and symbol where each is enforced.
+- Rules that must hold. Cite the file and symbol in backticks where each is enforced; `milepost sync` uses those citations.
 
 ## Gotchas
 
-- Non-obvious behavior that has caused or would cause bugs. Be specific.
+- Non-obvious behavior that has caused or would cause bugs. Be specific, and cite the file in backticks.
 
 ## Related modules
 
