@@ -205,23 +205,23 @@ def test_project_dirs_when_worktree_and_sibling_projects_exist_then_only_exact_a
 ) -> None:
     root = tmp_path / "projects"
     for name in [
-        "-Users-me-Projects-kaihle",
-        "-Users-me-Projects-kaihle--claude-worktrees-feature-x",
-        "-Users-me-Projects-kaihle-www",
+        "-Users-me-Projects-myrepo",
+        "-Users-me-Projects-myrepo--claude-worktrees-feature-x",
+        "-Users-me-Projects-myrepo-www",
         "-Users-me-Projects-other",
     ]:
         (root / name).mkdir(parents=True)
 
-    found = sorted(path.name for path in project_dirs(Path("/Users/me/Projects/kaihle"), root))
+    found = sorted(path.name for path in project_dirs(Path("/Users/me/Projects/myrepo"), root))
 
     assert found == [
-        "-Users-me-Projects-kaihle",
-        "-Users-me-Projects-kaihle--claude-worktrees-feature-x",
+        "-Users-me-Projects-myrepo",
+        "-Users-me-Projects-myrepo--claude-worktrees-feature-x",
     ]
 
 
 def test_find_logs_when_subagents_requested_then_newest_n_returned(tmp_path: Path) -> None:
-    project = tmp_path / "-Users-me-Projects-kaihle"
+    project = tmp_path / "-Users-me-Projects-myrepo"
     logs = []
     for index in range(4):
         path = write_log(project / "sess1" / "subagents" / f"agent-{index}.jsonl", [])
@@ -235,7 +235,7 @@ def test_find_logs_when_subagents_requested_then_newest_n_returned(tmp_path: Pat
 
 
 def test_find_logs_when_sessions_requested_then_main_logs_only(tmp_path: Path) -> None:
-    project = tmp_path / "-Users-me-Projects-kaihle"
+    project = tmp_path / "-Users-me-Projects-myrepo"
     write_log(project / "sess1" / "subagents" / "agent-1.jsonl", [])
     main_log = write_log(project / "sess1.jsonl", [])
 

@@ -8,8 +8,8 @@ dist/
 kb/.index/
 kb/.progress.json
 
-# Pilot prompts contain private Kaihle plans; keep them local.
-pilot/prompts/
+# Local pilot data (private prompts, logs, results) stays out of the repository.
+pilot/
 
 # Local credentials (see templates/.env.example)
 .env
