@@ -40,7 +40,7 @@ def test_init_when_yes_flag_then_no_prompt_and_runs_to_completion(
     monkeypatch.setenv("MILEPOST_MODEL", "fake/model")
 
     result = runner.invoke(
-        cli.app, ["init", "--repo", str(repo.root), "--modules", "billing", "--yes"]
+        cli.app, ["init", "--repo", str(repo.root), "--modules", "billing", "--yes", "--model-mode"]
     )
 
     assert result.exit_code == 0, result.output
@@ -64,7 +64,7 @@ def test_init_when_model_comes_from_dotenv_then_drafting_works(repo: KbRepo) -> 
     repo.write(".env", "MILEPOST_MODEL=fake/model\n")
 
     result = runner.invoke(
-        cli.app, ["init", "--repo", str(repo.root), "--modules", "billing", "--yes"]
+        cli.app, ["init", "--repo", str(repo.root), "--modules", "billing", "--yes", "--model-mode"]
     )
 
     assert result.exit_code == 0, result.output
@@ -73,7 +73,7 @@ def test_init_when_model_comes_from_dotenv_then_drafting_works(repo: KbRepo) -> 
 
 def test_init_when_model_unset_then_exit_three_naming_variable(repo: KbRepo) -> None:
     result = runner.invoke(
-        cli.app, ["init", "--repo", str(repo.root), "--modules", "billing", "--yes"]
+        cli.app, ["init", "--repo", str(repo.root), "--modules", "billing", "--yes", "--model-mode"]
     )
 
     assert result.exit_code == 3
@@ -95,6 +95,7 @@ def test_doctor_when_json_flag_then_output_parses(
     repo: KbRepo, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     monkeypatch.setattr(cli, "run_doctor", lambda root, environ: run_doctor(root, {}, no_keys))
+    repo.write("milepost.toml", '[project]\nname = "x"\n\n[draft]\nmode = "model"\n')
 
     result = runner.invoke(cli.app, ["doctor", "--repo", str(repo.root), "--json"])
 
@@ -108,7 +109,9 @@ def test_draft_when_run_then_note_written_as_draft(
     repo: KbRepo, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     monkeypatch.setenv("MILEPOST_MODEL", "fake/model")
-    runner.invoke(cli.app, ["init", "--repo", str(repo.root), "--modules", "billing", "--yes"])
+    runner.invoke(
+        cli.app, ["init", "--repo", str(repo.root), "--modules", "billing", "--yes", "--model-mode"]
+    )
     (repo.root / "kb/modules/billing.md").unlink()
 
     result = runner.invoke(cli.app, ["draft", "billing", "--repo", str(repo.root)])
@@ -117,12 +120,12 @@ def test_draft_when_run_then_note_written_as_draft(
     assert read_note(repo.root / "kb/modules/billing.md").meta["status"] == "draft"
 
 
-def test_init_cli_when_agent_mode_flag_then_no_model_needed_and_instruction_printed(
+def test_init_cli_when_nothing_chosen_then_agent_mode_no_model_needed_and_instruction_printed(
     repo: KbRepo,
 ) -> None:
     result = runner.invoke(
         cli.app,
-        ["init", "--repo", str(repo.root), "--modules", "billing", "--yes", "--agent-mode"],
+        ["init", "--repo", str(repo.root), "--modules", "billing", "--yes"],
     )
 
     assert result.exit_code == 0, result.output
@@ -133,7 +136,7 @@ def test_init_cli_when_agent_mode_flag_then_no_model_needed_and_instruction_prin
 def test_draft_cli_when_mode_agent_then_usage_error_pointing_at_the_agent(repo: KbRepo) -> None:
     runner.invoke(
         cli.app,
-        ["init", "--repo", str(repo.root), "--modules", "billing", "--yes", "--agent-mode"],
+        ["init", "--repo", str(repo.root), "--modules", "billing", "--yes"],
     )
 
     result = runner.invoke(cli.app, ["draft", "billing", "--repo", str(repo.root)])
@@ -141,10 +144,10 @@ def test_draft_cli_when_mode_agent_then_usage_error_pointing_at_the_agent(repo: 
     assert result.exit_code == 2 and "kb_draft_module" in result.output
 
 
-def test_init_cli_when_agent_mode_dry_run_then_wording_says_agent_not_model(repo: KbRepo) -> None:
+def test_init_cli_when_default_mode_dry_run_then_wording_says_agent_not_model(repo: KbRepo) -> None:
     result = runner.invoke(
         cli.app,
-        ["init", "--repo", str(repo.root), "--modules", "billing", "--dry-run", "--agent-mode"],
+        ["init", "--repo", str(repo.root), "--modules", "billing", "--dry-run"],
     )
 
     assert result.exit_code == 0, result.output

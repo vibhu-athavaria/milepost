@@ -9,8 +9,10 @@ from pathlib import Path
 from typing import Literal
 
 from milepost.config import load_config
+from milepost.embeddings import semantic_search_available
 from milepost.env import DOTENV_NAME, dotenv_is_ignored
 from milepost.errors import MilepostError
+from milepost.llm.client import model_extra_available
 from milepost.services.coverage import CONFIG_NAME
 from milepost.services.hooks import outdated_hooks
 
@@ -54,11 +56,11 @@ def _fts5_available() -> bool:
 def _draft_mode(root: Path) -> tuple[str, str]:
     """(mode, config error). The error is empty when milepost.toml is absent or valid."""
     if not (root / CONFIG_NAME).is_file():
-        return "model", ""
+        return "agent", ""
     try:
         return load_config(root / CONFIG_NAME).draft.mode, ""
     except MilepostError as error:
-        return "model", str(error)
+        return "agent", str(error)
 
 
 def run_doctor(
@@ -85,8 +87,20 @@ def run_doctor(
     if config_error:
         checks.append(Check(CONFIG_NAME, "fail", config_error))
     if mode == "agent":
+        detail = "agent: your coding agent writes the notes; no model needed"
+        if model:
+            detail += (
+                f" ({MODEL_VAR} is set but not used in agent mode; "
+                'set [draft] mode = "model" in milepost.toml to use it)'
+            )
+        checks.append(Check("draft-mode", "ok", detail))
+    elif not model_extra_available():
         checks.append(
-            Check("draft-mode", "ok", "agent: your coding agent writes the notes; no model needed")
+            Check(
+                "litellm",
+                "fail",
+                "model mode needs the `model` extra: pip install 'milepost[model]'",
+            )
         )
     elif not model:
         checks.append(
@@ -105,6 +119,15 @@ def run_doctor(
             )
         else:
             checks.append(Check("provider-key", "ok", "present"))
+    if not semantic_search_available():
+        checks.append(
+            Check(
+                "search",
+                "warn",
+                "meaning-based search is off (keyword search only); "
+                "pip install 'milepost[search]' to turn it on",
+            )
+        )
     outdated = outdated_hooks(root) if shutil.which("git") else []
     if outdated:
         checks.append(

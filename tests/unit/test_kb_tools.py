@@ -4,7 +4,8 @@ import pytest
 from support.embedders import HashEmbedder
 from support.kb_repo import KbRepo
 
-from milepost.config import Config
+from milepost import mcp_server
+from milepost.config import Config, load_config
 from milepost.core.notes import read_note, write_note
 from milepost.embeddings import Embedder
 from milepost.errors import UsageError
@@ -61,6 +62,11 @@ def make_repo(tmp_path: Path, status: str = "reviewed") -> KbRepo:
     repo.git("config", "user.email", "t@example.com")
     repo.commit("base")
     return repo
+
+
+def use_model_mode(repo: KbRepo) -> None:
+    text = (repo.root / "milepost.toml").read_text()
+    (repo.root / "milepost.toml").write_text(text + '\n[draft]\nmode = "model"\n')
 
 
 def code_of(error: pytest.ExceptionInfo[KbToolError]) -> str:
@@ -183,6 +189,7 @@ def test_kb_update_when_l2_note_missing_then_rejects_and_points_to_kb_draft_modu
 ) -> None:
     repo = make_repo(tmp_path)
     repo.add_module("other", ["app/other/**/*.py"], {"app/other/x.py": "x = 1\n"}, with_note=False)
+    use_model_mode(repo)
 
     with pytest.raises(KbToolError) as error:
         kb_update(repo.root, "module/other", "## Purpose\n\nx\n", "h", NOW)
@@ -300,6 +307,7 @@ def test_kb_draft_module_when_module_declared_and_no_note_then_writes_draft_note
 ) -> None:
     repo = make_repo(tmp_path)
     repo.add_module("other", ["app/other/**/*.py"], {"app/other/x.py": "x = 1\n"}, with_note=False)
+    use_model_mode(repo)
     client = FakeClient()
 
     result = kb_draft_module(repo.root, "other", client, {"MILEPOST_MODEL": "m"}, NOW, no_sleep)
@@ -335,6 +343,7 @@ def test_kb_draft_module_when_model_env_unset_then_environment_error_naming_vari
 ) -> None:
     repo = make_repo(tmp_path)
     repo.add_module("other", ["app/other/**/*.py"], {"app/other/x.py": "x = 1\n"}, with_note=False)
+    use_model_mode(repo)
 
     with pytest.raises(KbToolError) as error:
         kb_draft_module(repo.root, "other", FakeClient(), {}, NOW, no_sleep)
@@ -470,6 +479,7 @@ def test_kb_draft_module_when_sources_match_no_files_then_coded_error_not_crash(
 ) -> None:
     repo = make_repo(tmp_path)
     repo.add_module("empty", ["app/empty/**/*.py"], {}, with_note=False)
+    use_model_mode(repo)
 
     try:
         kb_draft_module(repo.root, "empty", FakeClient(), {"MILEPOST_MODEL": "m"}, NOW, no_sleep)
@@ -752,3 +762,28 @@ def test_kb_update_when_note_was_retitled_by_a_person_then_title_is_kept(tmp_pat
     kb_update(repo.root, "module/billing", "## Purpose\n\nx.\n", repo.hash_of(SOURCES), NOW)
 
     assert read_note(repo.root / "kb/modules/billing.md").meta["title"] == "Billing & invoicing"
+
+
+def test_kb_search_when_no_embedder_available_then_keyword_results_still_returned(
+    tmp_path: Path,
+) -> None:
+    repo = make_repo(tmp_path)
+
+    result = kb_search(repo.root, lambda config: None, "bills customers", limit=5)
+
+    assert result["results"] and result["results"][0]["note_id"] == "module/billing"
+
+
+def test_cached_embedders_when_extra_missing_first_then_picked_up_without_restart(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    repo = make_repo(tmp_path)
+    config = load_config(repo.root / "milepost.toml")
+    cache = mcp_server._CachedEmbedders()
+    monkeypatch.setattr(mcp_server, "default_embedder", lambda *args: None)
+    assert cache(config) is None
+
+    sentinel = HashEmbedder()
+    monkeypatch.setattr(mcp_server, "default_embedder", lambda *args: sentinel)
+
+    assert cache(config) is sentinel

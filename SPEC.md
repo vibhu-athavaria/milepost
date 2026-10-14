@@ -99,7 +99,7 @@ embedding_model = "BAAI/bge-small-en-v1.5"   # fastembed model name; config, not
 embedding_dim = 384                    # must match the model
 
 [draft]
-mode = "model"                         # "model" (default) or "agent"; section 9.3. `milepost init --agent-mode` writes "agent"
+mode = "agent"                         # "agent" (default) or "model"; section 9.3. `milepost init --model-mode` writes "model"
 provider_model = "${MILEPOST_MODEL}"      # resolved from env var at run time; required when mode = "model"
 max_source_bytes = 200000              # per module; larger modules are sampled, see 9.3
 exclude = ["**/.env*", "**/*secret*", "**/*.pem", "**/*.key", "**/credentials*"]
@@ -267,6 +267,7 @@ CREATE TABLE chunk_vectors (chunk_id INTEGER PRIMARY KEY, embedding BLOB NOT NUL
 - `milepost index` is incremental: a note is re-chunked and re-embedded only when its `content_sha` (sha256 of the file bytes) changed.
 - `milepost index --rebuild` drops and recreates all tables.
 - A schema or model change (different `embedding_model` or `embedding_dim`) forces `--rebuild`; the stored model name is kept in a `meta` table and compared on every run.
+- Vectors are optional (the `search` extra). The `meta` table records `vectors` as `True`, `False` (keyword only) or `mixed` (some notes were indexed while the extra was missing). An index with vectors is never wiped because one process lacks the extra; it is rebuilt with vectors automatically when the extra is present and the state is `False` or `mixed`. A keyword-only index is never queried with an embedded query.
 - The index never affects `milepost check`. Check reads files only.
 
 ### 7.4 Search
@@ -388,7 +389,7 @@ Re-running `init` creates only what is missing. Existing `kb/modules/*.md` files
 
 ### 9.3 Drafting
 
-**Modes.** `draft.mode = "model"` (default) calls the model named by `MILEPOST_MODEL` through LiteLLM, as described below. `draft.mode = "agent"` never calls a model from milepost and needs no key: `milepost init` scaffolds, declares modules and builds the index but skips drafting, and the coding agent drafts through `kb_draft_module`. In agent mode that tool returns a *draft packet* instead of writing a note: the drafting prompt, the collected sources (after `draft.exclude`, the size budget and the secret scan), and an instruction to write the body and submit it with `kb_update`. `kb_update` is allowed to create a missing L2 note in agent mode, only for a declared module, and always writes `status: draft`. In agent mode `draft.exclude` and the secret scan protect only the packet; the agent can still read any file with its own tools, so they are not a guarantee. Updates after a task are written by the agent in both modes (section 0).
+**Modes.** `draft.mode = "agent"` (the default) never calls a model from milepost and needs no key: `milepost init` scaffolds, declares modules and builds the index but skips drafting, and the coding agent drafts through `kb_draft_module`. In agent mode that tool returns a *draft packet* instead of writing a note: the drafting prompt, the collected sources (after `draft.exclude`, the size budget and the secret scan), and an instruction to write the body and submit it with `kb_update`. `kb_update` is allowed to create a missing note in agent mode, only for a declared module, and always writes `status: draft`. In agent mode `draft.exclude` and the secret scan protect only the packet; the agent can still read any file with its own tools, so they are not a guarantee. `draft.mode = "model"` calls the model named by `MILEPOST_MODEL` through LiteLLM (the optional `model` extra), as described below. Updates after a task are written by the agent in both modes (section 0).
 
 - Input: the module's source files, concatenated with headers `=== path ===`, after applying `draft.exclude`. If the total exceeds `max_source_bytes`, include the structure summary (imports, top-level symbols) for every file and full text only for the first N files that fit, and state the truncation in the note body.
 - Prompt: stored in `milepost/prompts/draft_l2.md` (not inline in code). It instructs the model to write only what is verifiable from the provided code, to mark uncertainty explicitly, to avoid describing behavior not present in the input, to cite file paths in backticks, to include a File map, and to stay short.
@@ -594,21 +595,22 @@ The MCP server (section 11) is not tied to Claude Code: any agent that can start
 
 ## 13. Dependencies
 
-Runtime:
-- `typer`, `pydantic>=2`, `tomli` (stdlib `tomllib` on 3.11+ suffices; use it), `pyyaml`, `wcmatch`
-- `mcp` (FastMCP)
-- `litellm` (drafting only; imported lazily so other commands do not need it)
-- `fastembed`
-- `numpy`
-- `python-dotenv` (loads `.env`, section 3)
+Core (always installed):
+- `typer`, `pydantic>=2`, `pyyaml`, `wcmatch`, `python-dotenv` (loads `.env`, section 3)
+- `mcp>=2,<3` (the MCP Python SDK)
 - `tree-sitter`, `tree-sitter-typescript`, `tree-sitter-javascript`
 
+Optional extras (about 70 fewer packages without them; the core install is 43 packages):
+- `milepost[search]`: `fastembed` and `numpy`, for meaning-based search. Without it, notes are indexed and searched by keyword only (SQLite FTS5), and `doctor` says so.
+- `milepost[model]`: `litellm`, for drafting with a separate model (`draft.mode = "model"`). Not needed in the default agent mode.
+- `milepost[all]`: both.
+
 Development:
-- `pytest`, `pytest-cov`, `ruff`, `mypy`
+- `pytest`, `pytest-cov`, `ruff`, `mypy`; install with `uv sync --all-extras`.
 
 Python `>=3.12`.
 
-Lazy import rule: `litellm` and `fastembed` are imported inside the functions that use them. Commands that do not need them (`check`, `review`, `hooks`) start fast and work without the model stack.
+Lazy import rule: `litellm`, `fastembed` and `numpy` are imported only inside the functions that use them, so commands that do not need them start fast and work when the extras are absent. A missing extra gives a message naming it, never a traceback.
 
 ---
 

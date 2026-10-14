@@ -17,7 +17,7 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - uses: astral-sh/setup-uv@v3
-      - run: uv sync --python 3.12
+      - run: uv sync --python 3.12 --all-extras
       - run: uv run ruff check
       - run: uv run mypy milepost
       - run: uv run pytest

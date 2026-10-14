@@ -31,6 +31,7 @@ You need [uv](https://docs.astral.sh/uv/) and [Claude Code](https://claude.com/c
    git clone <this repository> && cd milepost
    uv sync --python 3.12 && uv tool install --editable .
    ```
+   That is the lean install (43 packages, no API key, no model download). Add `".[search]"` for meaning-based search and `".[model]"` to draft notes with a separate model; see [USAGE.md](USAGE.md).
 2. **Open the repository you want to try it on** and start Claude Code with the plugin loaded:
    ```bash
    cd /path/to/your/repo
@@ -131,8 +132,8 @@ Files and symbols cited in backticks are checked: `milepost check` warns when a 
 | MCP server with ten `kb_*` tools; each response says what to do next | Works |
 | Claude Code plugin: `/milepost:kb-init`, a usage skill, and hooks (index at session start, covering notes after each edit, one stop if a note is stale) | Works, loaded from a local checkout |
 | Computed context: `outline`, `impact`, `sync` | Works (Python, TypeScript, JavaScript) |
-| Local hybrid search over the notes (keyword + meaning, no API key) | Works |
-| Drafting with your own model (OpenRouter, Anthropic, anything LiteLLM supports) or with Claude Code itself (agent mode, no key) | Works |
+| Search over the notes: keyword by default, plus meaning-based with the optional `search` extra (local, no API key) | Works |
+| Drafting notes: by Claude Code itself (the default, no key), or with your own model (OpenRouter, Anthropic, anything LiteLLM supports) via the optional `model` extra | Works |
 | Human visibility: `status` (unreviewed change per module), `report` (a pull-request aid, in the CI job summary), a churn warning, a `CODEOWNERS` template | Works |
 | Safe handling of your code: secret scan, exclusion list, a dry run that lists every file before anything is sent | Works |
 | Install from a marketplace or PyPI | Not yet. Needs a release |
@@ -244,7 +245,7 @@ Built test-first. Details and the named tests for each milestone are in [TASKS.m
 Requires Python 3.12 and [uv](https://docs.astral.sh/uv/).
 
 ```bash
-uv sync --python 3.12
+uv sync --python 3.12 --all-extras
 uv run pytest            # unit and integration tests
 uv run ruff check        # lint
 uv run mypy              # strict type check

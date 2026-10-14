@@ -65,14 +65,23 @@ def _documents(root: Path, config: Config, report: IndexReport) -> list[_Documen
     return documents
 
 
-def _check_model(store: IndexStore, config: Config, rebuild: bool) -> None:
+def _check_model(store: IndexStore, config: Config, rebuild: bool, vectors: bool) -> str:
+    """Prepare the store for a run and return the vector state to record afterwards.
+
+    States: "True" (every note has vectors), "False" (keyword only) and "mixed" (some notes were
+    indexed while the `search` extra was missing). An index with vectors is never wiped just
+    because this process lacks fastembed (a hook or the MCP server may run without the extra);
+    it only gets rebuilt when the extra is present and the index lacks vectors, or on request."""
     wanted = {
         "embedding_model": config.index.embedding_model,
         "embedding_dim": str(config.index.embedding_dim),
     }
     stored = {key: store.get_meta(key) for key in wanted}
-    if rebuild:
-        store.reset()
+    state = store.get_meta("vectors")
+    if rebuild or (vectors and state in ("False", "mixed")):
+        store.reset()  # an explicit rebuild, or the extra arrived and the index lacks vectors
+        stored = {key: None for key in wanted}
+        state = None
     elif any(stored[key] not in (None, wanted[key]) for key in wanted):
         raise IndexRebuildRequired(
             "the index was built with a different embedding model or dimension "
@@ -81,20 +90,31 @@ def _check_model(store: IndexStore, config: Config, rebuild: bool) -> None:
         )
     for key, value in wanted.items():
         store.set_meta(key, value)
+    if state is None:
+        return str(vectors)
+    return state
 
 
-def run_index(root: Path, config: Config, embedder: Embedder, rebuild: bool = False) -> IndexReport:
+def run_index(
+    root: Path, config: Config, embedder: Embedder | None, rebuild: bool = False
+) -> IndexReport:
+    """Index the notes. With no embedder (the `search` extra is not installed) notes are indexed
+    for keyword search only; once the extra is available, the index is rebuilt with vectors."""
     report = IndexReport()
     store = SqliteStore(root / config.index.path, config.index.embedding_dim)
     try:
-        _check_model(store, config, rebuild)
+        state = _check_model(store, config, rebuild, vectors=embedder is not None)
         documents = _documents(root, config, report)
         for document in documents:
             record = document.record
             if store.note_content_sha(record.note_id) == record.content_sha:
                 report.skipped += 1
                 continue
-            vectors = embedder.embed([chunk.text for chunk in document.chunks])
+            vectors: list[list[float]] | list[None] = (
+                embedder.embed([chunk.text for chunk in document.chunks])
+                if embedder is not None
+                else [None] * len(document.chunks)
+            )
             chunks = [
                 ChunkRecord(chunk.heading, chunk.text, vector)
                 for chunk, vector in zip(document.chunks, vectors, strict=True)
@@ -105,6 +125,9 @@ def run_index(root: Path, config: Config, embedder: Embedder, rebuild: bool = Fa
         for gone in store.note_ids() - current:
             store.delete_note(gone)
             report.removed += 1
+        if embedder is None and state == "True" and report.indexed:
+            state = "mixed"
+        store.set_meta("vectors", state)
     finally:
         store.close()
     return report

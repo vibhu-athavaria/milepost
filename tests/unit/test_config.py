@@ -184,11 +184,11 @@ def test_config_when_draft_mode_invalid_then_exit_two(tmp_path: Path) -> None:
     assert error.value.exit_code == 2 and error.value.field_path == "draft.mode"
 
 
-def test_config_when_draft_mode_agent_then_accepted_and_default_is_model(tmp_path: Path) -> None:
-    agent = load_config(write_config(tmp_path, MINIMAL + '\n[draft]\nmode = "agent"\n'))
+def test_config_when_draft_mode_is_set_then_accepted_and_default_is_agent(tmp_path: Path) -> None:
+    model = load_config(write_config(tmp_path, MINIMAL + '\n[draft]\nmode = "model"\n'))
     default = load_config(write_config(tmp_path, MINIMAL))
 
-    assert agent.draft.mode == "agent" and default.draft.mode == "model"
+    assert model.draft.mode == "model" and default.draft.mode == "agent"
 
 
 @pytest.mark.parametrize("spelling", ["kb/", "./kb", "kb", "kb//"])

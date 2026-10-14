@@ -9,8 +9,6 @@ import sqlite3
 from datetime import UTC, datetime
 from pathlib import Path
 
-import numpy as np
-
 from milepost.store.base import ChunkRecord, Hit, NoteRecord
 
 _HIT_COLUMNS = "c.chunk_id, c.note_id, n.level, n.status, c.heading, c.text"
@@ -164,7 +162,8 @@ class SqliteStore:
 
     def replace_note(self, record: NoteRecord, chunks: list[ChunkRecord]) -> None:
         for chunk in chunks:
-            self._check_dimension(chunk.embedding)
+            if chunk.embedding is not None:
+                self._check_dimension(chunk.embedding)
         self._delete_note(record.note_id)
         self.conn.execute(
             "INSERT INTO notes(note_id, level, status, source_hash, content_sha, indexed_at) "
@@ -188,10 +187,13 @@ class SqliteStore:
                 "INSERT INTO chunks_fts(rowid, text, heading) VALUES (?, ?, ?)",
                 (chunk_id, chunk.text, chunk.heading),
             )
-            self.conn.execute(
-                "INSERT INTO chunk_vectors(chunk_id, embedding) VALUES (?, ?)",
-                (chunk_id, np.asarray(chunk.embedding, dtype=np.float32).tobytes()),
-            )
+            if chunk.embedding is not None:
+                import numpy as np  # optional (the `search` extra): only needed with vectors
+
+                self.conn.execute(
+                    "INSERT INTO chunk_vectors(chunk_id, embedding) VALUES (?, ?)",
+                    (chunk_id, np.asarray(chunk.embedding, dtype=np.float32).tobytes()),
+                )
         self.conn.commit()
 
     def search_keyword(self, query: str, k: int, level: str | None) -> list[Hit]:
@@ -225,6 +227,8 @@ class SqliteStore:
         rows = self.conn.execute(sql + " ORDER BY c.chunk_id", params).fetchall()
         if not rows:
             return []
+        import numpy as np  # optional (the `search` extra): only reached when vectors exist
+
         matrix = np.vstack([np.frombuffer(row[6], dtype=np.float32) for row in rows])
         query = np.asarray(embedding, dtype=np.float32)
         norms = np.linalg.norm(matrix, axis=1) * np.linalg.norm(query)

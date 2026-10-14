@@ -17,7 +17,7 @@ class NoteRecord:
 class ChunkRecord:
     heading: str
     text: str
-    embedding: list[float]
+    embedding: list[float] | None  # None: index for keyword search only
 
 
 @dataclass(frozen=True)

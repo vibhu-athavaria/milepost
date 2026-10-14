@@ -1,13 +1,19 @@
 """The one place that calls an LLM provider (SPEC 3 and 9.3). LiteLLM is imported lazily."""
 
+import importlib.util
 import time
 from collections.abc import Callable
 from typing import Protocol
 
-from milepost.errors import ProviderError
+from milepost.errors import EnvironmentProblem, ProviderError
 
 RETRIES = 2
 BACKOFF_SECONDS = 2.0
+
+
+def model_extra_available() -> bool:
+    """True when the optional `model` extra (litellm) is installed."""
+    return importlib.util.find_spec("litellm") is not None
 
 
 class LlmClient(Protocol):
@@ -16,7 +22,13 @@ class LlmClient(Protocol):
 
 class LiteLlmClient:
     def complete(self, model: str, system: str, user: str) -> str:
-        import litellm
+        try:
+            import litellm
+        except ImportError as error:
+            raise EnvironmentProblem(
+                "drafting with a separate model needs the `model` extra: "
+                "pip install 'milepost[model]' (or use agent mode)"
+            ) from error
 
         response = litellm.completion(
             model=model,
