@@ -17,6 +17,8 @@ Companion to SPEC.md. Each milestone lists the work, the test functions to write
 
 Each milestone below was reviewed with the code-review skill before it was merged; fixes are in the commit "Address code review findings" on each PR.
 
+**Reading the milestone sections below:** they keep their original plans and test lists. The trim (next section) later removed some features they mention (file and passage notes, the stored hash and `rehash`, the stored `INDEX.md`, `--level`). SPEC.md describes what exists now.
+
 ## The trim (after the architecture review)
 
 An architecture review of the finished MVP found structural risks: one stored hash per module conflicts between concurrent pull requests, any byte change marks a note stale, a stored `INDEX.md` drifts and conflicts, the dependency footprint is large, and the value is unmeasured. The response is to cut back to the part with the least risk and keep a kill criterion. Each step is its own pull request with tests.
@@ -28,9 +30,9 @@ An architecture review of the finished MVP found structural risks: one stored ha
 | 3 | Remove L3 and L4 notes: one note per module | Done |
 | 4 | Staleness from git history, soft by default; remove the stored hash, `rehash` and the `CONFLICT` sentinel | Done |
 | 5 | Heavy dependencies become optional extras; agent mode becomes the default | Done |
-| 6 | Consolidate SPEC and README around the trimmed product | Planned |
+| 6 | Consolidate SPEC and README around the trimmed product | Done |
 
-Kill criterion (decided before the pilot): stop, or ship only the computed tools as a small standalone server, if tokens after the first turn are not clearly lower (under about 20% savings), or if reviewers do not answer questions about a pull request faster or more accurately from the notes and `report` than from the diff.
+Kill criterion (proposed; to be agreed before the pilot runs): drop the notes layer and ship only the computed tools as a small standalone server, or stop, if tokens after the first turn are not clearly lower (under about 20% savings), or if reviewers do not answer questions about a pull request faster or more accurately from the notes and `report` than from the diff.
 
 Rules for implementers:
 - Write the named tests first, see them fail, then implement.
