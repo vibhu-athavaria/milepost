@@ -2,8 +2,8 @@
 
 Each sub-agent log (or main session log) is one "run". Examples:
 
-    python scripts/pilot_usage.py --project /Users/me/Projects/kaihle --last 5
-    python scripts/pilot_usage.py --project ~/Projects/kaihle --kind sessions --format csv
+    python scripts/pilot_usage.py --project /Users/me/Projects/myrepo --last 5
+    python scripts/pilot_usage.py --project ~/Projects/myrepo --kind sessions --format csv
     python scripts/pilot_usage.py path/to/agent-abc.jsonl path/to/agent-def.jsonl
 
 Reliability notes, from inspecting real logs:
@@ -252,7 +252,7 @@ def main(argv: Sequence[str] | None = None) -> int:
     )
     parser.add_argument("files", nargs="*", type=Path, help="log files to summarize")
     parser.add_argument(
-        "--project", type=Path, help="repo path whose logs to read, e.g. ~/Projects/kaihle"
+        "--project", type=Path, help="repo path whose logs to read, e.g. ~/Projects/myrepo"
     )
     parser.add_argument("--projects-root", type=Path, default=DEFAULT_PROJECTS_ROOT)
     parser.add_argument("--last", type=int, default=5, help="how many newest logs (default 5)")

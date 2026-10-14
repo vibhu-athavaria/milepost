@@ -168,12 +168,12 @@ Acceptance:
 This milestone needs no milepost code and can start at any time. M6 does not start until it is done, because everything from M6 on is only worth building if the measurement later shows an improvement.
 
 Work:
-- Pilot repository: Kaihle.
-- Pick five representative tasks (a feature, a bugfix, a cross-module change, a question about existing behavior, a refactor). Write each as a fixed prompt in `PILOT.md`.
+- Pilot repository: a real repository the maintainer owns (its name and data are kept outside this repository).
+- Pick five representative tasks (a feature, a bugfix, a cross-module change, a question about existing behavior, a refactor). Write each as a fixed prompt, kept with the private baseline data (see `PILOT.md` for the protocol).
 - Run each with the coding agent and no milepost. Record files read, tokens used, and whether the task outcome was acceptable.
 
 Acceptance:
-- `PILOT.md` in the milepost repository holds the five prompts and the baseline numbers, committed before any M6 work.
+- The five prompts and the baseline numbers are recorded (privately, outside this repository) before any M6 work; `PILOT.md` holds the public protocol.
 - The prompts are frozen: M11 reruns exactly these.
 
 ---
@@ -331,8 +331,8 @@ Tests:
 - `test_impact_when_stem_shorter_than_three_chars_then_no_name_matches`
 
 Acceptance:
-- On the Kaihle checkout, `milepost outline` on the largest route file (1,779 lines) lists the same 31 top-level definitions as `grep -nE "^(async )?def |^class "`. Whole-command time including `uv` startup was 1.1 s; the parse itself is not separately timed, so the 200 ms target in SPEC section 14 is not yet shown.
-- `milepost impact` on a Kaihle service file lists its importers and test, checked by hand against `grep` (done for `analytics_service.py`: 2 route importers and 1 test; two other grep hits were docstring mentions, correctly not listed).
+- On a real repository, `milepost outline` on the largest route file (1,779 lines) lists the same 31 top-level definitions as `grep -nE "^(async )?def |^class "`. Whole-command time including `uv` startup was 1.1 s; the parse itself is not separately timed, so the 200 ms target in SPEC section 14 is not yet shown.
+- `milepost impact` on a service file of that repository lists its importers and test, checked by hand against `grep` (done for `analytics_service.py`: 2 route importers and 1 test; two other grep hits were docstring mentions, correctly not listed).
 - The existing INDEX fixtures and `milepost index` regenerate with the Purpose column and `check` passes.
 
 ---
@@ -367,7 +367,7 @@ Tests:
 - `test_codeowners_snippet_when_present_then_names_kb_directory`
 
 Acceptance:
-- On the Kaihle pilot branch, `milepost status` runs in under 2 seconds and ranks the `api` module by unreviewed lines after a deliberate edit to one route file.
+- On the pilot repository, `milepost status` runs in under 2 seconds and ranks the `api` module by unreviewed lines after a deliberate edit to one route file.
 - `milepost report --base main` on a branch where an agent edited `routes/db_tools.py` quotes the `db_tools.py` invariant or gotcha bullet if one cites it, and says so plainly if none does.
 - The CI template renders the report into the job summary on a pull request in a scratch repository.
 
@@ -469,12 +469,12 @@ Acceptance:
 ## M11. Pilot and release
 
 Work:
-- Repeat the measurement (PROPOSAL.md section 7 step 6) on the same Kaihle repository and the same five frozen prompts as the M5a baseline.
+- Repeat the measurement (PROPOSAL.md section 7 step 6) on the same repository and the same five frozen prompts as the M5a baseline.
 - Measure review effort, the second goal (SPEC 0.1). Proposed method, not yet agreed: take three agent-written pull requests from the pilot. Someone who did not write them writes five factual questions each from the code diff (what behavior changed, which module, what invariant is touched). A reviewer answers using only the note diff and `milepost report`, timed; another answers from the code diff alone. Compare correct answers and time.
 - Record which tools agents actually called per run (from the logs), since a tool never called saves nothing.
 - Publish `0.1.0` to PyPI only if the measurement passes. Otherwise stop and record the result.
 
 Acceptance:
-- Baseline (from M5a) and post-milepost numbers recorded side by side, plus the review-effort comparison and the per-run tool-call counts. Go/no-go decision written into `PILOT.md` in the milepost repository.
-- Pass rule: agreed with the maintainer before the run and written in `PILOT.md` first. A proposal to start from: at least 30% fewer total fresh tokens after the first turn, and the review-effort comparison at least 80% as many correct answers in at most half the time. Neither number is agreed yet.
+- Baseline (from M5a) and post-milepost numbers recorded side by side, plus the review-effort comparison and the per-run tool-call counts. Go/no-go decision recorded with the private baseline data.
+- Pass rule: agreed with the maintainer before the run and written down first, with the protocol in `PILOT.md`. A proposal to start from: at least 30% fewer total fresh tokens after the first turn, and the review-effort comparison at least 80% as many correct answers in at most half the time. Neither number is agreed yet.
 - README includes quickstart, the decision record, and the known limitations from SPEC section 16.
