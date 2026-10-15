@@ -41,6 +41,9 @@ mode = "agent"
 provider_model = "${MILEPOST_MODEL}"
 max_source_bytes = 200000
 exclude = ["**/.env*", "**/*secret*", "**/*.pem", "**/*.key", "**/credentials*"]
+# Files the credential scan withholds (false positives such as token-type constants) that a
+# person has checked and wants included in drafting:
+secret_scan_allow = []
 
 [check]
 # "stale" (default): errors such as an invalid note fail the check. "none": report only.

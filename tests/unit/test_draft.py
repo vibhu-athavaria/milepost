@@ -6,7 +6,7 @@ from support.kb_repo import KbRepo
 
 from milepost.config import Config, load_config
 from milepost.core.notes import read_note
-from milepost.errors import ProviderError, SecretDetected, UsageError
+from milepost.errors import ProviderError, UsageError
 from milepost.llm.client import complete_with_retries
 from milepost.services.draft import (
     PROMPT_PATH,
@@ -113,20 +113,50 @@ def test_scan_for_secrets_when_ordinary_code_then_none() -> None:
     assert scan_for_secrets({"f.py": "password = get_password()\ntoken_count = 3\n"}) is None
 
 
-def test_secret_scan_when_aws_key_pattern_then_aborts_module_with_file_name_only(
+def test_secret_scan_when_one_file_looks_like_a_key_then_only_that_file_is_withheld(
     tmp_path: Path,
 ) -> None:
     repo, config = make_repo(tmp_path)
     repo.write("app/billing/pay.py", 'KEY = "AKIAABCDEFGHIJKLMNOP"\n')
     client = FakeClient()
 
-    with pytest.raises(SecretDetected) as error:
-        draft_modules(repo.root, config, ["billing"], client, "m", False, NOW, no_sleep)
+    done = draft_modules(repo.root, config, ["billing"], client, "m", False, NOW, no_sleep)
 
-    assert error.value.exit_code == 4
-    assert "app/billing/pay.py" in str(error.value)
+    assert done == ["billing"]
+    sent = client.calls[0][2]
+    assert "AKIAABCDEFGHIJKLMNOP" not in sent and "app/billing/pay.py" not in sent
+    assert "def charge" in sent  # the other files are still drafted from
+    body = read_note(repo.root / "kb/modules/billing.md").body
+    assert "Files withheld" in body and "`app/billing/pay.py`" in body
+    assert "AKIAABCDEFGHIJKLMNOP" not in body
+
+
+def test_secret_scan_when_file_is_in_secret_scan_allow_then_it_is_sent(tmp_path: Path) -> None:
+    repo, config = make_repo(tmp_path)
+    repo.write(
+        "app/billing/pay.py",
+        'TOKEN_TYPE = "password_setup_token"\nPASSWORD_KEY = "abcdefghijklmnop"\n',
+    )
+    config.draft.secret_scan_allow = ["app/billing/pay.py"]
+
+    packet = build_draft_packet(repo.root, config, "billing")
+
+    assert "app/billing/pay.py" in packet.sent_files
+    assert packet.withheld == [] and packet.truncation_notice == ""
+
+
+def test_secret_scan_when_every_file_is_withheld_then_usage_error_names_the_config_key(
+    tmp_path: Path,
+) -> None:
+    repo, config = make_repo(tmp_path)
+    for path in list((repo.root / "app/billing").glob("*.py")):
+        path.write_text('KEY = "AKIAABCDEFGHIJKLMNOP"\n')
+
+    with pytest.raises(UsageError) as error:
+        build_draft_packet(repo.root, config, "billing")
+
+    assert "secret_scan_allow" in str(error.value)
     assert "AKIAABCDEFGHIJKLMNOP" not in str(error.value)
-    assert client.calls == []
 
 
 def test_draft_when_provider_fails_twice_then_retries_and_succeeds(tmp_path: Path) -> None:

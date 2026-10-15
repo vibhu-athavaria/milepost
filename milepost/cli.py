@@ -181,6 +181,11 @@ def init(
                 f"warning: {module_id}: {len(outlined)} file(s) exceed draft.max_source_bytes and "
                 "would be sent as outline only; raise it in milepost.toml to cover them"
             )
+        for module_id, held in plan.withheld.items():
+            typer.echo(
+                f"warning: {module_id}: {', '.join(held)} look like they contain a credential and "
+                "would be left out; if they are safe, list them in draft.secret_scan_allow"
+            )
         typer.echo(f"estimated tokens: {plan.estimated_tokens}")
         if dry_run:
             return

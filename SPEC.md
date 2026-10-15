@@ -103,6 +103,7 @@ mode = "agent"                         # "agent" (default) or "model"; section 9
 provider_model = "${MILEPOST_MODEL}"      # resolved from env var at run time; required when mode = "model"
 max_source_bytes = 200000              # per module; larger modules are sampled, see 9.3
 exclude = ["**/.env*", "**/*secret*", "**/*.pem", "**/*.key", "**/credentials*"]
+secret_scan_allow = []   # globs of files the secret scan would withhold but a person has checked
 
 [check]
 fail_on = "stale"                      # "stale" (default) or "none" (report only)
@@ -411,7 +412,7 @@ The command does not print the CLAUDE.md snippet, because the plugin's skill and
 ### 9.5 Security
 
 - Files matching `draft.exclude` are never read for drafting.
-- Before sending, milepost scans the input for common secret patterns (AWS key ids, private key headers, `password=`/`token=` assignments with long values). A match aborts that module with exit 4 and names the file, not the value.
+- Before sending, milepost scans the input for common secret patterns (AWS key ids, private key headers, `password=`/`token=` assignments with long values). A match withholds that one file from the input (the rest of the module is still drafted) and the note states which files were withheld, by path and never by value. If every file is withheld, drafting stops with a usage error. A person who has checked a file lists it in `draft.secret_scan_allow` (globs) to include it.
 - `--dry-run` lists every file that would be sent, so a reviewer can check the set before any network call.
 - The provider endpoint is whatever LiteLLM is configured for via environment variables; milepost adds no endpoint of its own.
 

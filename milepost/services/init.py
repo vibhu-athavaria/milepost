@@ -31,6 +31,7 @@ class InitReport:
     drafted: list[str] = field(default_factory=list)
     planned_files: dict[str, list[str]] = field(default_factory=dict)
     outline_only: dict[str, list[str]] = field(default_factory=dict)
+    withheld: dict[str, list[str]] = field(default_factory=dict)
     estimated_tokens: int = 0
     indexed: int = 0
     hooks: HooksReport | None = None
@@ -185,6 +186,8 @@ def run_init(
             report.planned_files[module_id] = collected.sent
             if collected.outline_only:
                 report.outline_only[module_id] = collected.outline_only
+            if collected.withheld:
+                report.withheld[module_id] = collected.withheld
             report.estimated_tokens += collected.estimated_tokens
         return report
 
