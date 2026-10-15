@@ -9,7 +9,10 @@ MARKER = "# managed-by: milepost"
 MERGE_DRIVER = "milepost merge-driver %O %A %B %P"
 GITATTRIBUTES_LINE = "kb/**/*.md merge=milepost"
 
+# Hooks live in the shared git directory, so they also run in worktrees and on older branches
+# that have no milepost.toml. There they must do nothing, not block the commit.
 _GUARD = (
+    "[ -f milepost.toml ] || exit 0\n"
     "command -v milepost >/dev/null 2>&1 "
     '|| { echo "milepost: not installed, skipping" >&2; exit 0; }'
 )
@@ -42,7 +45,9 @@ def _hooks_dir(root: Path) -> Path:
 
 def _snippet() -> str:
     lines = ["Add these to your hook manager, so milepost still runs:"]
-    lines += [f"  {name}: {body.splitlines()[-1]}" for name, body in HOOKS.items()]
+    for name, body in HOOKS.items():
+        command = next(x for x in body.splitlines() if x.startswith(("milepost ", "exec milepost")))
+        lines.append(f"  {name}: {command}")
     lines.append(f"And set the merge driver: git config merge.milepost.driver '{MERGE_DRIVER}'")
     return "\n".join(lines)
 

@@ -94,6 +94,34 @@ Nothing more to run. During a session:
 
 ---
 
+## Compare the same task with and without Milepost
+
+There is no pause switch. The plugin only exists in sessions you start with `--plugin-dir`, so the comparison is two sessions on two copies of the same commit. Use a separate worktree for each, so the notes and settings of one cannot leak into the other.
+
+```bash
+cd ~/your-repo
+git worktree add ../task-with    -b ab-with    <commit>
+git worktree add ../task-without -b ab-without <commit>
+
+# Without: delete everything Milepost added, so the agent has nothing to read.
+cd ../task-without
+git rm -rq --ignore-unmatch kb milepost.toml .mcp.json
+ls kb milepost.toml 2>/dev/null   # must print nothing; if it lists files, delete them by hand
+# Also remove the Milepost lines from CLAUDE.md / AGENTS.md if you added the snippet.
+git commit -qm "ab: remove milepost" && claude
+
+# With: same commit, plugin loaded.
+cd ../task-with
+claude --plugin-dir ~/milepost/plugin
+```
+
+Give both sessions the identical prompt, then compare the token count, the number of turns, whether the result passes your tests, and how long a reviewer needs to review each diff. Run each arm more than once, since a single run is noise.
+
+Two details that matter:
+
+- Git hooks live in the shared git directory, so a hook installed with `milepost hooks install` also runs in the "without" worktree. Hooks from this version do nothing when the checkout has no `milepost.toml`. If you installed them with an older version, run `milepost hooks install` once (`milepost doctor` tells you when they are outdated), or the old pre-commit will block commits in the "without" worktree.
+- `kb/` is ordinary markdown. If you leave it in the "without" copy, the agent can read the notes as plain files and the comparison is no longer fair.
+
 ## Use only the command line
 
 You don't need the plugin to use milepost.
