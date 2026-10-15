@@ -16,7 +16,7 @@ import typer
 
 from milepost.config import Config, Index, load_config, load_config_or_default, resolve_model
 from milepost.embeddings import Embedder, default_embedder
-from milepost.env import load_env
+from milepost.env import is_disabled, load_env
 from milepost.errors import MilepostError, UsageError
 from milepost.llm.client import LiteLlmClient, LlmClient
 from milepost.mcp_server import run_server
@@ -547,6 +547,8 @@ def _hook_payload() -> dict[str, Any]:
 
 def _run_hook(handler: Callable[[Path, dict[str, Any]], str]) -> None:
     """Hooks always exit 0: any failure prints a warning on stderr and adds no context."""
+    if is_disabled():
+        return
     try:
         payload = _hook_payload()
         output = handler(hook_project_root(payload, os.environ.get("CLAUDE_PROJECT_DIR")), payload)

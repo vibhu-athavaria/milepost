@@ -267,3 +267,32 @@ def test_hook_session_start_when_milepost_errors_then_exits_zero_with_stderr_war
     result = runner.invoke(cli.app, ["hook", "session-start"], input="{}")
 
     assert result.exit_code == 0 and "session boom" in result.output
+
+
+@pytest.mark.parametrize("command", ["session-start", "post-edit", "stop"])
+def test_hook_cli_when_milepost_disabled_then_prints_nothing(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, command: str
+) -> None:
+    repo = make_repo(tmp_path)
+    monkeypatch.setenv("MILEPOST_DISABLED", "1")
+
+    result = runner.invoke(
+        cli.app, ["hook", command], input=json.dumps(edit_payload(repo, "app/billing/charge.py"))
+    )
+
+    assert result.exit_code == 0 and result.output == ""
+
+
+def test_hook_cli_when_disabled_is_zero_then_hooks_still_work(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    repo = make_repo(tmp_path)
+    monkeypatch.setenv("MILEPOST_DISABLED", "0")
+
+    result = runner.invoke(
+        cli.app,
+        ["hook", "post-edit"],
+        input=json.dumps(edit_payload(repo, "app/billing/charge.py")),
+    )
+
+    assert "module/billing" in context_of(result.output.strip())

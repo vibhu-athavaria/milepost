@@ -12,6 +12,7 @@ GITATTRIBUTES_LINE = "kb/**/*.md merge=milepost"
 # Hooks live in the shared git directory, so they also run in worktrees and on older branches
 # that have no milepost.toml. There they must do nothing, not block the commit.
 _GUARD = (
+    'case "${MILEPOST_DISABLED:-}" in 1|true|TRUE|True|yes|YES|Yes|on|ON|On) exit 0 ;; esac\n'
     "[ -f milepost.toml ] || exit 0\n"
     "command -v milepost >/dev/null 2>&1 "
     '|| { echo "milepost: not installed, skipping" >&2; exit 0; }'
