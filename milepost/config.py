@@ -79,6 +79,8 @@ class Draft(_Model):
     provider_model: str = "${MILEPOST_MODEL}"
     max_source_bytes: PositiveInt = 200000
     exclude: list[str] = ["**/.env*", "**/*secret*", "**/*.pem", "**/*.key", "**/credentials*"]
+    # Files the credential scan would withhold from drafting but a person has checked are safe.
+    secret_scan_allow: list[str] = []
 
 
 class Check(_Model):

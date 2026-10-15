@@ -28,7 +28,6 @@ from milepost.errors import (
     NoteInvalid,
     NotFoundError,
     ProviderError,
-    SecretDetected,
     UsageError,
 )
 from milepost.llm.client import LlmClient
@@ -38,8 +37,8 @@ from milepost.services.draft import (
     build_draft_packet,
     collect_sources,
     draft_modules,
+    notice_blocks,
     scan_for_secrets,
-    truncation_note,
 )
 from milepost.services.impact import file_impact
 from milepost.services.index import run_index
@@ -92,7 +91,7 @@ def _config(root: Path, required: bool = True) -> Config:
 def _translate(error: MilepostError) -> KbToolError:
     if isinstance(error, NotFoundError):
         return KbToolError("NOT_FOUND", str(error))
-    if isinstance(error, SecretDetected | UsageError):
+    if isinstance(error, UsageError):
         return KbToolError("INVALID_INPUT", str(error))
     return KbToolError("ENVIRONMENT", str(error))
 
@@ -396,8 +395,13 @@ def kb_update(
     meta.setdefault("related", module.related)
     if agent_mode_create:
         collected = collect_sources(root, config, name)
-        if collected.truncated and "Truncated draft" not in body:
-            body = truncation_note(collected.outline_only) + "\n" + body
+        missing = [
+            text
+            for heading, text in notice_blocks(collected.outline_only, collected.withheld).items()
+            if heading not in body  # the agent may have reworded the block but kept its heading
+        ]
+        if missing:
+            body = "\n".join(missing) + "\n" + body
 
     if not read_hash:
         raise KbToolError(
@@ -467,13 +471,17 @@ def kb_draft_module(
             "source_hash_now": packet.source_hash_now,
             "files": packet.sent_files,
             "outline_only": packet.outline_only,
+            "withheld": packet.withheld,
             "truncation_notice": packet.truncation_notice,
             "estimated_tokens": packet.estimated_tokens,
             "next_steps": [
                 "write the note body yourself, following system_prompt and using only the "
                 "sources above; start with the first section heading, no frontmatter",
                 *(
-                    ["put truncation_notice at the top of the body"]
+                    [
+                        "put truncation_notice at the top of the body "
+                        "(it names the files that were not read)"
+                    ]
                     if packet.truncation_notice
                     else []
                 ),

@@ -12,7 +12,7 @@ from milepost.config import Config
 from milepost.core.glob import FLAGS, expand_sources
 from milepost.core.hashing import compute_source_hash
 from milepost.core.notes import Note, parse_note, read_note, write_note
-from milepost.errors import NoteInvalid, ProviderError, SecretDetected, UsageError
+from milepost.errors import NoteInvalid, ProviderError, UsageError
 from milepost.llm.client import LlmClient, complete_with_retries
 
 PROMPT_PATH = Path(__file__).resolve().parent.parent / "prompts" / "draft_l2.md"
@@ -31,13 +31,28 @@ _SECRET_PATTERNS = [
 ]
 
 
-def truncation_note(outline_only: list[str]) -> str:
-    listed = ", ".join(f"`{path}`" for path in outline_only)
-    return (
-        "> **Truncated draft.** The sources exceeded `draft.max_source_bytes`, so these files "
-        f"were summarized from their outline only and are not described here: {listed}. "
-        "Raise `draft.max_source_bytes` and redraft to cover them.\n"
-    )
+def notice_blocks(outline_only: list[str], withheld: list[str]) -> dict[str, str]:
+    """Heading -> text of what a note must say about sources the drafter did not fully read."""
+    blocks = {}
+    if outline_only:
+        listed = ", ".join(f"`{path}`" for path in outline_only)
+        blocks["Truncated draft"] = (
+            "> **Truncated draft.** The sources exceeded `draft.max_source_bytes`, so these files "
+            f"were summarized from their outline only and are not described here: {listed}. "
+            "Raise `draft.max_source_bytes` and redraft to cover them.\n"
+        )
+    if withheld:
+        listed = ", ".join(f"`{path}`" for path in withheld)
+        blocks["Files withheld"] = (
+            "> **Files withheld.** These files looked like they contain a credential, so they "
+            f"were not read and are not described here: {listed}. If a person has checked they "
+            "are safe, list them in `draft.secret_scan_allow` and redraft.\n"
+        )
+    return blocks
+
+
+def source_notice(outline_only: list[str], withheld: list[str]) -> str:
+    return "\n".join(notice_blocks(outline_only, withheld).values())
 
 
 @dataclass
@@ -48,6 +63,7 @@ class Collected:
     truncated: bool = False
     contents: dict[str, str] = field(default_factory=dict)
     outline_only: list[str] = field(default_factory=list)
+    withheld: list[str] = field(default_factory=list)
 
     @property
     def estimated_tokens(self) -> int:
@@ -69,11 +85,17 @@ def collect_sources(root: Path, config: Config, module_id: str) -> Collected:
     contents: dict[str, str] = {}
     truncated = False
     outline_only: list[str] = []
+    withheld: list[str] = []
     for path in kept:
         data = (root / path).read_bytes()
         if b"\x00" in data:
             continue
         text = data.decode("utf-8", errors="replace")
+        if looks_like_secret(text) and not wcglob.globmatch(
+            path, config.draft.secret_scan_allow, flags=FLAGS
+        ):
+            withheld.append(path)  # only this file is dropped, never the whole module
+            continue
         if not truncated and used + len(data) <= budget:
             used += len(data)
             parts.append(f"=== {path} ===\n{text}\n")
@@ -84,13 +106,19 @@ def collect_sources(root: Path, config: Config, module_id: str) -> Collected:
             outline = _outline(text)
             parts.append(f"=== {path} (outline only) ===\n{outline}")
             contents[path] = outline
-    return Collected("".join(parts), sorted(contents), excluded, truncated, contents, outline_only)
+    return Collected(
+        "".join(parts), sorted(contents), excluded, truncated, contents, outline_only, withheld
+    )
+
+
+def looks_like_secret(text: str) -> bool:
+    return any(pattern.search(text) for pattern in _SECRET_PATTERNS)
 
 
 def scan_for_secrets(contents: dict[str, str]) -> str | None:
-    """Path of the first file that looks like it holds a credential. Never returns the value."""
+    """Path of the first text that looks like it holds a credential. Never returns the value."""
     for path, text in contents.items():
-        if any(pattern.search(text) for pattern in _SECRET_PATTERNS):
+        if looks_like_secret(text):
             return path
     return None
 
@@ -111,18 +139,23 @@ class DraftPacket:
     source_hash_now: str
     sent_files: list[str]
     outline_only: list[str]
+    withheld: list[str]
     truncation_notice: str
     estimated_tokens: int
 
 
 def build_draft_packet(root: Path, config: Config, module_id: str) -> DraftPacket:
     """The drafting prompt and the module's sources, after `draft.exclude`, the size budget and
-    the secret scan. No model is called. Raises SecretDetected naming the file, not the value."""
+    the secret scan. No model is called. A file that looks like it holds a credential is left out
+    and listed in `withheld`; if that leaves nothing to read, raises UsageError."""
     module = config.modules[module_id]
     collected = collect_sources(root, config, module_id)
-    leaked = scan_for_secrets(collected.contents)
-    if leaked is not None:
-        raise SecretDetected(leaked)
+    if collected.withheld and not collected.contents:
+        raise UsageError(
+            f"module '{module_id}': every file looked like it holds a credential "
+            f"({', '.join(collected.withheld)}); if a person has checked them, list them in "
+            "draft.secret_scan_allow in milepost.toml"
+        )
     return DraftPacket(
         module_id=module_id,
         system_prompt=_system_prompt(config, module_id),
@@ -130,7 +163,8 @@ def build_draft_packet(root: Path, config: Config, module_id: str) -> DraftPacke
         source_hash_now=compute_source_hash(root, module.sources, config.structure.ignore).value,
         sent_files=collected.sent,
         outline_only=collected.outline_only,
-        truncation_notice=truncation_note(collected.outline_only) if collected.truncated else "",
+        withheld=collected.withheld,
+        truncation_notice=source_notice(collected.outline_only, collected.withheld),
         estimated_tokens=collected.estimated_tokens,
     )
 

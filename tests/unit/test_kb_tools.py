@@ -351,7 +351,7 @@ def test_kb_draft_module_when_model_env_unset_then_environment_error_naming_vari
     assert error.value.code == "ENVIRONMENT" and "MILEPOST_MODEL" in error.value.message
 
 
-def test_kb_draft_module_when_secret_in_sources_then_aborts_with_file_name_only(
+def test_kb_draft_module_when_every_file_has_a_secret_then_refused_naming_file_only(
     tmp_path: Path,
 ) -> None:
     repo = make_repo(tmp_path)
@@ -368,6 +368,7 @@ def test_kb_draft_module_when_secret_in_sources_then_aborts_with_file_name_only(
 
     assert error.value.code == "INVALID_INPUT"
     assert "app/other/x.py" in error.value.message
+    assert "secret_scan_allow" in error.value.message
     assert "AKIAABCDEFGHIJKLMNOP" not in error.value.message
     assert client.calls == 0
 
@@ -568,17 +569,32 @@ def test_kb_draft_module_when_mode_agent_then_returns_packet_and_calls_no_model(
     assert not (repo.root / "kb/modules/other.md").exists()
 
 
-def test_kb_draft_module_when_mode_agent_and_secret_in_sources_then_packet_refused_naming_file(
+def test_kb_draft_module_when_mode_agent_and_one_file_has_a_secret_then_packet_withholds_it(
     tmp_path: Path,
 ) -> None:
     repo = agent_repo(tmp_path)
-    repo.write("app/other/x.py", 'KEY = "AKIAABCDEFGHIJKLMNOP"\n')
+    repo.write("app/other/keys.py", 'KEY = "AKIAABCDEFGHIJKLMNOP"\n')
 
-    with pytest.raises(KbToolError) as error:
-        kb_draft_module(repo.root, "other", FakeClient(), {}, NOW, no_sleep)
+    result = kb_draft_module(repo.root, "other", FakeClient(), {}, NOW, no_sleep)
 
-    assert error.value.code == "INVALID_INPUT" and "app/other/x.py" in error.value.message
-    assert "AKIAABCDEFGHIJKLMNOP" not in error.value.message
+    assert result["withheld"] == ["app/other/keys.py"]
+    assert "def run()" in result["sources"]
+    assert "AKIAABCDEFGHIJKLMNOP" not in result["sources"]
+    assert "Files withheld" in result["truncation_notice"]
+    assert any("truncation_notice at the top" in step for step in result["next_steps"])
+
+
+def test_kb_update_when_agent_creates_note_and_a_file_was_withheld_then_notice_is_added(
+    tmp_path: Path,
+) -> None:
+    repo = agent_repo(tmp_path)
+    repo.write("app/other/keys.py", 'KEY = "AKIAABCDEFGHIJKLMNOP"\n')
+    packet = kb_draft_module(repo.root, "other", FakeClient(), {}, NOW, no_sleep)
+
+    kb_update(repo.root, "module/other", "## Purpose\n\nRuns.\n", packet["source_hash_now"], NOW)
+
+    body = (repo.root / "kb/modules/other.md").read_text()
+    assert "Files withheld" in body and "`app/other/keys.py`" in body
 
 
 def test_kb_draft_module_when_mode_agent_and_note_exists_then_conflict(tmp_path: Path) -> None:
@@ -787,3 +803,16 @@ def test_cached_embedders_when_extra_missing_first_then_picked_up_without_restar
     monkeypatch.setattr(mcp_server, "default_embedder", lambda *args: sentinel)
 
     assert cache(config) is sentinel
+
+
+def test_kb_update_when_agent_kept_one_notice_heading_then_only_the_missing_block_is_added(
+    tmp_path: Path,
+) -> None:
+    repo = agent_repo(tmp_path)
+    repo.write("app/other/keys.py", 'KEY = "AKIAABCDEFGHIJKLMNOP"\n')
+    packet = kb_draft_module(repo.root, "other", FakeClient(), {}, NOW, no_sleep)
+    body = "> **Files withheld.** reworded by the agent.\n\n## Purpose\n\nRuns.\n"
+
+    kb_update(repo.root, "module/other", body, packet["source_hash_now"], NOW)
+
+    assert (repo.root / "kb/modules/other.md").read_text().count("Files withheld") == 1

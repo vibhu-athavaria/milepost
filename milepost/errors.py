@@ -56,14 +56,6 @@ class ProviderError(MilepostError):
     exit_code = 4
 
 
-class SecretDetected(ProviderError):
-    """Source sent for drafting contains something that looks like a credential."""
-
-    def __init__(self, path: str) -> None:
-        self.path = path
-        super().__init__(f"possible secret in {path}; nothing was sent for this module")
-
-
 class NotFoundError(MilepostError):
     """A path or id the caller named does not exist (exit 2)."""
 

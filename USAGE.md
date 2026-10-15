@@ -253,6 +253,7 @@ The git hooks `hooks install` adds are `post-merge` and `post-checkout` (run `in
 | `NOTE_INVALID`, `MISSING_KEY`, `INVALID_STATUS`, `ID_PATH_MISMATCH`, ... | failure | A note's frontmatter is missing or wrong |
 | `MISSING_NOTE` | warning | A declared module has no note yet |
 | `UNCOVERED_DIR` | warning | A source directory is covered by no module |
+| A note says "Files withheld" | The credential scan found something shaped like a key or password in those files (often a constant such as a token type) and left only them out. Read the file; if it is safe, add it to `[draft] secret_scan_allow` in `milepost.toml` and redraft. (`draft.exclude` still wins: a path matching `**/*secret*` is never read, allow-listed or not.) Until then the note says it does not describe them |
 | `CITATION_BROKEN` | warning | A note cites (in backticks, in Entry points, File map, Invariants or Gotchas) a file that is not in the repository, or a `file::symbol` whose name does not appear in the file. Lenient on purpose: it flags only what is clearly absent |
 | `UNREVIEWED_CHURN` | warning | A reviewed note's source files changed by more than `visibility.churn_warn_lines` since the review. Never a failure |
 
@@ -270,7 +271,7 @@ The git hooks `hooks install` adds are `post-merge` and `post-checkout` (run `in
 | `[modules.<id>]` | One table per module: `sources` (file globs, relative to the repo root), optional `title`, `related`, and `verify` (commands that check the module, shown to agents; write them yourself) |
 | `[structure]` | `languages`, `ignore` globs, and `roots` where module candidates are looked for |
 | `[index]` | Search index location and the embedding model and its dimension (these must agree) |
-| `[draft]` | `mode` (`model` or `agent`), drafting limits (`max_source_bytes`, default 200000 per module; larger modules are partly sent as outlines and the note says so) and files that are never sent (`**/.env*`, keys, credentials) |
+| `[draft]` | `mode` (`model` or `agent`), drafting limits (`max_source_bytes`, default 200000 per module; larger modules are partly sent as outlines and the note says so) files that are never sent (`**/.env*`, keys, credentials), and `secret_scan_allow` (globs of files the credential scan withheld that you have checked and want included) |
 | `[check]` | `stale` (`warn`, the default, or `fail`: a pull request that edits covered code without touching its note fails) and `fail_on` (`stale`, the default, or `none` for report-only) |
 | `[visibility]` | `agent_trailers` (regexes that mark a commit as agent-authored; default: Claude Code's `Co-Authored-By ... noreply@anthropic.com` trailer and its "Generated with Claude Code" line) and `churn_warn_lines` (default 1000) |
 

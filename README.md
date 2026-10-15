@@ -164,7 +164,7 @@ Files and symbols cited in backticks are checked: `milepost check` warns when a 
 | Drafting: by Claude Code itself (the default, no key), or with your own model (OpenRouter, Anthropic, anything LiteLLM supports) via the optional `model` extra | Works |
 | Search over the notes: keyword by default, plus meaning-based with the optional `search` extra (local, no API key) | Works |
 | Human visibility: `status` (unreviewed change per module), `report` (a pull-request aid, in the CI job summary), a churn warning, a `CODEOWNERS` template | Works |
-| Safe handling of your code: secret scan, exclusion list, a dry run that lists every file first | Works |
+| Safe handling of your code: secret scan (withholds only the flagged file), exclusion list, a dry run that lists every file first | Works |
 | Install from a marketplace or PyPI | Not yet. Needs a release |
 | Other agents (Cursor, Codex and so on) | Untested. The server is standard MCP, and an `AGENTS.md` snippet carries the playbook |
 

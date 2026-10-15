@@ -153,3 +153,17 @@ def test_init_cli_when_default_mode_dry_run_then_wording_says_agent_not_model(re
     assert result.exit_code == 0, result.output
     assert "would show your coding agent 1 file(s)" in result.output
     assert "would send" not in result.output
+
+
+def test_init_cli_when_dry_run_and_file_looks_like_a_secret_then_warns_it_would_be_left_out(
+    repo: KbRepo,
+) -> None:
+    repo.write("app/billing/keys.py", 'KEY = "AKIAABCDEFGHIJKLMNOP"\n')
+
+    result = runner.invoke(
+        cli.app, ["init", "--repo", str(repo.root), "--modules", "billing", "--dry-run"]
+    )
+
+    assert result.exit_code == 0, result.output
+    assert "app/billing/keys.py" in result.output and "secret_scan_allow" in result.output
+    assert "AKIAABCDEFGHIJKLMNOP" not in result.output
