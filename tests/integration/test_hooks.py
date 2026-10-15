@@ -23,6 +23,8 @@ def hook_path(repo: KbRepo, name: str) -> Path:
 
 
 def run_hook(repo: KbRepo, name: str, fake_bin: Path | None) -> subprocess.CompletedProcess[str]:
+    if not (repo.root / "milepost.toml").exists():
+        (repo.root / "milepost.toml").write_text('[project]\nname = "x"\n')
     env = dict(os.environ)
     base = "/usr/bin:/bin"
     env["PATH"] = f"{fake_bin}:{base}" if fake_bin else base
@@ -179,3 +181,36 @@ def test_outdated_hooks_when_pre_commit_written_by_an_older_milepost_then_report
     path.write_text(path.read_text().replace(" --no-churn", ""))
 
     assert outdated_hooks(repo.root) == ["pre-commit"]
+
+
+def test_hooks_when_repo_has_no_milepost_toml_then_they_do_nothing_and_never_call_milepost(
+    tmp_path: Path,
+) -> None:
+    repo = make_repo(tmp_path)
+    install_hooks(repo.root)
+    bin_dir = fake_milepost(tmp_path, exit_code=1)  # would fail loudly if it were called
+
+    for name in ("pre-commit", "post-merge", "post-checkout"):
+        env = dict(os.environ)
+        env["PATH"] = f"{bin_dir}:/usr/bin:/bin"
+        done = subprocess.run(
+            ["sh", str(hook_path(repo, name))],
+            cwd=repo.root,
+            env=env,
+            capture_output=True,
+            text=True,
+        )
+        assert done.returncode == 0 and done.stderr == "", name
+
+
+def test_install_when_hooks_path_set_then_snippet_shows_the_milepost_commands(
+    tmp_path: Path,
+) -> None:
+    repo = make_repo(tmp_path)
+    subprocess.run(["git", "config", "core.hooksPath", ".githooks"], cwd=repo.root, check=True)
+
+    report = install_hooks(repo.root)
+
+    assert "post-merge: milepost index" in report.snippet
+    assert "pre-commit: exec milepost check --no-churn" in report.snippet
+    assert "exit 0" not in report.snippet
