@@ -216,7 +216,7 @@ def init(
     if report.drafted:
         typer.echo(
             "Next: read each draft, run `milepost review <id>` for each one that is right, "
-            "then commit milepost.toml, kb/, .gitattributes and the CI workflow."
+            "then commit milepost.toml, kb/, .gitignore, .gitattributes and the CI workflow."
         )
     elif not report.declared:
         typer.echo(
