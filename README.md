@@ -29,7 +29,7 @@ The first layer is useful the moment you install it. The second is where the rul
 You need [uv](https://docs.astral.sh/uv/). In any git repository with Python, TypeScript or JavaScript:
 
 ```bash
-git clone <this repository> && cd milepost
+git clone https://github.com/vibhu-athavaria/milepost ~/milepost && cd ~/milepost
 uv sync --python 3.12 && uv tool install --editable .      # lean: no API key, no ML libraries
 cd /path/to/your/repo
 milepost outline src/billing/charge.py     # what is in this file, and where
@@ -66,8 +66,9 @@ You need [Claude Code](https://claude.com/claude-code).
 1. **Start Claude Code in your repository with the plugin loaded:**
    ```bash
    cd /path/to/your/repo
-   claude --plugin-dir /path/to/milepost/plugin
+   claude --plugin-dir ~/milepost/plugin
    ```
+   The plugin is the `plugin/` folder inside the checkout you cloned in the first step (shown here as `~/milepost`; use your own path if you cloned elsewhere). You point Claude Code at it with `--plugin-dir`, so there is nothing to download or install separately.
 2. **Run `/milepost:kb-init`.** It checks your setup, lists candidate modules, shows exactly which files the agent will read to draft the notes and the token estimate, and asks **once**. By default Claude Code itself writes the drafts, so there is no key to set up. (To use a separate cheaper model, see [USAGE.md](USAGE.md).)
 3. **Read the drafts** under `kb/modules/`, fix anything wrong, and approve each with `milepost review module/<id>`. Then commit `milepost.toml`, `kb/`, `.gitignore`, `.gitattributes` and `.github/workflows/milepost.yml`.
 4. **Work as usual.** The agent is shown the module index at session start, is told which notes cover each file it edits, and is stopped once if it finishes with a note out of date.
