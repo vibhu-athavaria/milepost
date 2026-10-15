@@ -26,6 +26,8 @@ def load_env(root: Path, environ: MutableMapping[str, str] | None = None) -> Non
     if not path.is_file():
         return
     for key, value in dotenv_values(path).items():
+        if key == DISABLED_VAR:  # per-shell only: a committed file must not pause half the tool
+            continue
         if value and not target.get(key):
             target[key] = value
 

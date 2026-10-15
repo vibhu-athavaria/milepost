@@ -102,13 +102,13 @@ Set `MILEPOST_DISABLED=1` in the shell that starts Claude Code:
 MILEPOST_DISABLED=1 claude --plugin-dir ~/milepost/plugin
 ```
 
-The plugin hooks print nothing, the MCP server starts with no tools (its instructions say it is paused), and the git hooks exit 0 without running. Commands you type yourself (`milepost check`, `status`, and so on) still run. Unset the variable to resume. Accepted values are `1`, `true`, `yes` and `on`.
+The plugin hooks print nothing, the MCP server starts with no tools (its instructions say it is paused), and the git hooks exit 0 without running. Commands you type yourself (`milepost check`, `status`, and so on) still run. Unset the variable and restart Claude Code to resume: the MCP server reads it once at startup. Accepted values are `1`, `true`, `yes` and `on`. Git hooks installed by an older version do not know the variable, so run `milepost hooks install` once to refresh them.
 
 Pausing does not hide `kb/`, which is plain markdown the agent can still read, nor any Milepost lines in `CLAUDE.md` or `AGENTS.md`. For a fair comparison use the worktrees below.
 
 ## Compare the same task with and without Milepost
 
-The pause switch is not enough for a fair comparison, because the notes stay readable. Use two copies of the same commit. The plugin only exists in sessions you start with `--plugin-dir`, so the comparison is two sessions on two copies of the same commit. Use a separate worktree for each, so the notes and settings of one cannot leak into the other.
+The pause switch is not enough for a fair comparison, because the notes stay readable. Run the same task in two sessions, each in its own worktree of the same commit, so the notes and settings of one cannot leak into the other.
 
 ```bash
 cd ~/your-repo

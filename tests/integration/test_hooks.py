@@ -217,7 +217,7 @@ def test_install_when_hooks_path_set_then_snippet_shows_the_milepost_commands(
     assert "exit 0" not in report.snippet
 
 
-@pytest.mark.parametrize("value", ["1", "true", "yes", "on"])
+@pytest.mark.parametrize("value", ["1", "true", "yes", "on", "tRUE", " 1 ", "On"])
 def test_hooks_when_milepost_disabled_then_they_do_nothing(tmp_path: Path, value: str) -> None:
     repo = make_repo(tmp_path)
     install_hooks(repo.root)
@@ -234,3 +234,24 @@ def test_hooks_when_milepost_disabled_then_they_do_nothing(tmp_path: Path, value
             text=True,
         )
         assert done.returncode == 0 and done.stderr == "", (name, value)
+
+
+@pytest.mark.parametrize("value", ["0", "", "false", "no"])
+def test_hooks_when_disabled_value_is_off_then_they_still_run_milepost(
+    tmp_path: Path, value: str
+) -> None:
+    repo = make_repo(tmp_path)
+    install_hooks(repo.root)
+    (repo.root / "milepost.toml").write_text('[project]\nname = "x"\n')
+    bin_dir = fake_milepost(tmp_path, exit_code=1)
+    env = {**os.environ, "PATH": f"{bin_dir}:/usr/bin:/bin", "MILEPOST_DISABLED": value}
+
+    done = subprocess.run(
+        ["sh", str(hook_path(repo, "pre-commit"))],
+        cwd=repo.root,
+        env=env,
+        capture_output=True,
+        text=True,
+    )
+
+    assert done.returncode == 1
