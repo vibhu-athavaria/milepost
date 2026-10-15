@@ -2,6 +2,7 @@
 
 import asyncio
 import json
+import os
 import sys
 from pathlib import Path
 from typing import Any
@@ -37,9 +38,13 @@ def make_repo(tmp_path: Path) -> KbRepo:
     return repo
 
 
-async def session_calls(root: Path, calls: list[tuple[str, dict[str, Any]]]) -> list[Any]:
+async def session_calls(
+    root: Path, calls: list[tuple[str, dict[str, Any]]], env: dict[str, str] | None = None
+) -> list[Any]:
     params = StdioServerParameters(
-        command=sys.executable, args=["-m", "milepost", "serve", "--repo", str(root)]
+        command=sys.executable,
+        args=["-m", "milepost", "serve", "--repo", str(root)],
+        env={**os.environ, **env} if env else None,
     )
     async with stdio_client(params) as (read, write), ClientSession(read, write) as session:
         await session.initialize()
@@ -97,3 +102,11 @@ def test_mcp_stdio_when_tool_fails_then_error_result_names_the_code(tmp_path: Pa
 
     assert result.is_error
     assert "NOT_FOUND" in result.content[0].text
+
+
+def test_mcp_stdio_when_milepost_disabled_then_server_offers_no_tools(tmp_path: Path) -> None:
+    repo = make_repo(tmp_path)
+
+    (names,) = asyncio.run(session_calls(repo.root, [], env={"MILEPOST_DISABLED": "1"}))
+
+    assert names == set()

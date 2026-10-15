@@ -62,3 +62,12 @@ def test_dotenv_is_ignored_when_not_listed_then_false(git_repo: Path) -> None:
 
 def test_dotenv_is_ignored_when_no_dotenv_then_true(git_repo: Path) -> None:
     assert dotenv_is_ignored(git_repo) is True
+
+
+def test_load_env_when_dotenv_sets_milepost_disabled_then_it_is_ignored(tmp_path: Path) -> None:
+    (tmp_path / ".env").write_text("MILEPOST_DISABLED=1\nOTHER=x\n")
+    environ: dict[str, str] = {}
+
+    load_env(tmp_path, environ)
+
+    assert environ == {"OTHER": "x"}

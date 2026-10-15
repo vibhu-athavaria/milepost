@@ -94,9 +94,21 @@ Nothing more to run. During a session:
 
 ---
 
+## Pause Milepost
+
+Set `MILEPOST_DISABLED=1` in the shell that starts Claude Code:
+
+```bash
+MILEPOST_DISABLED=1 claude --plugin-dir ~/milepost/plugin
+```
+
+The plugin hooks print nothing, the MCP server starts with no tools (its instructions say it is paused), and the git hooks exit 0 without running. Commands you type yourself (`milepost check`, `status`, and so on) still run. Unset the variable and restart Claude Code to resume: the MCP server reads it once at startup. Accepted values are `1`, `true`, `yes` and `on`. Git hooks installed by an older version do not know the variable, so run `milepost hooks install` once to refresh them.
+
+Pausing does not hide `kb/`, which is plain markdown the agent can still read, nor any Milepost lines in `CLAUDE.md` or `AGENTS.md`. For a fair comparison use the worktrees below.
+
 ## Compare the same task with and without Milepost
 
-There is no pause switch. The plugin only exists in sessions you start with `--plugin-dir`, so the comparison is two sessions on two copies of the same commit. Use a separate worktree for each, so the notes and settings of one cannot leak into the other.
+The pause switch is not enough for a fair comparison, because the notes stay readable. Run the same task in two sessions, each in its own worktree of the same commit, so the notes and settings of one cannot leak into the other.
 
 ```bash
 cd ~/your-repo
@@ -272,6 +284,7 @@ Needed only to draft notes with a separate model: `milepost init --model-mode` (
 |---|---|
 | `MILEPOST_MODEL` | The model used to draft notes, in LiteLLM's format. For OpenRouter: `openrouter/<OpenRouter model slug>` |
 | The provider's own key variable | `OPENROUTER_API_KEY` for an `openrouter/...` model, `ANTHROPIC_API_KEY` for an Anthropic model |
+| `MILEPOST_DISABLED` | Set to `1` to pause Milepost: see [Pause Milepost](#pause-milepost). Not read from `.env` |
 
 Set them in your shell, or in a `.env` file at the repository root (see [templates/.env.example](templates/.env.example)). milepost loads `.env` for `draft`, `init`, `doctor` and `serve`; a variable already set in the shell wins. `milepost init` adds `.env` to `.gitignore`, and `doctor` warns if a `.env` exists that git does not ignore.
 

@@ -13,6 +13,7 @@ from pydantic import Field
 
 from milepost.config import Config
 from milepost.embeddings import Embedder, default_embedder
+from milepost.env import is_disabled
 from milepost.llm.client import LiteLlmClient, LlmClient
 from milepost.services import kb
 
@@ -43,6 +44,12 @@ class _CachedEmbedders:
         return self._by_model[key]
 
 
+PAUSED_INSTRUCTIONS = (
+    "Milepost is paused (MILEPOST_DISABLED is set). It offers no tools in this session; work "
+    "from the code directly."
+)
+
+
 def _guard(call: Callable[[], dict[str, Any]]) -> dict[str, Any]:
     try:
         return call()
@@ -55,6 +62,8 @@ def build_server(
     embedder_for: Callable[[Config], Embedder | None] | None = None,
     client: LlmClient | None = None,
 ) -> MCPServer:
+    if is_disabled():
+        return MCPServer("milepost", instructions=PAUSED_INSTRUCTIONS)
     server = MCPServer("milepost", instructions=INSTRUCTIONS)
     llm = client or LiteLlmClient()
     embedders = embedder_for or _CachedEmbedders()
