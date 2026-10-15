@@ -25,13 +25,14 @@ A complete note, with every frontmatter field, is in [templates/note.md.template
 
 **You need:** [uv](https://docs.astral.sh/uv/), Python 3.12, [Claude Code](https://claude.com/claude-code), and a git repository to try it on. By default Claude Code writes the first drafts itself (*agent mode*), so no API key is needed; you can instead use a separate model (below).
 
-The plugin lives in [plugin/](plugin/) and runs your local checkout of milepost. That means it must be loaded in place with `--plugin-dir`. Installing it from a marketplace, which copies it elsewhere, needs a published release and does not work yet.
+The plugin is the [plugin/](plugin/) folder of your clone of this repository (below, `~/milepost` stands for wherever you cloned it) and it runs that checkout of milepost. That means it must be loaded in place with `--plugin-dir`. Installing it from a marketplace, which copies it elsewhere, needs a published release and does not work yet.
 
 ### 1. Set up
 
-In the milepost checkout:
+Clone this repository once and set it up:
 
 ```bash
+git clone https://github.com/vibhu-athavaria/milepost ~/milepost && cd ~/milepost
 uv sync --python 3.12 && uv tool install --editable .      # the second command puts `milepost` on your PATH
 ```
 
@@ -48,7 +49,7 @@ Nothing else is needed for the default. Agent mode spends tokens in your Claude 
 
 ```bash
 cd /path/to/your/repo
-claude --plugin-dir /path/to/milepost/plugin
+claude --plugin-dir ~/milepost/plugin
 ```
 
 Approve the MCP server and hooks if asked. Run `/mcp`: `milepost` should be listed with ten `kb_*` tools.
@@ -73,7 +74,7 @@ Read each note under `kb/modules/`. Fix what is wrong, then approve it:
 milepost review module/<id>
 ```
 
-(If you skipped `uv tool install`, use `uv run --project /path/to/milepost milepost review module/<id>`.) Then commit `milepost.toml`, `kb/`, `.gitignore`, `.gitattributes` and `.github/workflows/milepost.yml`.
+(If you skipped `uv tool install`, use `uv run --project ~/milepost milepost review module/<id>`.) Then commit `milepost.toml`, `kb/`, `.gitignore`, `.gitattributes` and `.github/workflows/milepost.yml`.
 
 ### 5. Work
 
@@ -87,7 +88,7 @@ Nothing more to run. During a session:
 ### What to expect on a first run
 
 - Search is keyword-only until you install the `search` extra; the first meaning-based search then downloads a ~130 MB model.
-- Each hook starts `uv run`, which adds a fraction of a second. To remove it, run `uv tool install --editable /path/to/milepost` and change the commands in `plugin/hooks/hooks.json` to plain `milepost hook ...`.
+- Each hook starts `uv run`, which adds a fraction of a second. To remove it, run `uv tool install --editable ~/milepost` and change the commands in `plugin/hooks/hooks.json` to plain `milepost hook ...`.
 - Drafting sends a module's source to your model provider (or shows it to your agent). Only run it on code you are allowed to send, and read the dry-run list first.
 - The CI workflow that `init` writes installs milepost from PyPI, which does not exist yet, so that step fails in CI. Edit `.github/workflows/milepost.yml` to install from your checkout or a git URL, or leave the workflow out of a first trial.
 
@@ -98,7 +99,7 @@ Nothing more to run. During a session:
 You don't need the plugin to use milepost.
 
 ```bash
-git clone <this repository> && cd milepost
+git clone https://github.com/vibhu-athavaria/milepost ~/milepost && cd ~/milepost
 uv sync --python 3.12
 uv tool install --editable .          # puts `milepost` on your PATH (optional)
 ```
@@ -124,7 +125,7 @@ The default install is lean (no machine-learning libraries, no downloads). Two e
 
 `milepost doctor` says which are missing. For development use `uv sync --all-extras`.
 
-Without `uv tool install`, prefix commands with `uv run --project /path/to/milepost`. Every command accepts `--repo PATH`; the default is the nearest parent directory containing `milepost.toml`.
+Without `uv tool install`, prefix commands with `uv run --project ~/milepost`. Every command accepts `--repo PATH`; the default is the nearest parent directory containing `milepost.toml`.
 
 ---
 
@@ -255,8 +256,8 @@ Start with `milepost doctor`. It checks Python, git, SQLite, your model settings
 | Symptom | Likely cause and fix |
 |---|---|
 | `milepost: command not found` right after `uv tool install` | uv put the command in a folder that is not on your PATH. Run `uv tool update-shell` and open a new terminal (or add the folder uv printed to PATH) |
-| `/mcp` does not list `milepost` | Claude Code was not started with `--plugin-dir /path/to/milepost/plugin`, or `uv sync` was not run in the milepost checkout. Run `claude plugin validate /path/to/milepost/plugin` |
-| Hooks seem to do nothing | They fail open on purpose. Run one by hand: `echo '{}' \| uv run --project /path/to/milepost milepost hook session-start`, and read stderr |
+| `/mcp` does not list `milepost` | Claude Code was not started with `--plugin-dir ~/milepost/plugin`, or `uv sync` was not run in the milepost checkout. Run `claude plugin validate ~/milepost/plugin` |
+| Hooks seem to do nothing | They fail open on purpose. Run one by hand: `echo '{}' \| uv run --project ~/milepost milepost hook session-start`, and read stderr |
 | `config file not found` | You are outside a repository with a `milepost.toml`. Run `/milepost:kb-init` or `milepost init`, or pass `--repo` |
 | `MILEPOST_MODEL is not set` | You are in model mode. Set it and the provider key in `.env` or your shell, or switch to agent mode (`[draft] mode = "agent"`), which needs neither |
 | `STALE_NOTE` after an ordinary edit | Expected: any commit that touches a covered file after the note was last touched counts, comments included. Re-read the code and touch the note (`kb_update`, or edit it; an unchanged body is fine if it still holds). It only warns unless you set `[check] stale = "fail"` |
