@@ -218,6 +218,12 @@ By default the code goes only where your coding agent already sends it: the agen
 </details>
 
 <details>
+<summary><b>How do I remove it?</b></summary>
+
+`milepost uninstall` lists everything milepost added and removes it with `--yes`, keeping your notes unless you pass `--delete-notes`. It never edits `CLAUDE.md`, CODEOWNERS or your hook manager; it lists those for you to clean by hand. See [USAGE.md](USAGE.md#remove-milepost). To only pause it, set `MILEPOST_DISABLED=1`.
+</details>
+
+<details>
 <summary><b>What does it cost?</b></summary>
 
 Drafting is the agent reading each module's source once (the dry run shows the estimate), or one model call per module in model mode. After that, each task adds the cost of the tool calls (the tool definitions and the session-start index, measured at roughly 2,000 tokens on a small repository) and of rewriting the notes it changes. The computed tools cost almost nothing. Whether the total is less than the searching it saves is exactly what the pilot is meant to measure.

@@ -17,7 +17,7 @@ import typer
 from milepost.config import Config, Index, load_config, load_config_or_default, resolve_model
 from milepost.embeddings import Embedder, default_embedder
 from milepost.env import is_disabled, load_env
-from milepost.errors import MilepostError, UsageError
+from milepost.errors import EnvironmentProblem, MilepostError, UsageError
 from milepost.llm.client import LiteLlmClient, LlmClient
 from milepost.mcp_server import run_server
 from milepost.services.check import run_check
@@ -40,6 +40,7 @@ from milepost.services.review import review_note
 from milepost.services.search import search as run_search
 from milepost.services.status import module_statuses
 from milepost.services.sync import sync as run_sync
+from milepost.services.uninstall import run_uninstall
 
 app = typer.Typer(
     help="Git-native, drift-checked codebase memory for coding agents.",
@@ -531,6 +532,44 @@ def hooks_install(repo: RepoOption = None) -> None:
         return
     typer.echo(f"git hooks not installed: {report.skipped_reason}")
     typer.echo(report.snippet)
+
+
+@app.command()
+@handle_errors
+def uninstall(
+    repo: RepoOption = None,
+    delete_notes: Annotated[
+        bool, typer.Option("--delete-notes", help="Also delete the notes under kb/")
+    ] = False,
+    yes: Annotated[bool, typer.Option("--yes", help="Do it; without this only list")] = False,
+) -> None:
+    """Remove what milepost added to this repository (lists first; --yes to apply)."""
+    root = _repo_root(repo)
+    report = run_uninstall(root, delete_notes, apply=yes)
+    if report.failed:
+        for line in report.done:
+            typer.echo(f"removed: {line}")
+        raise EnvironmentProblem(
+            f"stopped at {report.failed}. Already removed: {', '.join(report.done) or 'nothing'}. "
+            "Fix the cause and run again; finished steps are skipped."
+        )
+    verb = "removed" if report.applied else "would remove"
+    for line in report.remove:
+        typer.echo(f"{verb}: {line}")
+    for line in report.keep:
+        typer.echo(f"kept: {line}")
+    if not report.remove:
+        typer.echo("nothing to remove: milepost is not set up here")
+    for line in report.manual:
+        typer.echo(f"by hand: {line}")
+    if report.blocked:
+        if yes:
+            raise UsageError(report.blocked)
+        typer.echo(f"blocked: {report.blocked}")
+    if report.remove and not report.applied:
+        typer.echo("nothing was changed; run again with --yes to do this")
+    elif report.applied:
+        typer.echo("review with `git status`; undo with `git restore .` (tracked files)")
 
 
 @hooks_app.command("uninstall")

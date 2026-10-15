@@ -224,6 +224,7 @@ KB-Waive: dir:app/payments scratch code, a module comes later
 | `milepost sync [--base REF] [--json]` | What changed and which notes to update, and how. With no `milepost.toml` it lists the changed files only |
 | `milepost status [--json]` | Per module: who reviewed its note, and how many lines, commits and agent-authored commits have changed since. Never-reviewed modules first |
 | `milepost report --base REF [--format markdown\|json]` | A review aid for a change range. Always exits 0 |
+| `milepost uninstall [--delete-notes] [--yes]` | Remove what `init` added. Lists first; changes nothing without `--yes`. See [Remove Milepost](#remove-milepost) |
 | `milepost hooks install\|uninstall` | Manage the git hooks and the merge driver. Never overwrites a hook it did not write |
 | `milepost doctor [--json]` | Report the environment milepost needs. Exit 3 when a drafting variable is missing |
 | `milepost serve` | Run the MCP server on stdio. Started by the plugin, not by hand |
@@ -308,6 +309,20 @@ Start with `milepost doctor`. It checks Python, git, SQLite, your model settings
 | CI fails at "Install milepost" | milepost isn't on PyPI yet. Edit `.github/workflows/milepost.yml` to install from a git URL |
 | The first search is slow | With the `search` extra it is downloading the embedding model (about 130 MB) once |
 | A commit is blocked by `pre-commit` | A note is stale or invalid. Fix it, or `git commit --no-verify` |
+
+---
+
+## Remove Milepost
+
+```bash
+milepost uninstall                 # lists what it would remove; changes nothing
+milepost uninstall --yes           # removes it, keeps your notes
+milepost uninstall --delete-notes --yes   # also deletes the notes under kb/
+```
+
+It removes only what milepost wrote: the git hooks and the merge driver config, the milepost line in `.gitattributes` and the `kb/` lines in `.gitignore` (the `.env` line stays), the CI workflow if you have not edited it, the search index, and `milepost.toml`. The notes are plain markdown and are kept unless you pass `--delete-notes`; with that flag it refuses, and changes nothing, while `kb/` has uncommitted changes.
+
+It never edits files you own. It lists them instead, under "by hand": the milepost section in `CLAUDE.md` or `AGENTS.md`, CODEOWNERS lines for `kb/`, entries in your own hook manager, `MILEPOST_*` lines in `.env`, and the `--plugin-dir` flag. It does not touch git history. Nothing is committed for you: review with `git status`, commit the removal, and `git restore .` or a revert brings tracked files back. The tool itself is removed with `uv tool uninstall milepost`.
 
 ---
 

@@ -99,9 +99,23 @@ def uninstall_hooks(root: Path) -> list[str]:
             path.unlink()
             removed.append(name)
     if removed:
-        _git(root, "config", "--unset", "merge.milepost.driver")
-        _git(root, "config", "--unset", "merge.milepost.name")
+        unset_merge_driver(root)
     return removed
+
+
+def unset_merge_driver(root: Path) -> None:
+    _git(root, "config", "--local", "--unset", "merge.milepost.driver")
+    _git(root, "config", "--local", "--unset", "merge.milepost.name")
+
+
+def installed_hooks(root: Path) -> list[str]:
+    """Names of the git hooks that carry the milepost marker."""
+    directory = _hooks_dir(root)
+    return [name for name in HOOKS if _is_ours(directory / name)]
+
+
+def merge_driver_configured(root: Path) -> bool:
+    return bool(_git(root, "config", "--local", "--get", "merge.milepost.driver"))
 
 
 def outdated_hooks(root: Path) -> list[str]:
