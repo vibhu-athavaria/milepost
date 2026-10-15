@@ -60,9 +60,10 @@ Run **`/milepost:kb-init`**. It will:
 1. check your environment;
 2. list the candidate modules found under `src`, `app`, `backend/app`, `packages` and `apps`;
 3. show the files that would be sent for drafting and the token estimate, then **ask once** which modules to keep;
-4. declare those modules in `milepost.toml`, install the git hooks and merge driver, write the CI workflow, build the index, and draft one note per module.
+4. declare those modules in `milepost.toml`, install the git hooks and merge driver, write the CI workflow, and build the search index;
+5. then Claude Code reads each module's source and writes one draft note per module through the `kb_draft_module` and `kb_update` tools. This is the step that spends tokens, and it takes a minute or so per module.
 
-Nothing is sent or written before you answer. Notes stay `draft`.
+Claude Code may ask your permission to run the `milepost` commands and tools; approve them. Nothing is written before you answer the one question in step 3. Notes stay `draft` until you review them.
 
 ### 4. Review
 
@@ -72,7 +73,7 @@ Read each note under `kb/modules/`. Fix what is wrong, then approve it:
 milepost review module/<id>
 ```
 
-(If you skipped `uv tool install`, use `uv run --project /path/to/milepost milepost review module/<id>`.) Then commit `milepost.toml`, `kb/`, `.gitattributes` and `.github/workflows/milepost.yml`.
+(If you skipped `uv tool install`, use `uv run --project /path/to/milepost milepost review module/<id>`.) Then commit `milepost.toml`, `kb/`, `.gitignore`, `.gitattributes` and `.github/workflows/milepost.yml`.
 
 ### 5. Work
 
@@ -253,6 +254,7 @@ Start with `milepost doctor`. It checks Python, git, SQLite, your model settings
 
 | Symptom | Likely cause and fix |
 |---|---|
+| `milepost: command not found` right after `uv tool install` | uv put the command in a folder that is not on your PATH. Run `uv tool update-shell` and open a new terminal (or add the folder uv printed to PATH) |
 | `/mcp` does not list `milepost` | Claude Code was not started with `--plugin-dir /path/to/milepost/plugin`, or `uv sync` was not run in the milepost checkout. Run `claude plugin validate /path/to/milepost/plugin` |
 | Hooks seem to do nothing | They fail open on purpose. Run one by hand: `echo '{}' \| uv run --project /path/to/milepost milepost hook session-start`, and read stderr |
 | `config file not found` | You are outside a repository with a `milepost.toml`. Run `/milepost:kb-init` or `milepost init`, or pass `--repo` |

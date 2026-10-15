@@ -69,7 +69,7 @@ You need [Claude Code](https://claude.com/claude-code).
    claude --plugin-dir /path/to/milepost/plugin
    ```
 2. **Run `/milepost:kb-init`.** It checks your setup, lists candidate modules, shows exactly which files the agent will read to draft the notes and the token estimate, and asks **once**. By default Claude Code itself writes the drafts, so there is no key to set up. (To use a separate cheaper model, see [USAGE.md](USAGE.md).)
-3. **Read the drafts** under `kb/modules/`, fix anything wrong, and approve each with `milepost review module/<id>`. Then commit `milepost.toml`, `kb/`, `.gitattributes` and `.github/workflows/milepost.yml`.
+3. **Read the drafts** under `kb/modules/`, fix anything wrong, and approve each with `milepost review module/<id>`. Then commit `milepost.toml`, `kb/`, `.gitignore`, `.gitattributes` and `.github/workflows/milepost.yml`.
 4. **Work as usual.** The agent is shown the module index at session start, is told which notes cover each file it edits, and is stopped once if it finishes with a note out of date.
 
 Full steps, what to expect, and troubleshooting are in **[USAGE.md](USAGE.md)**.
