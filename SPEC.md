@@ -501,7 +501,7 @@ Lets an agent create the note for a new module in the same change as the code, w
 - Precondition: the module id is declared in `milepost.toml`. The tool never edits config; the agent adds the `[modules.<id>]` entry as an ordinary file edit first. An undeclared id returns `NOT_FOUND` with `next_steps` naming the config entry to add.
 - Refuses with `CONFLICT` if a note for the module already exists. Redrafting is a human action.
 - `draft.exclude`, the secret scan and the size budget all apply to the packet.
-- It returns the draft packet described in section 9.3 and calls no model.
+- It returns the draft packet described in section 9.3 and calls no model. The sources are served in parts of at most 30,000 characters (`part=1`, `2`, ...; the result carries `part` and `parts_total`), because Claude Code saves any tool result over 50,000 characters to a file. The prompt comes with part 1; every part carries the read receipt. A `part` outside 1..parts_total is `INVALID_INPUT`.
 - `next_steps` always includes: "ask a human to run `milepost review <id>` after reading the note".
 
 ---

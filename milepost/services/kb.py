@@ -197,6 +197,9 @@ def kb_overview(root: Path) -> dict[str, Any]:
     }
 
 
+MAX_LISTED = 200
+
+
 def _bare_module_id(value: str) -> str:
     """Accept `core` and `module/core` alike: tools disagree on which form they take."""
     return value.removeprefix("module/")
@@ -438,7 +441,7 @@ def kb_update(
 
 
 @_tool
-def kb_draft_module(root: Path, module_id: str) -> dict[str, Any]:
+def kb_draft_module(root: Path, module_id: str, part: int = 1) -> dict[str, Any]:
     module_id = _bare_module_id(module_id)
     config = _config(root)
     if module_id not in config.modules:
@@ -453,19 +456,43 @@ def kb_draft_module(root: Path, module_id: str) -> dict[str, Any]:
             "CONFLICT", f"module/{module_id} already has a note; redrafting is a human action"
         )
     packet = build_draft_packet(root, config, module_id)
-    return {
+    total = len(packet.parts)
+    if not 1 <= part <= total:
+        raise KbToolError("INVALID_INPUT", f"part must be between 1 and {total}, got {part}")
+    result: dict[str, Any] = {
         "id": f"module/{module_id}",
-        "system_prompt": packet.system_prompt,
-        "sources": packet.sources_text,
+        "part": part,
+        "parts_total": total,
+        "sources": packet.parts[part - 1],
         "source_hash_now": packet.source_hash_now,
-        "files": packet.sent_files,
-        "outline_only": packet.outline_only,
-        "withheld": packet.withheld,
-        "truncation_notice": packet.truncation_notice,
-        "estimated_tokens": packet.estimated_tokens,
-        "next_steps": [
-            "write the note body yourself, following system_prompt and using only the "
-            "sources above; start with the first section heading, no frontmatter",
+    }
+    if part == 1:  # the lists and the prompt are sent once, so no part grows with the file count
+        result.update(
+            system_prompt=packet.system_prompt,
+            files=packet.sent_files[:MAX_LISTED],
+            files_not_listed=max(len(packet.sent_files) - MAX_LISTED, 0),
+            outline_only=packet.outline_only[:MAX_LISTED],
+            withheld=packet.withheld[:MAX_LISTED],
+            estimated_tokens=packet.estimated_tokens,
+        )
+    if part == 1 or part == total:
+        result["truncation_notice"] = packet.truncation_notice
+    if part < total:
+        result["next_steps"] = [
+            f"this is part {part} of {total}: call kb_draft_module with id={module_id} and "
+            f"part={part + 1} (and so on) to read the rest before writing anything",
+            "if source_hash_now differs between parts, files changed meanwhile: start again at "
+            "part 1",
+            *(
+                ["remember truncation_notice: it goes at the top of the body"]
+                if packet.truncation_notice
+                else []
+            ),
+        ]
+    else:
+        result["next_steps"] = [
+            "write the note body yourself, following system_prompt (from part 1) and using only "
+            "the sources you were given; start with the first section heading, no frontmatter",
             *(
                 [
                     "put truncation_notice at the top of the body "
@@ -476,5 +503,5 @@ def kb_draft_module(root: Path, module_id: str) -> dict[str, Any]:
             ),
             f"call kb_update with id=module/{module_id}, your body, and read_hash=source_hash_now",
             "tell the user a person must read it and run `milepost review`",
-        ],
-    }
+        ]
+    return result
