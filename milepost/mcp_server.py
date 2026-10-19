@@ -115,12 +115,17 @@ def build_server(
     @server.tool()
     def kb_draft_module(
         id: Annotated[str, Field(description="Module id, e.g. 'core' ('module/core' also works)")],
+        part: Annotated[
+            int,
+            Field(ge=1, description="Which part of the sources, from 1; the result says how many"),
+        ] = 1,
     ) -> dict[str, Any]:
         """Get what you need to write the note for a module declared in milepost.toml: the
         instructions and the module's source files (minus excluded or credential-like files).
-        Writes nothing. Write the note yourself, then save it with kb_update using
+        Large modules come in parts: read every part (part=1, 2, ...) before writing. Writes
+        nothing. Write the note yourself, then save it with kb_update using
         read_hash=source_hash_now."""
-        return _guard(lambda: kb.kb_draft_module(root, id))
+        return _guard(lambda: kb.kb_draft_module(root, id, part))
 
     @server.tool()
     def kb_outline(

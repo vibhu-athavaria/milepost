@@ -1,3 +1,4 @@
+import json
 from pathlib import Path
 
 import pytest
@@ -739,3 +740,34 @@ def test_kb_module_and_draft_accept_the_module_prefix_too(tmp_path: Path) -> Non
 
     assert kb_module(repo.root, "module/billing")["id"] == "module/billing"
     assert kb_draft_module(repo.root, "module/other")["id"] == "module/other"
+
+
+def test_kb_draft_module_when_large_then_parts_are_served_in_order_each_under_the_limit(
+    tmp_path: Path,
+) -> None:
+    repo = repo_with_undrafted_module(tmp_path)
+    for n in range(12):
+        repo.write(f"app/other/m{n}.py", "def f():\n    return 'a long line of code'\n" * 400)
+    text = (repo.root / "milepost.toml").read_text()
+    (repo.root / "milepost.toml").write_text(text + "\n[draft]\nmax_source_bytes = 10000000\n")
+
+    first = kb_draft_module(repo.root, "other")
+    last = kb_draft_module(repo.root, "other", first["parts_total"])
+
+    assert first["parts_total"] > 1 and first["part"] == 1 and "system_prompt" in first
+    assert "part=2" in " ".join(first["next_steps"]) and "kb_update" not in " ".join(
+        first["next_steps"]
+    )
+    assert "system_prompt" not in last and "kb_update" in " ".join(last["next_steps"])
+    assert "files" not in last and "outline_only" not in last  # sent once, with part 1
+    assert len(json.dumps(first)) < 50_000 and len(json.dumps(last)) < 50_000
+    assert first["source_hash_now"] == last["source_hash_now"]
+
+
+def test_kb_draft_module_when_part_out_of_range_then_invalid_input(tmp_path: Path) -> None:
+    repo = repo_with_undrafted_module(tmp_path)
+
+    for part in (0, 2, -1):
+        with pytest.raises(KbToolError) as error:
+            kb_draft_module(repo.root, "other", part)
+        assert error.value.code == "INVALID_INPUT" and "between 1 and 1" in error.value.message

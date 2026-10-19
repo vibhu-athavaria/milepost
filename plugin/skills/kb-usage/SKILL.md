@@ -59,7 +59,7 @@ Find the scenario that matches what you are doing and follow its steps in order.
 ### A new module
 
 1. Add `[modules.<id>]` with `sources` to `milepost.toml`.
-2. Call `kb_draft_module` with the id. It returns the instructions and the module's sources: write the note body from them and save it with `kb_update` (`read_hash` = the `source_hash_now` it returned). If the response lists `withheld` files, put its `truncation_notice` at the top of the body.
+2. Call `kb_draft_module` with the id. It returns the instructions and the module's sources, in parts if the module is large (read every part: `part=1`, `2`, ...). Write the note body from them and save it with `kb_update` (`read_hash` = the `source_hash_now` it returned). If the response lists `withheld` files, put its `truncation_notice` at the top of the body.
 3. Call `kb_check`.
 4. Tell the user to read the note and run `milepost review <id>`. The note stays `draft` until they do.
 

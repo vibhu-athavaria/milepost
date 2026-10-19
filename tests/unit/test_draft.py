@@ -1,3 +1,4 @@
+import json
 from pathlib import Path
 
 import pytest
@@ -6,10 +7,12 @@ from support.kb_repo import KbRepo
 from milepost.config import Config, load_config
 from milepost.errors import UsageError
 from milepost.services.draft import (
+    PART_CHARS,
     PROMPT_PATH,
     build_draft_packet,
     collect_sources,
     scan_for_secrets,
+    split_into_parts,
 )
 
 
@@ -192,3 +195,83 @@ def test_packet_when_built_then_carries_the_read_receipt(tmp_path: Path) -> None
     assert packet.source_hash_now == repo.hash_of(["app/billing/**"])
     assert "app/billing/api.py" in packet.sent_files
     assert "STRIPE_KEY" not in packet.sources_text  # draft.exclude keeps .env files out
+
+
+def test_split_into_parts_when_blocks_fit_then_one_part_and_nothing_lost() -> None:
+    blocks = ["=== a ===\nx\n", "=== b ===\ny\n"]
+
+    assert split_into_parts(blocks, 1000) == ["".join(blocks)]
+
+
+def test_split_into_parts_when_blocks_exceed_limit_then_every_part_is_within_it() -> None:
+    blocks = [f"=== f{n}.py ===\n" + ("line of code\n" * 50) for n in range(10)]
+
+    parts = split_into_parts(blocks, 1500)
+
+    assert len(parts) > 1 and all(len(part) <= 1500 for part in parts)
+    assert "".join(parts) == "".join(blocks)  # whole files are kept together when they fit
+
+
+def test_split_into_parts_when_one_file_is_larger_than_limit_then_split_on_lines_and_labelled() -> (
+    None
+):
+    block = "=== big.py ===\n" + "".join(f"line {n}\n" for n in range(500))
+
+    parts = split_into_parts([block], 1000)
+
+    assert len(parts) > 1 and all(len(part) <= 1000 for part in parts)
+    assert parts[0].startswith("=== big.py === (piece 1 of ")
+    lines = "".join(parts).splitlines(keepends=True)
+    body = "".join(line for line in lines if not line.startswith("=== big.py ==="))
+    assert body == block.partition("\n")[2]  # no line lost or reordered
+
+
+def test_split_into_parts_when_a_single_line_is_enormous_then_it_is_cut_to_fit() -> None:
+    parts = split_into_parts(["=== min.js ===\n" + "x" * 5000 + "\n"], 1000)
+
+    assert all(len(part) <= 1000 for part in parts)
+    assert sum(part.count("x") for part in parts) == 5000
+
+
+def test_split_into_parts_when_no_sources_then_one_empty_part() -> None:
+    assert split_into_parts([]) == [""]
+
+
+def test_packet_when_module_is_large_then_parts_are_each_under_the_result_limit(
+    tmp_path: Path,
+) -> None:
+    repo, config = make_repo(tmp_path)
+    for n in range(12):
+        repo.write(f"app/billing/m{n}.py", "def f():\n    return 'a long line of code'\n" * 400)
+    config.draft.max_source_bytes = 10_000_000
+
+    packet = build_draft_packet(repo.root, config, "billing")
+
+    assert len(packet.parts) > 1
+    assert all(len(json.dumps(part)) - 2 <= PART_CHARS for part in packet.parts)
+
+
+def test_split_into_parts_when_text_is_escape_heavy_then_the_escaped_json_still_fits() -> None:
+    block = "=== ui.py ===\n" + ('label = "日本語\\n"\n' * 2000)
+
+    parts = split_into_parts([block], 2000)
+
+    assert all(len(json.dumps(part)) - 2 <= 2000 for part in parts)
+    assert len(parts) > 1
+
+
+def test_split_into_parts_when_header_is_longer_than_the_limit_then_it_terminates() -> None:
+    block = "=== " + "d/" * 400 + "x.py ===\n" + "q" * 5000 + "\n"
+
+    parts = split_into_parts([block], 300)
+
+    assert parts and sum(part.count("q") for part in parts) == 5000
+
+
+def test_packet_when_module_has_no_readable_files_then_usage_error(tmp_path: Path) -> None:
+    repo, config = make_repo(tmp_path)
+    repo.add_module("empty", ["app/empty/**/*.py"], {}, with_note=False)
+    config = load_config(repo.root / "milepost.toml")
+
+    with pytest.raises(UsageError, match="match no readable files"):
+        build_draft_packet(repo.root, config, "empty")

@@ -1,6 +1,7 @@
 """What Claude needs to write a module note: the instructions and the module's sources, after the
 exclusion list, the size budget and the credential scan (SPEC section 9)."""
 
+import json
 import re
 from dataclasses import dataclass, field
 from pathlib import Path
@@ -51,6 +52,57 @@ def source_notice(outline_only: list[str], withheld: list[str]) -> str:
     return "\n".join(notice_blocks(outline_only, withheld).values())
 
 
+# Claude Code saves a tool result over 50,000 characters to a file instead of showing it, and the
+# server may send the result as text and as structured data. A part is therefore measured as
+# escaped JSON (quotes, backslashes and non-ASCII grow) and kept well under that.
+PART_CHARS = 20_000
+
+
+def _size(text: str) -> int:
+    """Characters `text` takes inside a JSON string."""
+    return len(json.dumps(text)) - 2
+
+
+def _pieces(block: str, limit: int) -> list[str]:
+    """One file's block, cut on line boundaries into pieces of at most `limit` characters, each
+    labelled so the reader knows it is a continuation."""
+    if _size(block) <= limit:
+        return [block]
+    header, _, body = block.partition("\n")
+    label_room = max(limit // 2 - len(header) - 20, 100)  # halved: escaping can double a line
+    pieces: list[str] = []
+    chunk = ""
+    for line in body.splitlines(keepends=True):
+        while _size(line) > label_room:  # a single enormous line: cut it hard
+            if chunk:
+                pieces.append(chunk)
+                chunk = ""
+            pieces.append(line[:label_room])
+            line = line[label_room:]
+        if chunk and _size(chunk) + _size(line) > label_room:
+            pieces.append(chunk)
+            chunk = ""
+        chunk += line
+    if chunk:
+        pieces.append(chunk)
+    return [f"{header} (piece {n} of {len(pieces)})\n{piece}" for n, piece in enumerate(pieces, 1)]
+
+
+def split_into_parts(blocks: list[str], limit: int = PART_CHARS) -> list[str]:
+    """Pack source blocks into parts of at most `limit` characters; always at least one part."""
+    parts: list[str] = []
+    current = ""
+    for block in blocks:
+        for piece in _pieces(block, limit):
+            if current and _size(current) + _size(piece) > limit:
+                parts.append(current)
+                current = ""
+            current += piece
+    if current:
+        parts.append(current)
+    return parts or [""]
+
+
 @dataclass
 class Collected:
     text: str
@@ -60,6 +112,7 @@ class Collected:
     contents: dict[str, str] = field(default_factory=dict)
     outline_only: list[str] = field(default_factory=list)
     withheld: list[str] = field(default_factory=list)
+    blocks: list[str] = field(default_factory=list)
 
     @property
     def estimated_tokens(self) -> int:
@@ -103,7 +156,14 @@ def collect_sources(root: Path, config: Config, module_id: str) -> Collected:
             parts.append(f"=== {path} (outline only) ===\n{outline}")
             contents[path] = outline
     return Collected(
-        "".join(parts), sorted(contents), excluded, truncated, contents, outline_only, withheld
+        "".join(parts),
+        sorted(contents),
+        excluded,
+        truncated,
+        contents,
+        outline_only,
+        withheld,
+        parts,
     )
 
 
@@ -127,17 +187,21 @@ def _system_prompt(config: Config, module_id: str) -> str:
 
 @dataclass
 class DraftPacket:
-    """Everything an agent needs to write a module note itself (draft.mode = "agent")."""
+    """Everything Claude needs to write a module note: the sources arrive in `parts`."""
 
     module_id: str
     system_prompt: str
-    sources_text: str
+    parts: list[str]
     source_hash_now: str
     sent_files: list[str]
     outline_only: list[str]
     withheld: list[str]
     truncation_notice: str
     estimated_tokens: int
+
+    @property
+    def sources_text(self) -> str:
+        return "".join(self.parts)
 
 
 def build_draft_packet(root: Path, config: Config, module_id: str) -> DraftPacket:
@@ -146,6 +210,8 @@ def build_draft_packet(root: Path, config: Config, module_id: str) -> DraftPacke
     and listed in `withheld`; if that leaves nothing to read, raises UsageError."""
     module = config.modules[module_id]
     collected = collect_sources(root, config, module_id)
+    if not collected.contents and not collected.withheld:
+        raise UsageError(f"module '{module_id}': its sources match no readable files")
     if collected.withheld and not collected.contents:
         raise UsageError(
             f"module '{module_id}': every file looked like it holds a credential "
@@ -155,7 +221,7 @@ def build_draft_packet(root: Path, config: Config, module_id: str) -> DraftPacke
     return DraftPacket(
         module_id=module_id,
         system_prompt=_system_prompt(config, module_id),
-        sources_text=collected.text,
+        parts=split_into_parts(collected.blocks),
         source_hash_now=compute_source_hash(root, module.sources, config.structure.ignore).value,
         sent_files=collected.sent,
         outline_only=collected.outline_only,
