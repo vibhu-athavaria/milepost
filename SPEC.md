@@ -20,7 +20,7 @@ Audience: the developer implementing milepost, and reviewers checking it against
 | Embeddings v1 | fastembed, model named in config | Local, no API key |
 | Structure source v1 | Built-in scanner: Python `ast` + tree-sitter for TypeScript/JavaScript | No dependency on an external binary's API |
 | Structure source v2 | Adapter for codebase-memory-mcp | Added once its query API is verified |
-| LLM access (drafting only) | LiteLLM, model name from env var | The model is chosen by the user through an environment variable; no model names in code |
+| Drafting | Claude Code writes the notes itself | Milepost never calls a model and holds no keys; `kb_draft_module` hands Claude the sources and `kb_update` saves the result |
 | MCP server | `mcp` Python SDK (FastMCP), stdio transport | Standard transport for Claude Code |
 | Claude Code integration | Plugin wrapper (see section 12) | Ships the MCP server, a usage skill, slash commands, and hooks |
 | Plugin entry point | One user-facing command, `/kb-init`; everything else is called by it, by hooks, or by the agent (section 9.4) | Fewest required steps for a developer |
@@ -28,7 +28,7 @@ Audience: the developer implementing milepost, and reviewers checking it against
 | Design principle | A note stores only what code cannot tell you: purpose, contracts, invariants, gotchas, intent. Anything derivable from code (symbols, line ranges, importers, tests) is computed live from the working tree by the tools in section 8.3 and is never stored | Stored copies of derivable facts go stale and add review load; computed ones cannot go stale |
 | One note per module | No per-file or per-passage notes. Per-file detail comes from `kb_outline`, computed on demand | A model-written note per file multiplies review load and staleness; the outline gives the same pointers for free |
 | Human visibility | An agent edit returns a note to `draft`; only `milepost review` sets `reviewed`. `milepost status` and `milepost report` show unreviewed churn and changed code that notes call risky (section 8.4) | Agents now change more code than people read; the notes are the cheapest thing a person can still read |
-| Drafting mode | `[draft] mode = "model"` (default: LiteLLM, `MILEPOST_MODEL`) or `"agent"` (milepost hands the draft packet to the coding agent; no key needed), section 9.3 | Lets a team use the agent's own model or choose a cheaper one |
+| Who writes notes | The coding agent, always: `kb_draft_module` returns a draft packet, the agent writes the body, `kb_update` saves it | A separate drafting model was removed: one path, no keys, no second provider |
 | Note updates after a task | Always written by the agent that did the task, through `kb_update` | It has the change in context; a separate model would have to re-read it |
 
 Revision to PROPOSAL.md section 6: a note stores no hash of its sources. A stored hash conflicted between concurrent pull requests that touched different files of one module, and re-hashing on merge would bless a note written against older code. Staleness is judged from git history instead (section 6).
@@ -68,7 +68,7 @@ There are no per-file or per-passage notes. Per-file detail (symbols, signatures
   .github/workflows/milepost.yml # CI gate (committed)
 ```
 
-`kb/.index/`, `kb/.progress.json` and `.env` are git-ignored. `init` appends them to `.gitignore`.
+`kb/.index/` is git-ignored. `init` appends it to `.gitignore`. (Earlier versions also ignored `kb/.progress.json` and `.env`; `uninstall` still removes the former.)
 
 ---
 
@@ -99,9 +99,7 @@ embedding_model = "BAAI/bge-small-en-v1.5"   # fastembed model name; config, not
 embedding_dim = 384                    # must match the model
 
 [draft]
-mode = "agent"                         # "agent" (default) or "model"; section 9.3. `milepost init --model-mode` writes "model"
-provider_model = "${MILEPOST_MODEL}"      # resolved from env var at run time; required when mode = "model"
-max_source_bytes = 200000              # per module; larger modules are sampled, see 9.3
+max_source_bytes = 200000              # per module; larger modules are read as outlines, see 9.3
 exclude = ["**/.env*", "**/*secret*", "**/*.pem", "**/*.key", "**/credentials*"]
 secret_scan_allow = []   # globs of files the secret scan would withhold but a person has checked
 
@@ -121,15 +119,12 @@ Validation rules (fail fast, exit code 2):
 - `index.backend` is `sqlite`.
 - `embedding_dim` is a positive integer.
 - Every `structure.roots` entry is relative (no leading `/`, no `..`).
-- `draft.mode` is `model` or `agent`.
 - `verify` is a list of strings.
-- If `draft` is run in `model` mode and `MILEPOST_MODEL` is unset, fail with a message naming the variable.
 - `churn_warn_lines` is a non-negative integer; every `agent_trailers` entry is a valid regular expression.
 - `check.stale` is `warn` or `fail`.
 
-Credentials and model choice are never stored in `milepost.toml` or any committed file. The developer sets `MILEPOST_MODEL` and the provider's own environment variable (for example `OPENROUTER_API_KEY` for a model named `openrouter/...`, or `ANTHROPIC_API_KEY`) before using `draft` or `init`. `milepost doctor` reports what is missing.
+Milepost stores no credentials and reads no model settings. Configs written by earlier versions may still contain `mode = "agent"` and `provider_model` under `[draft]`; both are accepted and ignored. Both are ignored, including `mode = "model"`, so an upgrade never locks a repository out of its commands; `milepost doctor` warns and says to delete the line.
 
-**`.env` file.** The variables may live in a `.env` file at the repository root instead of the shell. Every command that needs them (`draft`, `init`, `doctor`, `serve`) loads that file at startup with `python-dotenv`. A variable already set in the shell wins over the file. `.env` is git-ignored: `init` appends it to `.gitignore`, and `doctor` warns when a `.env` file exists that git does not ignore. A missing `MILEPOST_MODEL` exits 3 (environment error), not 2.
 
 ---
 
@@ -146,7 +141,7 @@ status: draft                      # required; draft | reviewed
 sources:                           # required; mirrors the module's globs in milepost.toml
   - backend/app/services/**/*.py
 related: [ai, data]                # optional
-written_by: agent                  # required; agent | human | draft-command
+written_by: agent                  # required; agent | human | draft-command (the last only in notes from older versions)
 written_at: 2026-10-07T09:12:00Z   # required, UTC ISO-8601
 reviewed_by: Jane Doe <jane@example.com>   # optional; set only by `milepost review`
 reviewed_at: 2026-10-08T14:00:00Z  # optional; set only by `milepost review`
@@ -287,11 +282,10 @@ All commands accept `--repo <path>` (default: nearest ancestor with `milepost.to
 
 | Command | Purpose | Notes |
 |---|---|---|
-| `milepost init [--dry-run] [--backend sqlite] [--seed-docs PATH ...] [--modules ID,...] [--yes]` | Scaffold and draft (section 9) | Never overwrites existing files; `--modules` and `--yes` are what the plugin's `/kb-init` uses |
+| `milepost init [--dry-run] [--modules ID,...] [--yes] [--force-config] [--no-hooks]` | Scaffold, declare modules, install hooks, build the index, and list the modules Claude should write notes for (section 9) | Never overwrites existing files; `--modules` and `--yes` are what the plugin's `/kb-init` uses |
 | `milepost check [--ci --base REF] [--format text\|json]` | Validate and detect staleness (section 6) | Exit codes in section 6 |
 | `milepost index [--rebuild]` | Build or update the local search index (section 7) | Safe to run from git hooks |
 | `milepost overview` | Print the L1 module index, rendered from the notes (section 8.2) | Read-only |
-| `milepost draft <module-id> [--force]` | (Re)draft one module note with `status: draft` | Refuses to overwrite `reviewed` unless `--force`; `model` mode only (agent mode drafts through `kb_draft_module`) |
 | `milepost review <note-id>` | Set `status: reviewed` after human sign-off | Records `reviewed_by` and `reviewed_at` from the git identity (exit 3 if it is not set); refuses a stale note |
 | `milepost outline <path> [--json]` | Symbols, signatures and line ranges of one file, computed now | Section 8.3 |
 | `milepost impact <path> [--json]` | Files that import this file and the tests likely to cover it, computed now | Section 8.3 |
@@ -302,7 +296,7 @@ All commands accept `--repo <path>` (default: nearest ancestor with `milepost.to
 | `milepost hooks install \| uninstall` | Manage git hooks and merge driver config | Section 10 |
 | `milepost merge-driver %O %A %B %P` | Invoked by git for `kb/**/*.md` | Section 10.3 |
 | `milepost serve` | Run the MCP server on stdio | Section 11 |
-| `milepost doctor` | Print environment: Python, git, SQLite FTS5 available, fastembed model cached, `MILEPOST_MODEL` set, the provider key variables for that model present (via `litellm.validate_environment`, verified to name `OPENROUTER_API_KEY` and `ANTHROPIC_API_KEY`), and whether a `.env` file is git-ignored | Read-only; exit 3 when a variable needed for drafting is missing |
+| `milepost doctor` | Print environment: Python, git, SQLite FTS5 available, whether the search extra is installed, whether `milepost.toml` loads, and whether the git hooks are current | Read-only; exit 3 when git or FTS5 is missing or the config is invalid |
 | `milepost scan [--json]` | List candidate modules under `structure.roots` that no declared module covers (same scan as init step 3) | Read-only; never edits config |
 | `milepost hook session-start` | Print the index and a reminder as session context | Used by the plugin hook, section 12.4; always exits 0 |
 | `milepost hook post-edit` | Read Claude Code hook JSON on stdin, find the edited path, print the notes that cover it | Used by the plugin hook, section 12.4; always exits 0 |
@@ -378,7 +372,7 @@ The CI workflow writes this report to the job summary (`$GITHUB_STEP_SUMMARY`), 
 2. **Scaffold:** write `milepost.toml` from the template with the detected Python and TypeScript roots filled in as commented suggestions; create `kb/`; append ignore lines (`kb/.index/`, `kb/.progress.json`, `.env`) to `.gitignore`; write `.gitattributes` line if absent; write `.github/workflows/milepost.yml` from `milepost/resources/ci-kb-check.yml` if absent, with the installed milepost version pinned.
 3. **Structure scan:** build the module proposal. Top-level directories under the `structure.roots` entries become candidate modules. Without `--modules`, candidates are written as commented entries; the user uncomments and confirms. The scan never activates a module on its own. With `--modules a,b`, the named candidates are written as active `[modules.<id>]` tables; naming an id that is not a current candidate is a usage error (exit 2). The explicit flag is the confirmation.
 4. **Hooks:** if `--no-hooks` is absent, run `milepost hooks install`.
-5. **Draft:** in `model` mode, for each declared module without a note, call `milepost draft`; in `agent` mode, skip and tell the developer the agent will draft through `kb_draft_module`. Skipped with `--dry-run`, which prints module count and estimated tokens (file bytes / 4 as a rough estimate).
+5. **Draft:** skipped. `init` lists the declared modules that have no note; Claude writes them through `kb_draft_module` and `kb_update`. With `--dry-run` it prints the files Claude would read, the module count and the estimated tokens (file bytes / 4 as a rough estimate).
 6. **Index:** `milepost index`.
 7. **Report:** print the CLAUDE.md snippet location, the CI template location, and the next command (`milepost review <id>` per draft).
 
@@ -386,23 +380,22 @@ The CI workflow writes this report to the job summary (`$GITHUB_STEP_SUMMARY`), 
 
 Re-running `init` creates only what is missing. Existing `kb/modules/*.md` files are not modified. Existing `milepost.toml` is not modified unless `--force-config`, with one exception: `--modules` appends `[modules.<id>]` tables for modules not yet declared and changes nothing else in the file. That is how a module is added after the first run.
 
-`--yes` skips confirmation prompts. Without it, in an interactive shell, `init` prints the module list, the files that would be sent for drafting, and the token estimate, and asks once.
+`--yes` skips confirmation prompts. Without it, in an interactive shell, `init` prints the module list, the files Claude would read for drafting, and the token estimate, and asks once.
 
 ### 9.3 Drafting
 
-**Modes.** `draft.mode = "agent"` (the default) never calls a model from milepost and needs no key: `milepost init` scaffolds, declares modules and builds the index but skips drafting, and the coding agent drafts through `kb_draft_module`. In agent mode that tool returns a *draft packet* instead of writing a note: the drafting prompt, the collected sources (after `draft.exclude`, the size budget and the secret scan), and an instruction to write the body and submit it with `kb_update`. `kb_update` is allowed to create a missing note in agent mode, only for a declared module, and always writes `status: draft`. In agent mode `draft.exclude` and the secret scan protect only the packet; the agent can still read any file with its own tools, so they are not a guarantee. `draft.mode = "model"` calls the model named by `MILEPOST_MODEL` through LiteLLM (the optional `model` extra), as described below. Updates after a task are written by the agent in both modes (section 0).
+**Drafting.** Milepost never calls a model and needs no key: `milepost init` scaffolds, declares modules and builds the index, and Claude drafts through `kb_draft_module`. That tool returns a *draft packet* instead of writing a note: the drafting prompt, the collected sources (after `draft.exclude`, the size budget and the secret scan), and an instruction to write the body and submit it with `kb_update`. `kb_update` may create a missing note for a declared module, and always writes `status: draft`. `draft.exclude` and the secret scan protect only the packet; the agent can still read any file with its own tools, so they are not a guarantee. Updates after a task are written by the agent too (section 0).
 
 - Input: the module's source files, concatenated with headers `=== path ===`, after applying `draft.exclude`. If the total exceeds `max_source_bytes`, include the structure summary (imports, top-level symbols) for every file and full text only for the first N files that fit, and state the truncation in the note body.
-- Prompt: stored in `milepost/prompts/draft_l2.md` (not inline in code). It instructs the model to write only what is verifiable from the provided code, to mark uncertainty explicitly, to avoid describing behavior not present in the input, to cite file paths in backticks, to include a File map, and to stay short.
-- Output validation: the response must parse into the note body; frontmatter is written by milepost, never by the model.
-- Provider errors: retried 2 times with backoff; then exit 4 with the module id. A partial run leaves completed notes in place and records progress in `kb/.progress.json`.
+- Prompt: stored in `milepost/prompts/draft_l2.md` (not inline in code). It tells the agent to write only what is verifiable from the provided code, to mark uncertainty explicitly, to avoid describing behavior not present in the input, to cite file paths in backticks, to include a File map, and to stay short.
+- Output: frontmatter is written by milepost, never by the agent; the body comes from the agent through `kb_update`, which validates it.
 - Seed documents (`--seed-docs`): included in the prompt with the label "documentation, not verified against code." Notes derived from them must say so in the body.
 
 ### 9.4 Plugin entry point: `/kb-init`
 
 `/kb-init` is the only slash command the plugin ships. A developer runs it once; every other step is called from it, by hooks, or by the agent. `plugin/commands/kb-init.md` instructs the agent to:
 
-1. Run `milepost doctor --json`. If anything needed for drafting is missing (`MILEPOST_MODEL` or the provider key), tell the developer exactly which variables to set and stop.
+1. Run `milepost doctor --json`. Read the output and fix or report anything marked `fail`.
 2. Run `milepost scan --json` and `milepost init --dry-run --modules <all candidates>`. Show the candidate modules, the files that would be sent, and the estimated tokens, and ask once which modules to keep.
 3. Run `milepost init --yes --modules <confirmed ids>`: scaffold, declare the modules, install hooks and the merge driver, write the CI workflow, draft the L2 notes, and build the index.
 4. Report the one step that needs a person: read each draft under `kb/modules/`, run `milepost review <id>` for each one that is right, then commit `milepost.toml`, `kb/`, `.gitattributes`, and `.github/workflows/milepost.yml`.
@@ -412,9 +405,8 @@ The command does not print the CLAUDE.md snippet, because the plugin's skill and
 ### 9.5 Security
 
 - Files matching `draft.exclude` are never read for drafting.
-- Before sending, milepost scans the input for common secret patterns (AWS key ids, private key headers, `password=`/`token=` assignments with long values). A match withholds that one file from the input (the rest of the module is still drafted) and the note states which files were withheld, by path and never by value. If every file is withheld, drafting stops with a usage error. A person who has checked a file lists it in `draft.secret_scan_allow` (globs) to include it.
-- `--dry-run` lists every file that would be sent, so a reviewer can check the set before any network call.
-- The provider endpoint is whatever LiteLLM is configured for via environment variables; milepost adds no endpoint of its own.
+- Before handing sources to Claude, milepost scans them for common secret patterns (AWS key ids, private key headers, `password=`/`token=` assignments with long values). A match withholds that one file from the packet (the rest of the module is still drafted) and the note states which files were withheld, by path and never by value. If every file is withheld, drafting stops with a usage error. A person who has checked a file lists it in `draft.secret_scan_allow` (globs) to include it.
+- `--dry-run` lists every file Claude would read, so a reviewer can check the set first.
 
 ---
 
@@ -476,7 +468,7 @@ Every response is also size-bounded by the per-tool caps in section 14. Every re
 | `kb_search` | `query: str`, `limit: int = 5` | Hybrid search results (section 7.4) |
 | `kb_update` | `id: str` (`module/<id>`), `body: str`, `read_hash: str` | Writes the note with `status: draft` (and removes `reviewed_by` and `reviewed_at`), mirrors `sources` from `milepost.toml`, returns `milepost check` findings for that note. Writing counts as touching the note, so it is no longer stale. It cannot set `reviewed`; only `milepost review` can |
 | `kb_check` | none | Same findings as the CLI, including `UNCOVERED_DIR` warnings |
-| `kb_draft_module` | `id: str` | Drafts the note for a module already declared in `milepost.toml`, with `status: draft` (model mode), or returns a draft packet (agent mode); section 11.3 |
+| `kb_draft_module` | `id: str` | Returns a draft packet for a module already declared in `milepost.toml`; writes nothing; section 11.3 |
 | `kb_outline` | `path: str` | Symbols, signatures and line ranges of the file, computed now (section 8.3) |
 | `kb_impact` | `path: str` | Importers, likely tests, covering modules and notes (section 8.3) |
 | `kb_sync` | `base: str \| None` | Changed files, the notes to update and how, and the `verify` commands (section 8.3) |
@@ -491,7 +483,7 @@ A `kb_update` whose body is identical to the current body is allowed. It refresh
 
 `kb_update` rejects:
 - an id that is not `module/<module-id>`, or a module not declared in `milepost.toml` (`INVALID_INPUT`, `NOT_FOUND`);
-- writes to a note that does not exist, unless `draft.mode` is `agent` (new notes otherwise come from `kb_draft_module` or `milepost draft`);
+- writes to a note that does not exist, unless the module is declared in `milepost.toml`;
 - a missing or mismatched `read_hash` (`STALE_READ`);
 - bodies longer than 20,000 characters, or that look like they contain a credential;
 - an existing file that is not a valid note (it is never overwritten).
@@ -507,9 +499,9 @@ Tool errors return a structured error `{code, message}` with codes `NOT_FOUND`, 
 Lets an agent create the note for a new module in the same change as the code, without a CLI round trip.
 
 - Precondition: the module id is declared in `milepost.toml`. The tool never edits config; the agent adds the `[modules.<id>]` entry as an ordinary file edit first. An undeclared id returns `NOT_FOUND` with `next_steps` naming the config entry to add.
-- Refuses with `CONFLICT` if a note for the module already exists. Redrafting stays a human action (`milepost draft --force`).
-- Runs the same drafting service as `milepost draft` (section 9.3): `draft.exclude`, the secret scan, and the size budget all apply, and the note is written with `status: draft` and `written_by: draft-command`.
-- In model mode it needs `MILEPOST_MODEL`; if unset, returns `ENVIRONMENT` naming the variable. It sends source to the configured LLM provider, as `milepost draft` does, and the tool description says so. In agent mode it returns the draft packet described in section 9.3 and calls no model.
+- Refuses with `CONFLICT` if a note for the module already exists. Redrafting is a human action.
+- `draft.exclude`, the secret scan and the size budget all apply to the packet.
+- It returns the draft packet described in section 9.3 and calls no model.
 - `next_steps` always includes: "ask a human to run `milepost review <id>` after reading the note".
 
 ---
@@ -571,7 +563,7 @@ This table is normative. The skill (`plugin/skills/kb-usage/SKILL.md`) and the C
 | 5 | Add a file to an existing module | `kb_module`; read the new source; `kb_sync`; `kb_update` on the note (File map, and Entry points if it is a new starting point); `kb_check` | none |
 | 6 | Rename or delete a file | `kb_impact` on the old path before the change (who imports it); after the change, `kb_sync` and `kb_update` on each covering note; `kb_check` | none |
 | 7 | Learned a gotcha or invariant | `kb_update` on the note (Gotchas or Invariants, citing the file in backticks) after reading the source it refers to | none |
-| 8 | New module | Add `[modules.<id>]` to `milepost.toml`; `kb_draft_module` (in agent mode, write the body from the packet and submit it with `kb_update`); `kb_check`; tell the user to run `milepost review <id>` | `ENVIRONMENT` (`MILEPOST_MODEL` unset, model mode): tell the user which variable to set |
+| 8 | New module | Add `[modules.<id>]` to `milepost.toml`; `kb_draft_module`, write the body from the packet and submit it with `kb_update`; `kb_check`; tell the user to run `milepost review <id>` | `INVALID_INPUT` (every file looked like a credential): tell the user to check them and list them in `draft.secret_scan_allow` |
 | 9 | Code no module covers | `kb_check` shows `UNCOVERED_DIR`; follow scenario 8 if a module should exist; otherwise ask the user | Do not widen another module's globs without asking |
 | 10 | Note has merge-conflict markers | Stop. Do not edit the note | Tell the user a person must resolve the conflict |
 | 11 | Before commit | `kb_check`; fix every failure | Never write a `KB-Waive` trailer; ask the user |
@@ -597,13 +589,12 @@ The MCP server (section 11) is not tied to Claude Code: any agent that can start
 ## 13. Dependencies
 
 Core (always installed):
-- `typer`, `pydantic>=2`, `pyyaml`, `wcmatch`, `python-dotenv` (loads `.env`, section 3)
+- `typer`, `pydantic>=2`, `pyyaml`, `wcmatch`
 - `mcp>=2,<3` (the MCP Python SDK)
 - `tree-sitter`, `tree-sitter-typescript`, `tree-sitter-javascript`
 
 Optional extras (the core install has no machine-learning libraries and is roughly a third the size):
 - `milepost[search]`: `fastembed` and `numpy`, for meaning-based search. Without it, notes are indexed and searched by keyword only (SQLite FTS5), and `doctor` says so.
-- `milepost[model]`: `litellm`, for drafting with a separate model (`draft.mode = "model"`). Not needed in the default agent mode.
 - `milepost[all]`: both.
 
 Development:
@@ -611,7 +602,7 @@ Development:
 
 Python `>=3.12`.
 
-Lazy import rule: `litellm`, `fastembed` and `numpy` are imported only inside the functions that use them, so commands that do not need them start fast and work when the extras are absent. A missing extra gives a message naming it, never a traceback.
+Lazy import rule: `fastembed` and `numpy` are imported only inside the functions that use them, so commands that do not need them start fast and work when the extra is absent. A missing extra gives a message naming it, never a traceback.
 
 ---
 
@@ -621,7 +612,7 @@ Lazy import rule: `litellm`, `fastembed` and `numpy` are imported only inside th
 - **Speed targets (measured in M6, not guaranteed):** `check` under 1 s for 300 notes; `index` incremental under 10 s for 10 changed notes; `search` under 200 ms on a local index of 5,000 chunks.
 - **Context budget (targets, measured in the pilot, not guaranteed):** `kb_overview` under 1,500 tokens for 30 modules; `kb_module` under 2,500; `kb_outline` under 3,000 (200 symbols); `kb_impact` under 1,000 (50 per list); `kb_sync` under 2,000 for a change touching 10 files. Tokens are estimated as characters divided by 4. A tool that would exceed its cap truncates and sets `truncated`.
 - **Speed of computed tools:** `outline` under 200 ms for a 2,000-line file; `impact` under 2 s for a repository of 2,000 source files; `status` under 2 s for 30 modules. Unmeasured.
-- **Offline:** every command except `init` (drafting step) and `draft` in model mode works offline.
+- **Offline:** every command works offline except the first meaning-based search, which downloads the embedding model once.
 - **Failure visibility:** no silent failures. Every non-zero exit prints the reason and the next command to run.
 - **Coverage:** 90% line coverage on `milepost/services/` and `milepost/core/`, enforced in CI.
 - **Logging:** structured JSON logs on stderr when `MILEPOST_LOG=json`; otherwise human text. Logs never include file contents or secrets.
@@ -670,7 +661,7 @@ milepost/
       python_scanner.py        # ast-based
       tree_sitter_scanner.py   # TS/JS
     llm/
-      client.py                # LiteLLM wrapper, retries, secret scan
+      # (no model client: Milepost never calls a model)
     mcp_server.py              # section 11
     prompts/
       draft_l2.md
@@ -692,7 +683,7 @@ Rule for implementers: `cli.py` and `mcp_server.py` contain no business logic. T
 - codebase-memory-mcp adapter (deferred until its API is verified).
 - Cross-repository search.
 - A web UI.
-- Automatic note updates on every commit (notes are updated by agents during tasks and by `draft` on demand).
+- Automatic note updates on every commit (notes are updated by agents during tasks).
 - Languages beyond Python, TypeScript, and JavaScript.
 - Detecting bugs or wrong agent code. Milepost shows people where to look; it does not judge the change.
 - Verifying that a note is true. A stale note is detected; a wrong one is caught only by a person reading it.

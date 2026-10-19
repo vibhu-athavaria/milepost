@@ -4,7 +4,6 @@ import functools
 import json
 import os
 import sys
-import time
 from collections.abc import Callable
 from dataclasses import asdict
 from datetime import UTC, datetime
@@ -14,16 +13,14 @@ from typing import Annotated, Any
 
 import typer
 
-from milepost.config import Config, Index, load_config, load_config_or_default, resolve_model
+from milepost.config import Config, Index, load_config, load_config_or_default
 from milepost.embeddings import Embedder, default_embedder
-from milepost.env import is_disabled, load_env
+from milepost.env import is_disabled
 from milepost.errors import EnvironmentProblem, MilepostError, UsageError
-from milepost.llm.client import LiteLlmClient, LlmClient
 from milepost.mcp_server import run_server
 from milepost.services.check import run_check
 from milepost.services.coverage import CONFIG_NAME, undeclared_candidates
 from milepost.services.doctor import run_doctor
-from milepost.services.draft import draft_modules
 from milepost.services.hook import post_edit as hook_post_edit_text
 from milepost.services.hook import project_root as hook_project_root
 from milepost.services.hook import session_start as hook_session_start_text
@@ -87,10 +84,6 @@ def _embedder_for(root: Path) -> Embedder | None:
     return default_embedder(index.embedding_model, index.embedding_dim)
 
 
-def _llm_client() -> LlmClient:
-    return LiteLlmClient()
-
-
 def _now() -> str:
     return datetime.now(UTC).strftime("%Y-%m-%dT%H:%M:%SZ")
 
@@ -141,18 +134,9 @@ def init(
         bool, typer.Option("--force-config", help="Replace an existing milepost.toml.")
     ] = False,
     no_hooks: Annotated[bool, typer.Option("--no-hooks", help="Do not install git hooks.")] = False,
-    model_mode: Annotated[
-        bool,
-        typer.Option(
-            "--model-mode",
-            help="Advanced: draft notes with a separate model (needs the model extra and "
-            "MILEPOST_MODEL) instead of Claude.",
-        ),
-    ] = False,
 ) -> None:
-    """Scaffold the knowledge base, declare modules, and draft their notes."""
+    """Scaffold the knowledge base and declare modules; Claude then writes the notes."""
     root = _repo_root(repo)
-    load_env(root)
     wanted = [m.strip() for m in modules.split(",") if m.strip()] if modules else None
 
     def run(dry: bool) -> InitReport:
@@ -161,26 +145,20 @@ def init(
             modules=wanted,
             dry_run=dry,
             force_config=force_config,
-            client=_llm_client(),
             embedder=_embedder_for(root),
-            environ=os.environ,
-            now=_now(),
-            sleep=time.sleep,
             install_hooks_flag=not no_hooks,
-            model_mode=model_mode,
         )
 
     if dry_run or not yes:
         plan = run(True)
-        verb = "show your coding agent" if plan.agent_mode else "send"
         for module_id, files in plan.planned_files.items():
-            typer.echo(f"{module_id}: would {verb} {len(files)} file(s)")
+            typer.echo(f"{module_id}: Claude would read {len(files)} file(s) to write the note")
             for path in files:
                 typer.echo(f"  {path}")
         for module_id, outlined in plan.outline_only.items():
             typer.echo(
                 f"warning: {module_id}: {len(outlined)} file(s) exceed draft.max_source_bytes and "
-                "would be sent as outline only; raise it in milepost.toml to cover them"
+                "would be read as an outline only; raise it in milepost.toml to cover them"
             )
         for module_id, held in plan.withheld.items():
             typer.echo(
@@ -192,12 +170,7 @@ def init(
             return
         if not sys.stdin.isatty():
             raise UsageError("not an interactive shell; rerun with --yes to confirm")
-        question = (
-            "Set up milepost and let your coding agent draft the notes?"
-            if plan.agent_mode
-            else "Send these files to the configured model and write the notes?"
-        )
-        if not typer.confirm(question):
+        if not typer.confirm("Set up milepost and let Claude write the notes?"):
             raise typer.Exit(code=1)
     report = run(False)
     for path in report.created:
@@ -208,26 +181,22 @@ def init(
         else:
             typer.echo(f"git hooks not installed: {report.hooks.skipped_reason}")
             typer.echo(report.hooks.snippet)
-    for module_id in report.drafted:
-        typer.echo(f"drafted kb/modules/{module_id}.md (status: draft)")
-    if report.agent_pending:
+    if report.pending:
         typer.echo(
             "No notes written yet. Ask Claude to write them (the /milepost:kb-init command does "
-            "this): it calls kb_draft_module for each of: " + ", ".join(report.agent_pending)
+            "this): it calls kb_draft_module for each of: " + ", ".join(report.pending)
         )
         typer.echo(
-            "Next: when it has written them, read each draft and run `milepost review <id>` "
-            "for each one that is right, then commit."
-        )
-    if report.drafted:
-        typer.echo(
-            "Next: read each draft, run `milepost review <id>` for each one that is right, "
-            "then commit milepost.toml, kb/, .gitignore, .gitattributes and the CI workflow."
+            "Next: when Claude has written them, read each draft and run `milepost review <id>` "
+            "for each one that is right, then commit milepost.toml, kb/, .gitignore, "
+            ".gitattributes and the CI workflow."
         )
     elif not report.declared:
         typer.echo(
             "No modules declared. Run `milepost scan`, then `milepost init --modules <ids>`."
         )
+    elif report.created:
+        typer.echo("Next: commit the files listed above.")
 
 
 @app.command()
@@ -293,29 +262,6 @@ def index(
     for path in report.skipped_invalid:
         typer.echo(f"warning: skipped invalid note {path}", err=True)
     typer.echo(f"indexed {report.indexed}, skipped {report.skipped}, removed {report.removed}")
-
-
-@app.command()
-@handle_errors
-def draft(
-    module_id: Annotated[str, typer.Argument(help="Module id to draft.")],
-    repo: RepoOption = None,
-    force: Annotated[bool, typer.Option("--force", help="Overwrite a reviewed note.")] = False,
-) -> None:
-    """Draft one module's L2 note (status: draft)."""
-    root = _repo_root(repo)
-    load_env(root)
-    config = load_config(root / CONFIG_NAME)
-    if config.draft.mode == "agent":
-        raise UsageError(
-            "this command is for drafting with a separate model, which is not set up here. "
-            f"Ask Claude to call kb_draft_module for {module_id}, or (advanced) set "
-            '[draft] mode = "model" in milepost.toml and MILEPOST_MODEL'
-        )
-    model = resolve_model(config, os.environ)
-    draft_modules(root, config, [module_id], _llm_client(), model, force, _now(), time.sleep)
-    typer.echo(f"drafted kb/modules/{module_id}.md (status: draft)")
-    typer.echo(f"Next: read it, then run `milepost review {module_id}` if it is right.")
 
 
 @app.command()
@@ -489,7 +435,6 @@ def serve(repo: RepoOption = None) -> None:
     """Run the MCP server on stdio."""
     project_dir = os.environ.get("CLAUDE_PROJECT_DIR")
     root = repo or (Path(project_dir) if project_dir else _repo_root(None))
-    load_env(root)
     run_server(root)
 
 
@@ -497,8 +442,7 @@ def serve(repo: RepoOption = None) -> None:
 def doctor(repo: RepoOption = None, json_output: JsonOption = False) -> None:
     """Report the environment milepost needs."""
     root = _repo_root(repo)
-    load_env(root)
-    report = run_doctor(root, os.environ)
+    report = run_doctor(root)
     if json_output:
         payload = [{"name": c.name, "status": c.status, "detail": c.detail} for c in report.checks]
         typer.echo(json.dumps({"ok": report.exit_code == 0, "checks": payload}, indent=2))

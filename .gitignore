@@ -11,5 +11,5 @@ kb/.progress.json
 # Local pilot data (private prompts, logs, results) stays out of the repository.
 pilot/
 
-# Local credentials (see templates/.env.example)
+# Local credentials
 .env

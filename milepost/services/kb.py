@@ -9,34 +9,30 @@ import functools
 import os
 import re
 import subprocess
-from collections.abc import Callable, Mapping
+from collections.abc import Callable
 from dataclasses import asdict
 from pathlib import Path
 from typing import Any
 
-from milepost.config import Config, load_config, load_config_or_default, resolve_model
+from milepost.config import Config, load_config, load_config_or_default
 from milepost.core.glob import matches_any
 from milepost.core.hashing import compute_source_hash
 from milepost.core.notes import Note, note_path_for_id, parse_note, write_note
 from milepost.embeddings import Embedder
 from milepost.errors import (
     ConfigNotFound,
-    EnvironmentProblem,
     IndexMissing,
     IndexRebuildRequired,
     MilepostError,
     NoteInvalid,
     NotFoundError,
-    ProviderError,
     UsageError,
 )
-from milepost.llm.client import LlmClient
 from milepost.services.check import run_check
 from milepost.services.coverage import CONFIG_NAME
 from milepost.services.draft import (
     build_draft_packet,
     collect_sources,
-    draft_modules,
     notice_blocks,
     scan_for_secrets,
 )
@@ -381,19 +377,14 @@ def kb_update(
             f"{note_id} exists but its file is not a valid note; ask the user to fix or "
             "remove it, do not overwrite it",
         )
-    agent_mode_create = existing is None and config.draft.mode == "agent"
-    if existing is None and not agent_mode_create:
-        raise KbToolError(
-            "NOT_FOUND",
-            f"{note_id} does not exist; new module notes come from kb_draft_module",
-        )
+    creating = existing is None
 
     # `sources` mirrors milepost.toml, which is authoritative for what a module covers.
     meta: dict[str, Any] = dict(existing.meta) if existing is not None else {}
     meta.update({"kb_schema": 1, "id": note_id, "sources": module.sources})
     meta.setdefault("title", module.title)
     meta.setdefault("related", module.related)
-    if agent_mode_create:
+    if creating:
         collected = collect_sources(root, config, name)
         missing = [
             text
@@ -441,14 +432,7 @@ def kb_update(
 
 
 @_tool
-def kb_draft_module(
-    root: Path,
-    module_id: str,
-    client: LlmClient,
-    environ: Mapping[str, str],
-    now: str,
-    sleep: Callable[[float], None],
-) -> dict[str, Any]:
+def kb_draft_module(root: Path, module_id: str) -> dict[str, Any]:
     config = _config(root)
     if module_id not in config.modules:
         raise KbToolError(
@@ -461,48 +445,29 @@ def kb_draft_module(
         raise KbToolError(
             "CONFLICT", f"module/{module_id} already has a note; redrafting is a human action"
         )
-    if config.draft.mode == "agent":
-        packet = build_draft_packet(root, config, module_id)
-        return {
-            "id": f"module/{module_id}",
-            "mode": "agent",
-            "system_prompt": packet.system_prompt,
-            "sources": packet.sources_text,
-            "source_hash_now": packet.source_hash_now,
-            "files": packet.sent_files,
-            "outline_only": packet.outline_only,
-            "withheld": packet.withheld,
-            "truncation_notice": packet.truncation_notice,
-            "estimated_tokens": packet.estimated_tokens,
-            "next_steps": [
-                "write the note body yourself, following system_prompt and using only the "
-                "sources above; start with the first section heading, no frontmatter",
-                *(
-                    [
-                        "put truncation_notice at the top of the body "
-                        "(it names the files that were not read)"
-                    ]
-                    if packet.truncation_notice
-                    else []
-                ),
-                f"call kb_update with id=module/{module_id}, your body, and "
-                "read_hash=source_hash_now",
-                "tell the user a person must read it and run `milepost review`",
-            ],
-        }
-    try:
-        model = resolve_model(config, environ)
-    except EnvironmentProblem as error:
-        raise KbToolError("ENVIRONMENT", str(error)) from error
-    try:
-        draft_modules(root, config, [module_id], client, model, False, now, sleep)
-    except ProviderError as error:
-        raise _translate(error) from error
+    packet = build_draft_packet(root, config, module_id)
     return {
         "id": f"module/{module_id}",
-        "status": "draft",
+        "system_prompt": packet.system_prompt,
+        "sources": packet.sources_text,
+        "source_hash_now": packet.source_hash_now,
+        "files": packet.sent_files,
+        "outline_only": packet.outline_only,
+        "withheld": packet.withheld,
+        "truncation_notice": packet.truncation_notice,
+        "estimated_tokens": packet.estimated_tokens,
         "next_steps": [
-            f"ask a human to read the note and run `milepost review module/{module_id}`",
-            "call kb_check",
+            "write the note body yourself, following system_prompt and using only the "
+            "sources above; start with the first section heading, no frontmatter",
+            *(
+                [
+                    "put truncation_notice at the top of the body "
+                    "(it names the files that were not read)"
+                ]
+                if packet.truncation_notice
+                else []
+            ),
+            f"call kb_update with id=module/{module_id}, your body, and read_hash=source_hash_now",
+            "tell the user a person must read it and run `milepost review`",
         ],
     }

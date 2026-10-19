@@ -7,7 +7,7 @@ Companion to SPEC.md. Each milestone lists the work, the test functions to write
 | Milestone | State |
 |---|---|
 | M0 to M6, M5a | Done, on `main` |
-| M7 Drafting, init, doctor, `.env` | Done, on `main` |
+| M7 Drafting, init, doctor | Done, on `main`. Drafting with a separate model and `.env` loading were later removed: Claude writes the notes |
 | M8 Review, rehash, hooks, merge driver | Done, on `main` |
 | M8a Computed context (outline, impact, sync, L1 purpose) | Done, on `main` |
 | M8b Human visibility (status, report, churn, CODEOWNERS) | Done, on `main` |
@@ -31,6 +31,7 @@ An architecture review of the finished MVP found structural risks: one stored ha
 | 4 | Staleness from git history, soft by default; remove the stored hash, `rehash` and the `CONFLICT` sentinel | Done |
 | 5 | Heavy dependencies become optional extras; agent mode becomes the default | Done |
 | 6 | Consolidate SPEC and README around the trimmed product | Done |
+| 7 | Remove drafting with a separate model (`--model-mode`, `milepost draft`, `MILEPOST_MODEL`, the `model` extra, `.env` loading): Claude always writes the notes | Done |
 
 Kill criterion (proposed; to be agreed before the pilot runs): drop the notes layer and ship only the computed tools as a small standalone server, or stop, if tokens after the first turn are not clearly lower (under about 20% savings), or if reviewers do not answer questions about a pull request faster or more accurately from the notes and `report` than from the diff.
 

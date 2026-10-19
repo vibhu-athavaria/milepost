@@ -1,8 +1,7 @@
-"""Draft L2 module notes with an LLM (SPEC section 9.3 and 9.5)."""
+"""What Claude needs to write a module note: the instructions and the module's sources, after the
+exclusion list, the size budget and the credential scan (SPEC section 9)."""
 
-import json
 import re
-from collections.abc import Callable
 from dataclasses import dataclass, field
 from pathlib import Path
 
@@ -11,12 +10,9 @@ from wcmatch import glob as wcglob
 from milepost.config import Config
 from milepost.core.glob import FLAGS, expand_sources
 from milepost.core.hashing import compute_source_hash
-from milepost.core.notes import Note, parse_note, read_note, write_note
-from milepost.errors import NoteInvalid, ProviderError, UsageError
-from milepost.llm.client import LlmClient, complete_with_retries
+from milepost.errors import UsageError
 
 PROMPT_PATH = Path(__file__).resolve().parent.parent / "prompts" / "draft_l2.md"
-PROGRESS_NAME = ".progress.json"
 _OUTLINE_LINE = re.compile(
     r"^\s*(?:async\s+def|def|class|import|from|export|function|const|interface|type)\b"
 )
@@ -167,74 +163,3 @@ def build_draft_packet(root: Path, config: Config, module_id: str) -> DraftPacke
         truncation_notice=source_notice(collected.outline_only, collected.withheld),
         estimated_tokens=collected.estimated_tokens,
     )
-
-
-def _model_body(reply: str) -> str:
-    try:
-        body = parse_note(reply.strip() + "\n").body
-    except NoteInvalid:
-        body = reply
-    return body.strip()
-
-
-def _write_progress(kb: Path, completed: list[str]) -> None:
-    (kb / PROGRESS_NAME).write_text(json.dumps({"completed": completed}, indent=2) + "\n")
-
-
-def draft_modules(
-    root: Path,
-    config: Config,
-    module_ids: list[str],
-    client: LlmClient,
-    model: str,
-    force: bool,
-    now: str,
-    sleep: Callable[[float], None],
-) -> list[str]:
-    """Draft each module's L2 note. Returns the ids written. Progress is saved after each one."""
-    kb = root / config.project.kb_dir
-    for module_id in module_ids:
-        if module_id not in config.modules:
-            raise UsageError(f"module '{module_id}' is not declared in milepost.toml")
-        note_path = kb / "modules" / f"{module_id}.md"
-        if note_path.is_file() and not force and _is_reviewed(note_path):
-            raise UsageError(f"module '{module_id}' has a reviewed note; use --force to redraft it")
-    completed: list[str] = []
-    for module_id in module_ids:
-        module = config.modules[module_id]
-        packet = build_draft_packet(root, config, module_id)
-        try:
-            reply = complete_with_retries(
-                client, model, packet.system_prompt, packet.sources_text, sleep
-            )
-        except ProviderError as error:
-            raise ProviderError(f"module '{module_id}': {error}") from error
-        body = _model_body(reply)
-        if not body:
-            raise ProviderError(f"module '{module_id}': the model returned an empty note")
-        if packet.truncation_notice:
-            body = packet.truncation_notice + "\n" + body
-        note = Note(
-            meta={
-                "kb_schema": 1,
-                "id": f"module/{module_id}",
-                "title": module.title,
-                "status": "draft",
-                "sources": module.sources,
-                "related": module.related,
-                "written_by": "draft-command",
-                "written_at": now,
-            },
-            body="\n" + body + "\n",
-        )
-        write_note(note, kb / "modules" / f"{module_id}.md")
-        completed.append(module_id)
-        _write_progress(kb, completed)
-    return completed
-
-
-def _is_reviewed(path: Path) -> bool:
-    try:
-        return read_note(path).meta.get("status") == "reviewed"
-    except NoteInvalid:
-        return False

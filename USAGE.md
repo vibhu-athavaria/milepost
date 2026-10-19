@@ -23,7 +23,7 @@ A complete note, with every frontmatter field, is in [templates/note.md.template
 
 ## Try the plugin
 
-**You need:** [uv](https://docs.astral.sh/uv/), Python 3.12, [Claude Code](https://claude.com/claude-code), and a git repository to try it on. Claude Code writes the first drafts itself, so no API key is needed. (Advanced: you can have a separate, cheaper model write them instead; see below.)
+**You need:** [uv](https://docs.astral.sh/uv/), Python 3.12, [Claude Code](https://claude.com/claude-code), and a git repository to try it on. Claude Code writes the first drafts itself, so no API key or model setup is needed.
 
 The plugin is the [plugin/](plugin/) folder of your clone of this repository (below, `~/milepost` stands for wherever you cloned it) and it runs that checkout of milepost. That means it must be loaded in place with `--plugin-dir`. Installing it from a marketplace, which copies it elsewhere, needs a published release and does not work yet.
 
@@ -35,15 +35,6 @@ Clone this repository once and set it up:
 git clone https://github.com/vibhu-athavaria/milepost ~/milepost && cd ~/milepost
 uv sync --python 3.12 && uv tool install --editable .      # the second command puts `milepost` on your PATH
 ```
-
-**Advanced: to draft notes with a separate model instead of Claude**, put its settings in a git-ignored `.env` at the root of the repository you will try it on (or export them in your shell):
-
-```bash
-MILEPOST_MODEL=openrouter/<model slug>      # LiteLLM's format
-OPENROUTER_API_KEY=...                      # or ANTHROPIC_API_KEY for an Anthropic model
-```
-
-Nothing else is needed for the default. Drafting spends tokens in your Claude Code session instead of calling another model.
 
 ### 2. Start Claude Code with the plugin
 
@@ -89,7 +80,7 @@ Nothing more to run. During a session:
 
 - Search is keyword-only until you install the `search` extra; the first meaning-based search then downloads a ~130 MB model.
 - Each hook starts `uv run`, which adds a fraction of a second. To remove it, run `uv tool install --editable ~/milepost` and change the commands in `plugin/hooks/hooks.json` to plain `milepost hook ...`.
-- Drafting sends a module's source to your model provider (or shows it to your agent). Only run it on code you are allowed to send, and read the dry-run list first.
+- Drafting shows a module's source to Claude, as everything else it reads is shown. Only run it on code you are allowed to share with your Claude provider, and read the dry-run list first.
 - The CI workflow that `init` writes installs milepost from PyPI, which does not exist yet, so that step fails in CI. Edit `.github/workflows/milepost.yml` to install from your checkout or a git URL, or leave the workflow out of a first trial.
 
 ---
@@ -156,12 +147,11 @@ milepost review module/api                         # after you have read it
 
 ### Optional extras
 
-The default install is lean (no machine-learning libraries, no downloads). Two extras add capabilities:
+The default install is lean (no machine-learning libraries, no downloads). One extra adds a capability:
 
 | Extra | Adds | Install |
 |---|---|---|
 | `search` | meaning-based search over the notes (local embeddings; the first use downloads a ~130 MB model). Without it, search is keyword-only | `uv tool install --editable ".[search]"` |
-| `model` | drafting notes with a separate model through LiteLLM (`milepost init --model-mode`) | `uv tool install --editable ".[model]"` |
 
 `milepost doctor` says which are missing. For development use `uv sync --all-extras`.
 
@@ -211,10 +201,9 @@ KB-Waive: dir:app/payments scratch code, a module comes later
 
 | Command | Purpose |
 |---|---|
-| `milepost init [--dry-run] [--modules ID,...] [--yes] [--model-mode] [--force-config] [--no-hooks]` | Scaffold the knowledge base, declare the named modules, draft their notes, install the git hooks, build the index. Writes and sends nothing with `--dry-run` |
+| `milepost init [--dry-run] [--modules ID,...] [--yes] [--force-config] [--no-hooks]` | Scaffold the knowledge base, declare the named modules, install the git hooks, build the index, and list the modules Claude should write notes for. Writes nothing with `--dry-run` |
 | `milepost scan [--json]` | List candidate modules no declared module covers. Read-only |
 | `milepost check [--ci --base REF] [--format text\|json] [--no-churn]` | Validate notes and detect staleness. Exit 1 on failures. `--no-churn` skips the slower unreviewed-churn warning |
-| `milepost draft ID [--force]` | Draft or redraft one module note with the configured model |
 | `milepost review NOTE_ID` | Mark a note reviewed by you (records your git identity and the time). Refuses a stale note |
 | `milepost overview` | Print the module index (one line per module), built from the notes |
 | `milepost index [--rebuild]` | Build or update the local search index |
@@ -241,7 +230,6 @@ The git hooks `hooks install` adds are `post-merge` and `post-checkout` (run `in
 | 1 | The check or operation found failures |
 | 2 | Usage or configuration error |
 | 3 | Environment error (missing dependency or variable, no search index, unreadable repository) |
-| 4 | LLM provider error |
 
 ---
 
@@ -272,7 +260,7 @@ The git hooks `hooks install` adds are `post-merge` and `post-checkout` (run `in
 | `[modules.<id>]` | One table per module: `sources` (file globs, relative to the repo root), optional `title`, `related`, and `verify` (commands that check the module, shown to agents; write them yourself) |
 | `[structure]` | `languages`, `ignore` globs, and `roots` where module candidates are looked for |
 | `[index]` | Search index location and the embedding model and its dimension (these must agree) |
-| `[draft]` | `mode` (`model` or `agent`), drafting limits (`max_source_bytes`, default 200000 per module; larger modules are partly sent as outlines and the note says so) files that are never sent (`**/.env*`, keys, credentials), and `secret_scan_allow` (globs of files the credential scan withheld that you have checked and want included) |
+| `[draft]` | drafting limits (`max_source_bytes`, default 200000 per module; larger modules are partly read as outlines and the note says so), files that are never read (`**/.env*`, keys, credentials), and `secret_scan_allow` (globs of files the credential scan withheld that you have checked and want included) |
 | `[check]` | `stale` (`warn`, the default, or `fail`: a pull request that edits covered code without touching its note fails) and `fail_on` (`stale`, the default, or `none` for report-only) |
 | `[visibility]` | `agent_trailers` (regexes that mark a commit as agent-authored; default: Claude Code's `Co-Authored-By ... noreply@anthropic.com` trailer and its "Generated with Claude Code" line) and `churn_warn_lines` (default 1000) |
 
@@ -280,17 +268,11 @@ Module ids are lowercase letters, digits, `_` and `-`. Globs must be relative an
 
 ## Environment variables
 
-Needed only for the advanced option of drafting notes with a separate model: `milepost init --model-mode` (or `[draft] mode = "model"`), then `draft`, `init` and `kb_draft_module`. Install the extra with `uv tool install --editable ".[model]"`. By default Claude writes the notes itself, so no model, key or extra is needed. Nothing is stored in `milepost.toml` or any committed file.
-
 | Variable | Purpose |
 |---|---|
-| `MILEPOST_MODEL` | The model used to draft notes, in LiteLLM's format. For OpenRouter: `openrouter/<OpenRouter model slug>` |
-| The provider's own key variable | `OPENROUTER_API_KEY` for an `openrouter/...` model, `ANTHROPIC_API_KEY` for an Anthropic model |
-| `MILEPOST_DISABLED` | Set to `1` to pause Milepost: see [Pause Milepost](#pause-milepost). Not read from `.env` |
+| `MILEPOST_DISABLED` | Set to `1` to pause Milepost: see [Pause Milepost](#pause-milepost) |
 
-Set them in your shell, or in a `.env` file at the repository root (see [templates/.env.example](templates/.env.example)). milepost loads `.env` for `draft`, `init`, `doctor` and `serve`; a variable already set in the shell wins. `milepost init` adds `.env` to `.gitignore`, and `doctor` warns if a `.env` exists that git does not ignore.
-
----
+Nothing else is read from the environment: Claude writes the notes, so there are no model names or keys to configure. (Earlier versions could draft with a separate model through `MILEPOST_MODEL`; that was removed. A `milepost.toml` that still has `mode` or `provider_model` under `[draft]` keeps working, and the settings are ignored; `mode = "model"` is ignored too; `milepost doctor` warns and says to delete the line.)
 
 ## Fewer permission prompts
 
@@ -304,7 +286,7 @@ A plugin cannot ship permission rules itself, so this one line is yours to add. 
 
 ## Troubleshooting
 
-Start with `milepost doctor`. It checks Python, git, SQLite, your model settings, your `.env`, the config file and your git hooks, and says what is missing.
+Start with `milepost doctor`. It checks Python, git, SQLite, the config file, the optional search extra and your git hooks, and says what is missing.
 
 | Symptom | Likely cause and fix |
 |---|---|
@@ -312,7 +294,6 @@ Start with `milepost doctor`. It checks Python, git, SQLite, your model settings
 | `/mcp` does not list `milepost` | Claude Code was not started with `--plugin-dir ~/milepost/plugin`, or `uv sync` was not run in the milepost checkout. Run `claude plugin validate ~/milepost/plugin` |
 | Hooks seem to do nothing | They fail open on purpose. Run one by hand: `echo '{}' \| uv run --project ~/milepost milepost hook session-start`, and read stderr |
 | `config file not found` | You are outside a repository with a `milepost.toml`. Run `/milepost:kb-init` or `milepost init`, or pass `--repo` |
-| `MILEPOST_MODEL is not set` | This repository is set to draft with a separate model. Set it and the provider key in `.env` or your shell, or switch back to Claude writing the notes (`[draft] mode = "agent"` in `milepost.toml`), which needs neither |
 | `STALE_NOTE` after an ordinary edit | Expected: any commit that touches a covered file after the note was last touched counts, comments included. Re-read the code and touch the note (`kb_update`, or edit it; an unchanged body is fine if it still holds). It only warns unless you set `[check] stale = "fail"` |
 | `milepost review` refuses | The note is stale: update it first (any edit counts as touching it), then review |
 | `CITATION_BROKEN` | The note names a file or symbol that isn't there. Fix the note: it may be an invented detail |
@@ -330,9 +311,9 @@ milepost uninstall --yes           # removes it, keeps your notes
 milepost uninstall --delete-notes --yes   # also deletes the notes under kb/
 ```
 
-It removes only what milepost wrote: the git hooks and the merge driver config, the milepost line in `.gitattributes` and the `kb/` lines in `.gitignore` (the `.env` line stays), the CI workflow if you have not edited it, the search index, and `milepost.toml`. The notes are plain markdown and are kept unless you pass `--delete-notes`; with that flag it refuses, and changes nothing, while `kb/` has uncommitted changes.
+It removes only what milepost wrote: the git hooks and the merge driver config, the milepost line in `.gitattributes` and the `kb/` lines in `.gitignore` , the CI workflow if you have not edited it, the search index, and `milepost.toml`. The notes are plain markdown and are kept unless you pass `--delete-notes`; with that flag it refuses, and changes nothing, while `kb/` has uncommitted changes.
 
-It never edits files you own. It lists them instead, under "by hand": the milepost section in `CLAUDE.md` or `AGENTS.md`, CODEOWNERS lines for `kb/`, entries in your own hook manager, `MILEPOST_*` lines in `.env`, and the `--plugin-dir` flag. It does not touch git history. Nothing is committed for you: review with `git status`, commit the removal, and `git restore .` or a revert brings tracked files back. The tool itself is removed with `uv tool uninstall milepost`.
+It never edits files you own. It lists them instead, under "by hand": the milepost section in `CLAUDE.md` or `AGENTS.md`, CODEOWNERS lines for `kb/`, entries in your own hook manager, `MILEPOST_*` lines that older versions left in `.env`, and the `--plugin-dir` flag. It does not touch git history. Nothing is committed for you: review with `git status`, commit the removal, and `git restore .` or a revert brings tracked files back. The tool itself is removed with `uv tool uninstall milepost`.
 
 ---
 

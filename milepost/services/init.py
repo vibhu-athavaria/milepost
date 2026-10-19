@@ -3,22 +3,20 @@
 import json
 import re
 import subprocess
-from collections.abc import Callable, Mapping
 from dataclasses import dataclass, field
 from importlib.metadata import version
 from pathlib import Path
 
-from milepost.config import Config, Module, Project, Structure, load_config, resolve_model
+from milepost.config import Config, Module, Project, Structure, load_config
 from milepost.embeddings import Embedder
-from milepost.errors import EnvironmentProblem, MilepostError, UsageError
-from milepost.llm.client import LlmClient, model_extra_available
+from milepost.errors import EnvironmentProblem, UsageError
 from milepost.services.coverage import CONFIG_NAME, uncovered_candidates, undeclared_candidates
-from milepost.services.draft import collect_sources, draft_modules
+from milepost.services.draft import collect_sources
 from milepost.services.hooks import GITATTRIBUTES_LINE, HooksReport, install_hooks
 from milepost.services.index import run_index
 from milepost.structure.candidates import Candidate
 
-GITIGNORE_LINES = ["kb/.index/", "kb/.progress.json", ".env"]
+GITIGNORE_LINES = ["kb/.index/"]
 WORKFLOW_PATH = ".github/workflows/milepost.yml"
 WORKFLOW_TEMPLATE = Path(__file__).resolve().parent.parent / "resources" / "ci-kb-check.yml"
 
@@ -28,15 +26,13 @@ class InitReport:
     dry_run: bool = False
     created: list[str] = field(default_factory=list)
     declared: list[str] = field(default_factory=list)
-    drafted: list[str] = field(default_factory=list)
     planned_files: dict[str, list[str]] = field(default_factory=dict)
     outline_only: dict[str, list[str]] = field(default_factory=dict)
     withheld: dict[str, list[str]] = field(default_factory=dict)
     estimated_tokens: int = 0
     indexed: int = 0
     hooks: HooksReport | None = None
-    agent_pending: list[str] = field(default_factory=list)
-    agent_mode: bool = False
+    pending: list[str] = field(default_factory=list)  # declared modules still without a note
 
 
 def _require_git_repo(root: Path) -> None:
@@ -64,9 +60,7 @@ def _module_table(candidate: Candidate, commented: bool) -> str:
     return "\n".join(f"{prefix}{line}" for line in lines) + "\n"
 
 
-def _render_config(
-    name: str, active: list[Candidate], suggested: list[Candidate], model_mode: bool = False
-) -> str:
+def _render_config(name: str, active: list[Candidate], suggested: list[Candidate]) -> str:
     defaults = Structure()
     parts = [
         "# milepost configuration. Commit this file.\n"
@@ -83,12 +77,6 @@ def _render_config(
     )
     parts.append(
         "[draft]\n"
-        '# "agent" (default): your coding agent writes the notes itself, no key needed. '
-        '"model": milepost calls the model named by MILEPOST_MODEL (pip install milepost[model]).\n'
-        f'mode = "{"model" if model_mode else "agent"}"\n'
-        "# Resolved from the MILEPOST_MODEL environment variable (shell or .env). "
-        "Never put a model name or key here.\n"
-        'provider_model = "${MILEPOST_MODEL}"\n'
         "max_source_bytes = 200000\n"
         'exclude = ["**/.env*", "**/*secret*", "**/*.pem", "**/*.key", "**/credentials*"]\n'
     )
@@ -110,14 +98,6 @@ def _workflow_text() -> str:
     return re.sub(
         r"milepost==[\w.]+", f"milepost=={version('milepost')}", WORKFLOW_TEMPLATE.read_text()
     )
-
-
-def _existing_mode(root: Path) -> str | None:
-    """Draft mode of the config that --force-config is about to replace, if there is one."""
-    try:
-        return load_config(root / CONFIG_NAME).draft.mode
-    except MilepostError:
-        return None
 
 
 def _plan_config(
@@ -157,29 +137,14 @@ def run_init(
     modules: list[str] | None,
     dry_run: bool,
     force_config: bool,
-    client: LlmClient,
     embedder: Embedder | None,
-    environ: Mapping[str, str],
-    now: str,
-    sleep: Callable[[float], None],
     install_hooks_flag: bool = False,
-    model_mode: bool = False,
 ) -> InitReport:
     _require_git_repo(root)
     config, newly, suggested, config_exists = _plan_config(root, modules, force_config)
-    if model_mode and config_exists and config.draft.mode != "model":
-        raise UsageError(
-            "milepost.toml already exists and drafts with Claude; to use a separate model set "
-            '[draft] mode = "model" in it yourself'
-        )
-    if not config_exists:
-        # --force-config keeps the mode of the file it replaces; --model-mode picks model mode.
-        previous = _existing_mode(root) if force_config else None
-        config.draft.mode = "model" if model_mode or previous == "model" else "agent"
-    agent_drafts = config.draft.mode == "agent"
     kb = root / config.project.kb_dir
     to_draft = [m for m in config.modules if not (kb / "modules" / f"{m}.md").is_file()]
-    report = InitReport(dry_run=dry_run, declared=[c.id for c in newly], agent_mode=agent_drafts)
+    report = InitReport(dry_run=dry_run, declared=[c.id for c in newly])
 
     if dry_run:
         for module_id in to_draft:
@@ -192,18 +157,9 @@ def run_init(
             report.estimated_tokens += collected.estimated_tokens
         return report
 
-    if not agent_drafts and to_draft and not model_extra_available():
-        raise EnvironmentProblem(
-            "drafting with a separate model needs the `model` extra: pip install 'milepost[model]' "
-            "(or leave out --model-mode and let Claude write the notes)"
-        )
-    model = "" if agent_drafts or not to_draft else resolve_model(config, environ)
-
     config_path = root / CONFIG_NAME
     if not config_exists:
-        config_path.write_text(
-            _render_config(config.project.name, newly, suggested, model_mode=not agent_drafts)
-        )
+        config_path.write_text(_render_config(config.project.name, newly, suggested))
         report.created.append(CONFIG_NAME)
     elif newly:
         existing = config_path.read_text(encoding="utf-8")
@@ -227,10 +183,7 @@ def run_init(
         report.hooks = install_hooks(root)
 
     final = load_config(config_path)
-    if to_draft and agent_drafts:
-        report.agent_pending = to_draft
-    elif to_draft:
-        report.drafted = draft_modules(root, final, to_draft, client, model, False, now, sleep)
+    report.pending = to_draft
     index_report = run_index(root, final, embedder)
     report.indexed = index_report.indexed
     return report

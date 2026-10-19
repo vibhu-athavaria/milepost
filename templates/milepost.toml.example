@@ -29,16 +29,7 @@ embedding_model = "BAAI/bge-small-en-v1.5"
 embedding_dim = 384
 
 [draft]
-# "agent" (default): Claude writes the notes through kb_draft_module and kb_update. No key and
-#   no extra install.
-# "model" (advanced): milepost calls the separate model named by MILEPOST_MODEL (needs a provider
-#   key and `pip install milepost[model]`). `milepost init --model-mode` writes this for you.
-mode = "agent"
-# Resolved from the MILEPOST_MODEL environment variable at run time. Never put a model name here.
-# Also set the provider's own key variable (OPENROUTER_API_KEY, ANTHROPIC_API_KEY, ...).
-# Both can live in a git-ignored .env file at the repo root; see templates/.env.example.
-# `milepost doctor` reports what is missing.
-provider_model = "${MILEPOST_MODEL}"
+# Claude writes the notes through kb_draft_module and kb_update; there is no model to configure.
 max_source_bytes = 200000
 exclude = ["**/.env*", "**/*secret*", "**/*.pem", "**/*.key", "**/credentials*"]
 # Files the credential scan withholds (false positives such as token-type constants) that a

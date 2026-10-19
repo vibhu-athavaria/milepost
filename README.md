@@ -161,7 +161,7 @@ Files and symbols cited in backticks are checked: `milepost check` warns when a 
 | Merge driver: bodies merge line by line, and a merge that mixes in other people's prose returns a reviewed note to `draft` | Works |
 | MCP server with ten `kb_*` tools; each response says what to do next | Works |
 | Claude Code plugin: `/milepost:kb-init`, a usage skill, and hooks (index at session start, covering notes after each edit, one stop if a note is stale) | Works, loaded from a local checkout |
-| Drafting: by Claude Code itself (the default, no key), or with your own model (OpenRouter, Anthropic, anything LiteLLM supports) via the optional `model` extra | Works |
+| Drafting: Claude Code writes each note itself from the module's sources (no key, no separate model) | Works |
 | Search over the notes: keyword by default, plus meaning-based with the optional `search` extra (local, no API key) | Works |
 | Human visibility: `status` (unreviewed change per module), `report` (a pull-request aid, in the CI job summary), a churn warning, a `CODEOWNERS` template | Works |
 | Safe handling of your code: secret scan (withholds only the flagged file), exclusion list, a dry run that lists every file first | Works |
@@ -214,7 +214,7 @@ Code-graph and retrieval tools tell an agent *what the code is*. Milepost's nich
 <details>
 <summary><b>Does it send my code to a model?</b></summary>
 
-By default the code goes only where your coding agent already sends it: Claude writes the notes itself, so what it reads for drafting reaches the same provider as everything else it reads. If you opt in to a separate model (an advanced option), drafting sends each module's source to that provider, and `milepost init --dry-run` lists every file and the token estimate first. Computed context, checking, indexing and search run entirely locally. Model names and keys come from environment variables or a git-ignored `.env`, never from committed files.
+The code goes only where your coding agent already sends it: Claude writes the notes itself, so what it reads for drafting reaches the same provider as everything else it reads. `milepost init --dry-run` lists every file and the token estimate first. Computed context, checking, indexing and search run entirely locally. Milepost never calls a model of its own and holds no keys.
 </details>
 
 <details>
@@ -226,7 +226,7 @@ By default the code goes only where your coding agent already sends it: Claude w
 <details>
 <summary><b>What does it cost?</b></summary>
 
-Drafting is the agent reading each module's source once (the dry run shows the estimate), or one call to your separate model per module if you chose that option. After that, each task adds the cost of the tool calls (the tool definitions and the session-start index, measured at roughly 2,000 tokens on a small repository) and of rewriting the notes it changes. The computed tools cost almost nothing. Whether the total is less than the searching it saves is exactly what the pilot is meant to measure.
+Drafting is Claude reading each module's source once (the dry run shows the estimate). After that, each task adds the cost of the tool calls (the tool definitions and the session-start index, measured at roughly 2,000 tokens on a small repository) and of rewriting the notes it changes. The computed tools cost almost nothing. Whether the total is less than the searching it saves is exactly what the pilot is meant to measure.
 </details>
 
 <details>
@@ -275,7 +275,7 @@ Built test-first. Details and the named tests for each milestone are in [TASKS.m
 | [TASKS.md](TASKS.md) | The build order, with named tests per milestone |
 | [PILOT.md](PILOT.md) | How to measure whether it helps |
 | [plugin/](plugin/) | The Claude Code plugin |
-| [templates/](templates/) | Config example, note skeleton, `.env`, CLAUDE.md, AGENTS.md and CODEOWNERS snippets |
+| [templates/](templates/) | Config example, note skeleton, CLAUDE.md, AGENTS.md and CODEOWNERS snippets |
 
 ## Development
 

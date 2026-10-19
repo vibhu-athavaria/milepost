@@ -14,15 +14,12 @@ dependencies = [
     "tree-sitter",
     "tree-sitter-typescript",
     "tree-sitter-javascript",
-    "python-dotenv>=1.2.4",
 ]
 
 [project.optional-dependencies]
 # Meaning-based search over the notes (local embeddings). Without it, search is keyword-only.
 search = ["fastembed", "numpy"]
-# Drafting notes with a separate model (OpenRouter, Anthropic, ...). Not needed in agent mode.
-model = ["litellm"]
-all = ["milepost[search,model]"]
+all = ["milepost[search]"]
 
 [project.scripts]
 milepost = "milepost.cli:app"
