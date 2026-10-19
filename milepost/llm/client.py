@@ -27,7 +27,7 @@ class LiteLlmClient:
         except ImportError as error:
             raise EnvironmentProblem(
                 "drafting with a separate model needs the `model` extra: "
-                "pip install 'milepost[model]' (or use agent mode)"
+                "pip install 'milepost[model]' (or let Claude write the notes)"
             ) from error
 
         response = litellm.completion(

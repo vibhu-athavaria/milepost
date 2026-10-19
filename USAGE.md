@@ -23,7 +23,7 @@ A complete note, with every frontmatter field, is in [templates/note.md.template
 
 ## Try the plugin
 
-**You need:** [uv](https://docs.astral.sh/uv/), Python 3.12, [Claude Code](https://claude.com/claude-code), and a git repository to try it on. By default Claude Code writes the first drafts itself (*agent mode*), so no API key is needed; you can instead use a separate model (below).
+**You need:** [uv](https://docs.astral.sh/uv/), Python 3.12, [Claude Code](https://claude.com/claude-code), and a git repository to try it on. Claude Code writes the first drafts itself, so no API key is needed. (Advanced: you can have a separate, cheaper model write them instead; see below.)
 
 The plugin is the [plugin/](plugin/) folder of your clone of this repository (below, `~/milepost` stands for wherever you cloned it) and it runs that checkout of milepost. That means it must be loaded in place with `--plugin-dir`. Installing it from a marketplace, which copies it elsewhere, needs a published release and does not work yet.
 
@@ -36,14 +36,14 @@ git clone https://github.com/vibhu-athavaria/milepost ~/milepost && cd ~/milepos
 uv sync --python 3.12 && uv tool install --editable .      # the second command puts `milepost` on your PATH
 ```
 
-**To draft notes with a separate model**, put its settings in a git-ignored `.env` at the root of the repository you will try it on (or export them in your shell):
+**Advanced: to draft notes with a separate model instead of Claude**, put its settings in a git-ignored `.env` at the root of the repository you will try it on (or export them in your shell):
 
 ```bash
 MILEPOST_MODEL=openrouter/<model slug>      # LiteLLM's format
 OPENROUTER_API_KEY=...                      # or ANTHROPIC_API_KEY for an Anthropic model
 ```
 
-Nothing else is needed for the default. Agent mode spends tokens in your Claude Code session instead of calling another model.
+Nothing else is needed for the default. Drafting spends tokens in your Claude Code session instead of calling another model.
 
 ### 2. Start Claude Code with the plugin
 
@@ -179,7 +179,7 @@ The playbook is [SPEC.md](SPEC.md) section 12.5. In short:
 |---|---|
 | Starting a task | `kb_overview`, then `kb_module` for the owning module, `kb_outline` for the files to read (then read only those line ranges), `kb_impact` for the files to change |
 | After a change | the module's `verify` commands, then `kb_sync`, then `kb_update` on each note it lists, then `kb_check` |
-| A new module | add it to `milepost.toml`, then `kb_draft_module`; in agent mode write the note from the packet it returns and save it with `kb_update` |
+| A new module | add it to `milepost.toml`, then `kb_draft_module`; write the note from the sources it returns and save it with `kb_update` |
 | A note you cannot reconcile, or a merge conflict in a note | stop; tell a person. Never mark a note reviewed, never write a `KB-Waive` |
 
 Each tool's answer ends with `next_steps`: follow them.
@@ -280,7 +280,7 @@ Module ids are lowercase letters, digits, `_` and `-`. Globs must be relative an
 
 ## Environment variables
 
-Needed only to draft notes with a separate model: `milepost init --model-mode` (or `[draft] mode = "model"`), then `draft`, `init` and `kb_draft_module`. Install the extra with `uv tool install --editable ".[model]"`. In the default **agent mode** your coding agent writes the notes itself, so no model, key or extra is needed. Nothing is stored in `milepost.toml` or any committed file.
+Needed only for the advanced option of drafting notes with a separate model: `milepost init --model-mode` (or `[draft] mode = "model"`), then `draft`, `init` and `kb_draft_module`. Install the extra with `uv tool install --editable ".[model]"`. By default Claude writes the notes itself, so no model, key or extra is needed. Nothing is stored in `milepost.toml` or any committed file.
 
 | Variable | Purpose |
 |---|---|
@@ -292,6 +292,16 @@ Set them in your shell, or in a `.env` file at the repository root (see [templat
 
 ---
 
+## Fewer permission prompts
+
+The plugin's `/milepost:kb-init` command and its `kb-usage` skill pre-approve the Milepost tools while they run, so setup and the normal work loop do not stop to ask for each call. Outside them, Claude Code asks the first time it calls a Milepost tool. To stop that everywhere, allow the server once in your own settings (`~/.claude/settings.json`, or `.claude/settings.json` in a repository):
+
+```json
+{ "permissions": { "allow": ["mcp__plugin_milepost_milepost__*"] } }
+```
+
+A plugin cannot ship permission rules itself, so this one line is yours to add. `kb_update` writes only note files under `kb/`, saved as drafts; nothing is reviewed until a person says so.
+
 ## Troubleshooting
 
 Start with `milepost doctor`. It checks Python, git, SQLite, your model settings, your `.env`, the config file and your git hooks, and says what is missing.
@@ -302,7 +312,7 @@ Start with `milepost doctor`. It checks Python, git, SQLite, your model settings
 | `/mcp` does not list `milepost` | Claude Code was not started with `--plugin-dir ~/milepost/plugin`, or `uv sync` was not run in the milepost checkout. Run `claude plugin validate ~/milepost/plugin` |
 | Hooks seem to do nothing | They fail open on purpose. Run one by hand: `echo '{}' \| uv run --project ~/milepost milepost hook session-start`, and read stderr |
 | `config file not found` | You are outside a repository with a `milepost.toml`. Run `/milepost:kb-init` or `milepost init`, or pass `--repo` |
-| `MILEPOST_MODEL is not set` | You are in model mode. Set it and the provider key in `.env` or your shell, or switch to agent mode (`[draft] mode = "agent"`), which needs neither |
+| `MILEPOST_MODEL is not set` | This repository is set to draft with a separate model. Set it and the provider key in `.env` or your shell, or switch back to Claude writing the notes (`[draft] mode = "agent"` in `milepost.toml`), which needs neither |
 | `STALE_NOTE` after an ordinary edit | Expected: any commit that touches a covered file after the note was last touched counts, comments included. Re-read the code and touch the note (`kb_update`, or edit it; an unchanged body is fine if it still holds). It only warns unless you set `[check] stale = "fail"` |
 | `milepost review` refuses | The note is stale: update it first (any edit counts as touching it), then review |
 | `CITATION_BROKEN` | The note names a file or symbol that isn't there. Fix the note: it may be an invented detail |

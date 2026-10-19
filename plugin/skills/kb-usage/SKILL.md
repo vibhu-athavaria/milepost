@@ -1,5 +1,6 @@
 ---
 name: kb-usage
+allowed-tools: mcp__plugin_milepost_milepost__kb_overview, mcp__plugin_milepost_milepost__kb_module, mcp__plugin_milepost_milepost__kb_file, mcp__plugin_milepost_milepost__kb_search, mcp__plugin_milepost_milepost__kb_outline, mcp__plugin_milepost_milepost__kb_impact, mcp__plugin_milepost_milepost__kb_sync, mcp__plugin_milepost_milepost__kb_check, mcp__plugin_milepost_milepost__kb_draft_module, mcp__plugin_milepost_milepost__kb_update
 description: Use the milepost knowledge base to find the right module, the exact symbols to read, the importers and tests before searching code, and to write back what changed after a task. Follow the scenario steps so the right kb tool is called at the right time.
 ---
 
@@ -57,10 +58,8 @@ Find the scenario that matches what you are doing and follow its steps in order.
 
 ### A new module
 
-`kb_update` cannot create a module note unless the project is in agent mode and the module is declared.
-
 1. Add `[modules.<id>]` with `sources` to `milepost.toml`.
-2. Call `kb_draft_module` with the id. In model mode it writes the note as `draft`; if it returns `ENVIRONMENT`, tell the user which variable to set. In agent mode it returns a draft packet: write the note body from it and submit it with `kb_update`.
+2. Call `kb_draft_module` with the id. It returns the instructions and the module's sources: write the note body from them and save it with `kb_update` (`read_hash` = the `source_hash_now` it returned). If the response lists `withheld` files, put its `truncation_notice` at the top of the body.
 3. Call `kb_check`.
 4. Tell the user to read the note and run `milepost review <id>`. The note stays `draft` until they do.
 

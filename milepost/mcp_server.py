@@ -95,10 +95,11 @@ def build_server(
 
     @server.tool()
     def kb_update(id: str, body: str, read_hash: str | None = None) -> dict[str, Any]:
-        """Write a module's note (id `module/<id>`). Pass read_hash=source_hash_now from
-        kb_module. In agent mode this also creates the note of a declared module that has none.
-        The note is saved as a draft and a person must run `milepost review`. Bodies that look
-        like they contain a credential are rejected."""
+        """Save a module's note (id `module/<id>`). Pass read_hash=source_hash_now from
+        kb_module. Also creates the note of a declared module that has none. The note is saved
+        as a draft until a person runs `milepost review`. (If the project drafts with a separate
+        model, new notes come from kb_draft_module instead.) Bodies that look like they contain a
+        credential are rejected."""
         return _guard(lambda: kb.kb_update(root, id, body, read_hash, _now()))
 
     @server.tool()
@@ -108,10 +109,11 @@ def build_server(
 
     @server.tool()
     def kb_draft_module(id: str) -> dict[str, Any]:
-        """For a module already declared in milepost.toml. In model mode, drafts the note with
-        the configured LLM (sending the module's source to that provider). In agent mode,
-        writes nothing: it returns the drafting prompt and the module's sources, and you write
-        the note and save it with kb_update using read_hash=source_hash_now."""
+        """Get what you need to write the note for a module declared in milepost.toml: the
+        instructions and the module's source files (minus excluded or credential-like files).
+        Writes nothing. Write the note yourself, then save it with kb_update using
+        read_hash=source_hash_now. If the project is set to draft with a separate model, this
+        writes the note with that model instead."""
         return _guard(lambda: kb.kb_draft_module(root, id, llm, os.environ, _now(), time.sleep))
 
     @server.tool()

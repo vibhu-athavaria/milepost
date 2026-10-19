@@ -87,11 +87,11 @@ def run_doctor(
     if config_error:
         checks.append(Check(CONFIG_NAME, "fail", config_error))
     if mode == "agent":
-        detail = "agent: your coding agent writes the notes; no model needed"
+        detail = "Claude writes the notes; no separate model or key needed"
         if model:
             detail += (
-                f" ({MODEL_VAR} is set but not used in agent mode; "
-                'set [draft] mode = "model" in milepost.toml to use it)'
+                f" ({MODEL_VAR} is set but not used; "
+                'set [draft] mode = "model" in milepost.toml to draft with it)'
             )
         checks.append(Check("draft-mode", "ok", detail))
     elif not model_extra_available():
@@ -99,7 +99,8 @@ def run_doctor(
             Check(
                 "litellm",
                 "fail",
-                "model mode needs the `model` extra: pip install 'milepost[model]'",
+                "drafting with a separate model needs the `model` extra: "
+                "pip install 'milepost[model]'",
             )
         )
     elif not model:

@@ -14,7 +14,7 @@ After a task:
 
 Your note edits are saved as `status: draft`. Tell the user which notes changed and that a person must run `milepost review <id>`. Only a person marks a note reviewed.
 
-New module: add `[modules.<id>]` to `milepost.toml`, call `kb_draft_module` (in agent mode, write the note from the packet it returns and submit it with `kb_update`), then ask a person to review it.
+New module: add `[modules.<id>]` to `milepost.toml`, call `kb_draft_module` (write the note from the sources it returns and submit it with `kb_update`), then ask a person to review it.
 
 There is one note per module. Cite file paths in backticks in Invariants and Gotchas.
 

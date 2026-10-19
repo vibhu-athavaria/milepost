@@ -169,7 +169,8 @@ def run_init(
     config, newly, suggested, config_exists = _plan_config(root, modules, force_config)
     if model_mode and config_exists and config.draft.mode != "model":
         raise UsageError(
-            'milepost.toml already exists in agent mode; set [draft] mode = "model" in it yourself'
+            "milepost.toml already exists and drafts with Claude; to use a separate model set "
+            '[draft] mode = "model" in it yourself'
         )
     if not config_exists:
         # --force-config keeps the mode of the file it replaces; --model-mode picks model mode.
@@ -193,8 +194,8 @@ def run_init(
 
     if not agent_drafts and to_draft and not model_extra_available():
         raise EnvironmentProblem(
-            "model mode needs the `model` extra: pip install 'milepost[model]' "
-            "(or use the default agent mode)"
+            "drafting with a separate model needs the `model` extra: pip install 'milepost[model]' "
+            "(or leave out --model-mode and let Claude write the notes)"
         )
     model = "" if agent_drafts or not to_draft else resolve_model(config, environ)
 

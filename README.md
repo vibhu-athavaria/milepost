@@ -189,7 +189,7 @@ Proven: the pieces do what they say. The test suite passes on Linux and macOS in
 - **It can't prove a note is true.** Git can say a note is older than the code; only a person reading it vouches for the content. If reviewers rubber-stamp, the `reviewed` badge means nothing. `check` catches notes that cite files or symbols that don't exist, not a plausible falsehood.
 - **"Touched" is not "checked".** Because staleness comes from git, re-saving a note counts as updating it. An agent can silence the warning without reading the code; the read-receipt on `kb_update` and human review are the only defences.
 - **It can't see drift outside a note's file set.** Any commit that touches a covered file after the note makes it stale, however small, which is why a stale note only warns unless you opt in to failing.
-- **In agent mode the exclusion list and secret scan protect only what milepost hands the agent.** The agent can read any file with its own tools.
+- **The exclusion list and secret scan protect only what milepost hands Claude.** The agent can read any file with its own tools.
 - **Notes are text that agents will trust.** Treat `kb/` like code: review changes to it, and use `CODEOWNERS` (a template is provided) so a named person must approve them.
 
 ## How it is different
@@ -214,7 +214,7 @@ Code-graph and retrieval tools tell an agent *what the code is*. Milepost's nich
 <details>
 <summary><b>Does it send my code to a model?</b></summary>
 
-By default the code goes only where your coding agent already sends it: the agent drafts the notes itself with its own model, so what it reads for drafting reaches that provider, as everything else it reads does. If you choose a separate model, drafting sends each module's source to that provider, and `milepost init --dry-run` lists every file and the token estimate first. Computed context, checking, indexing and search run entirely locally. Model names and keys come from environment variables or a git-ignored `.env`, never from committed files.
+By default the code goes only where your coding agent already sends it: Claude writes the notes itself, so what it reads for drafting reaches the same provider as everything else it reads. If you opt in to a separate model (an advanced option), drafting sends each module's source to that provider, and `milepost init --dry-run` lists every file and the token estimate first. Computed context, checking, indexing and search run entirely locally. Model names and keys come from environment variables or a git-ignored `.env`, never from committed files.
 </details>
 
 <details>
@@ -226,7 +226,7 @@ By default the code goes only where your coding agent already sends it: the agen
 <details>
 <summary><b>What does it cost?</b></summary>
 
-Drafting is the agent reading each module's source once (the dry run shows the estimate), or one model call per module in model mode. After that, each task adds the cost of the tool calls (the tool definitions and the session-start index, measured at roughly 2,000 tokens on a small repository) and of rewriting the notes it changes. The computed tools cost almost nothing. Whether the total is less than the searching it saves is exactly what the pilot is meant to measure.
+Drafting is the agent reading each module's source once (the dry run shows the estimate), or one call to your separate model per module if you chose that option. After that, each task adds the cost of the tool calls (the tool definitions and the session-start index, measured at roughly 2,000 tokens on a small repository) and of rewriting the notes it changes. The computed tools cost almost nothing. Whether the total is less than the searching it saves is exactly what the pilot is meant to measure.
 </details>
 
 <details>

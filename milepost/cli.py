@@ -145,8 +145,8 @@ def init(
         bool,
         typer.Option(
             "--model-mode",
-            help="Draft notes with a separate model (needs the model extra and MILEPOST_MODEL) "
-            "instead of your coding agent.",
+            help="Advanced: draft notes with a separate model (needs the model extra and "
+            "MILEPOST_MODEL) instead of Claude.",
         ),
     ] = False,
 ) -> None:
@@ -212,8 +212,8 @@ def init(
         typer.echo(f"drafted kb/modules/{module_id}.md (status: draft)")
     if report.agent_pending:
         typer.echo(
-            "draft.mode = agent: no notes were written. Ask your coding agent to call "
-            "kb_draft_module for each of: " + ", ".join(report.agent_pending)
+            "No notes written yet. Ask Claude to write them (the /milepost:kb-init command does "
+            "this): it calls kb_draft_module for each of: " + ", ".join(report.agent_pending)
         )
         typer.echo(
             "Next: when it has written them, read each draft and run `milepost review <id>` "
@@ -308,8 +308,9 @@ def draft(
     config = load_config(root / CONFIG_NAME)
     if config.draft.mode == "agent":
         raise UsageError(
-            'draft.mode is "agent": ask your coding agent to call kb_draft_module '
-            f"{module_id} instead (this command needs a model)"
+            "this command is for drafting with a separate model, which is not set up here. "
+            f"Ask Claude to call kb_draft_module for {module_id}, or (advanced) set "
+            '[draft] mode = "model" in milepost.toml and MILEPOST_MODEL'
         )
     model = resolve_model(config, os.environ)
     draft_modules(root, config, [module_id], _llm_client(), model, force, _now(), time.sleep)
