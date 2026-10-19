@@ -17,6 +17,11 @@ from milepost.services.coverage import CONFIG_NAME, uncovered_candidates
 from milepost.services.gitinfo import changed_in_head, working_tree_changes
 from milepost.services.kb import KbToolError, kb_file, kb_overview
 
+NO_KB_NUDGE = (
+    "Milepost is installed but this repository has no knowledge base yet. kb_outline, kb_impact "
+    "and kb_sync already work here. If the user wants short reviewed notes per module, offer "
+    "/milepost:kb-init (one confirmation, then you write the notes). Mention this at most once."
+)
 INDEX_CHARS = 3000
 MAX_REASON_FINDINGS = 10
 REMINDER = (
@@ -41,6 +46,9 @@ def _context(event: str, text: str) -> str:
 
 
 def session_start(root: Path) -> str:
+    if not (root / CONFIG_NAME).is_file():
+        in_repo = any((d / ".git").exists() for d in (root, *root.parents))
+        return _context("SessionStart", NO_KB_NUDGE) if in_repo else ""
     try:
         overview = kb_overview(root)
     except Exception:  # noqa: BLE001 - a hook must never fail the session

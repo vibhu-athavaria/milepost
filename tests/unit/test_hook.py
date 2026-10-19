@@ -57,8 +57,21 @@ def test_hook_session_start_when_index_is_huge_then_cut(tmp_path: Path) -> None:
     assert "index cut" in text and len(text) < 3600
 
 
-def test_hook_session_start_when_no_kb_then_prints_nothing(tmp_path: Path) -> None:
-    assert hook.session_start(tmp_path) == ""
+def test_hook_session_start_when_no_kb_then_offers_setup_once_and_names_the_command(
+    tmp_path: Path,
+) -> None:
+    (tmp_path / ".git").mkdir()
+
+    text = context_of(hook.session_start(tmp_path))
+
+    assert "/milepost:kb-init" in text and "at most once" in text
+    assert "kb_outline" in text  # the tools that already work without setup
+
+
+def test_hook_session_start_when_not_in_a_git_repository_then_prints_nothing(
+    tmp_path: Path,
+) -> None:
+    assert hook.session_start(tmp_path / "scratch") == ""
 
 
 def test_hook_post_edit_when_path_covered_then_returns_covering_notes_and_update_instruction(

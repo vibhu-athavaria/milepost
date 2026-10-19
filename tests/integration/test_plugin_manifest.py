@@ -143,3 +143,18 @@ def test_agents_snippet_when_present_then_matches_claude_snippet_apart_from_the_
     agents = (ROOT / "templates/AGENTS.md.snippet").read_text().split("\n", 3)[3]
 
     assert claude.split("Before a task:")[1] == agents.split("Before a task:")[1]
+
+
+def test_plugin_pre_approval_covers_milepost_tools_and_setup_commands_but_never_review() -> None:
+    prefix = "mcp__plugin_milepost_milepost__"
+    root = Path(__file__).resolve().parents[2]
+    bash = re.compile(
+        r"Bash\((uv run --quiet --project \* milepost|milepost) (doctor|scan|init)\*\)"
+    )
+    for path in ("plugin/commands/kb-init.md", "plugin/skills/kb-usage/SKILL.md"):
+        front = (root / path).read_text(encoding="utf-8").split("---\n")[1]
+        tools = re.split(r",\s*", yaml.safe_load(front)["allowed-tools"])
+        for tool in tools:
+            assert tool.startswith(prefix) or bash.fullmatch(tool), (path, tool)
+        assert f"{prefix}kb_update" in tools and f"{prefix}kb_draft_module" in tools
+        assert not any("review" in tool for tool in tools)

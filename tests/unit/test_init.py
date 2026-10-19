@@ -354,7 +354,7 @@ def test_init_when_model_mode_requested_but_config_exists_in_agent_mode_then_usa
     repo = make_repo(tmp_path)
     init(repo, modules=["billing"], model_mode=False)
 
-    with pytest.raises(UsageError, match="agent"):
+    with pytest.raises(UsageError, match="drafts with Claude"):
         init(repo, model_mode=True)
 
 
