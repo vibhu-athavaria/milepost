@@ -231,3 +231,15 @@ def test_uninstall_cli_when_blocked_and_no_yes_then_plan_is_still_printed_with_e
 
     assert result.exit_code == 0, result.output
     assert "blocked:" in result.output and "milepost.toml" in result.output
+
+
+def test_uninstall_when_config_has_the_removed_model_setting_then_it_still_works(
+    repo: KbRepo,
+) -> None:
+    repo.write(
+        "milepost.toml", (repo.root / "milepost.toml").read_text() + '\n[draft]\nmode = "model"\n'
+    )
+
+    report = run_uninstall(repo.root, delete_notes=False, apply=True)
+
+    assert report.applied is True and not (repo.root / "milepost.toml").exists()

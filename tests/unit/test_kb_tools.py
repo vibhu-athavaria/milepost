@@ -33,19 +33,6 @@ def embedder_for(config: Config) -> Embedder:
     return HashEmbedder()
 
 
-class FakeClient:
-    def __init__(self) -> None:
-        self.calls = 0
-
-    def complete(self, model: str, system: str, user: str) -> str:
-        self.calls += 1
-        return "## Purpose\n\nDrafted.\n"
-
-
-def no_sleep(seconds: float) -> None:
-    pass
-
-
 def make_repo(tmp_path: Path, status: str = "reviewed") -> KbRepo:
     repo = KbRepo(tmp_path / "repo")
     repo.add_module(
@@ -62,11 +49,6 @@ def make_repo(tmp_path: Path, status: str = "reviewed") -> KbRepo:
     repo.git("config", "user.email", "t@example.com")
     repo.commit("base")
     return repo
-
-
-def use_model_mode(repo: KbRepo) -> None:
-    text = (repo.root / "milepost.toml").read_text()
-    (repo.root / "milepost.toml").write_text(text + '\n[draft]\nmode = "model"\n')
 
 
 def code_of(error: pytest.ExceptionInfo[KbToolError]) -> str:
@@ -184,20 +166,6 @@ def test_kb_search_when_called_then_indexes_and_returns_capped_results(tmp_path:
     assert len(result["results"]) <= 10
 
 
-def test_kb_update_when_l2_note_missing_then_rejects_and_points_to_kb_draft_module(
-    tmp_path: Path,
-) -> None:
-    repo = make_repo(tmp_path)
-    repo.add_module("other", ["app/other/**/*.py"], {"app/other/x.py": "x = 1\n"}, with_note=False)
-    use_model_mode(repo)
-
-    with pytest.raises(KbToolError) as error:
-        kb_update(repo.root, "module/other", "## Purpose\n\nx\n", "h", NOW)
-
-    assert error.value.code == "NOT_FOUND"
-    assert "kb_draft_module" in error.value.message
-
-
 def test_kb_update_when_body_over_limit_then_rejects(tmp_path: Path) -> None:
     repo = make_repo(tmp_path)
 
@@ -302,29 +270,13 @@ def test_kb_update_when_id_has_unknown_prefix_then_invalid_input(tmp_path: Path)
     assert error.value.code == "INVALID_INPUT"
 
 
-def test_kb_draft_module_when_module_declared_and_no_note_then_writes_draft_note(
-    tmp_path: Path,
-) -> None:
-    repo = make_repo(tmp_path)
-    repo.add_module("other", ["app/other/**/*.py"], {"app/other/x.py": "x = 1\n"}, with_note=False)
-    use_model_mode(repo)
-    client = FakeClient()
-
-    result = kb_draft_module(repo.root, "other", client, {"MILEPOST_MODEL": "m"}, NOW, no_sleep)
-
-    note = read_note(repo.root / "kb/modules/other.md")
-    assert note.meta["status"] == "draft" and note.meta["written_by"] == "draft-command"
-    assert "milepost review module/other" in " ".join(result["next_steps"])
-    assert "| other | Drafted. | draft |" in kb_overview(repo.root)["index"]
-
-
 def test_kb_draft_module_when_module_not_in_config_then_not_found_with_config_hint(
     tmp_path: Path,
 ) -> None:
     repo = make_repo(tmp_path)
 
     with pytest.raises(KbToolError) as error:
-        kb_draft_module(repo.root, "nope", FakeClient(), {"MILEPOST_MODEL": "m"}, NOW, no_sleep)
+        kb_draft_module(repo.root, "nope")
 
     assert error.value.code == "NOT_FOUND" and "milepost.toml" in error.value.message
 
@@ -333,22 +285,9 @@ def test_kb_draft_module_when_note_exists_then_conflict(tmp_path: Path) -> None:
     repo = make_repo(tmp_path)
 
     with pytest.raises(KbToolError) as error:
-        kb_draft_module(repo.root, "billing", FakeClient(), {"MILEPOST_MODEL": "m"}, NOW, no_sleep)
+        kb_draft_module(repo.root, "billing")
 
     assert error.value.code == "CONFLICT"
-
-
-def test_kb_draft_module_when_model_env_unset_then_environment_error_naming_variable(
-    tmp_path: Path,
-) -> None:
-    repo = make_repo(tmp_path)
-    repo.add_module("other", ["app/other/**/*.py"], {"app/other/x.py": "x = 1\n"}, with_note=False)
-    use_model_mode(repo)
-
-    with pytest.raises(KbToolError) as error:
-        kb_draft_module(repo.root, "other", FakeClient(), {}, NOW, no_sleep)
-
-    assert error.value.code == "ENVIRONMENT" and "MILEPOST_MODEL" in error.value.message
 
 
 def test_kb_draft_module_when_every_file_has_a_secret_then_refused_naming_file_only(
@@ -361,16 +300,13 @@ def test_kb_draft_module_when_every_file_has_a_secret_then_refused_naming_file_o
         {"app/other/x.py": 'KEY = "AKIAABCDEFGHIJKLMNOP"\n'},
         with_note=False,
     )
-    client = FakeClient()
-
     with pytest.raises(KbToolError) as error:
-        kb_draft_module(repo.root, "other", client, {"MILEPOST_MODEL": "m"}, NOW, no_sleep)
+        kb_draft_module(repo.root, "other")
 
     assert error.value.code == "INVALID_INPUT"
     assert "app/other/x.py" in error.value.message
     assert "secret_scan_allow" in error.value.message
     assert "AKIAABCDEFGHIJKLMNOP" not in error.value.message
-    assert client.calls == 0
 
 
 def test_kb_check_when_called_then_findings_and_ok_flag(tmp_path: Path) -> None:
@@ -480,10 +416,9 @@ def test_kb_draft_module_when_sources_match_no_files_then_coded_error_not_crash(
 ) -> None:
     repo = make_repo(tmp_path)
     repo.add_module("empty", ["app/empty/**/*.py"], {}, with_note=False)
-    use_model_mode(repo)
 
     try:
-        kb_draft_module(repo.root, "empty", FakeClient(), {"MILEPOST_MODEL": "m"}, NOW, no_sleep)
+        kb_draft_module(repo.root, "empty")
     except KbToolError as error:
         assert error.code in {"INVALID_INPUT", "NOT_FOUND", "ENVIRONMENT"}
 
@@ -540,7 +475,7 @@ def test_kb_overview_when_git_missing_or_detached_then_branch_is_explicit(tmp_pa
     assert "detached" in kb_overview(repo.root)["branch"]
 
 
-def agent_repo(tmp_path: Path) -> KbRepo:
+def repo_with_undrafted_module(tmp_path: Path) -> KbRepo:
     repo = make_repo(tmp_path)
     repo.add_module(
         "other",
@@ -548,34 +483,28 @@ def agent_repo(tmp_path: Path) -> KbRepo:
         {"app/other/x.py": "def run():\n    return 1\n"},
         with_note=False,
     )
-    text = (repo.root / "milepost.toml").read_text()
-    (repo.root / "milepost.toml").write_text(text + '\n[draft]\nmode = "agent"\n')
     return repo
 
 
-def test_kb_draft_module_when_mode_agent_then_returns_packet_and_calls_no_model(
+def test_kb_draft_module_when_called_then_returns_packet_and_writes_nothing(
     tmp_path: Path,
 ) -> None:
-    repo = agent_repo(tmp_path)
-    client = FakeClient()
+    repo = repo_with_undrafted_module(tmp_path)
+    result = kb_draft_module(repo.root, "other")
 
-    result = kb_draft_module(repo.root, "other", client, {}, NOW, no_sleep)
-
-    assert client.calls == 0
-    assert result["mode"] == "agent"
     assert "def run()" in result["sources"] and "## Purpose" in result["system_prompt"]
     assert result["source_hash_now"] == repo.hash_of(["app/other/**/*.py"])
     assert "kb_update" in " ".join(result["next_steps"])
     assert not (repo.root / "kb/modules/other.md").exists()
 
 
-def test_kb_draft_module_when_mode_agent_and_one_file_has_a_secret_then_packet_withholds_it(
+def test_kb_draft_module_when_one_file_has_a_secret_then_packet_withholds_it(
     tmp_path: Path,
 ) -> None:
-    repo = agent_repo(tmp_path)
+    repo = repo_with_undrafted_module(tmp_path)
     repo.write("app/other/keys.py", 'KEY = "AKIAABCDEFGHIJKLMNOP"\n')
 
-    result = kb_draft_module(repo.root, "other", FakeClient(), {}, NOW, no_sleep)
+    result = kb_draft_module(repo.root, "other")
 
     assert result["withheld"] == ["app/other/keys.py"]
     assert "def run()" in result["sources"]
@@ -587,9 +516,9 @@ def test_kb_draft_module_when_mode_agent_and_one_file_has_a_secret_then_packet_w
 def test_kb_update_when_agent_creates_note_and_a_file_was_withheld_then_notice_is_added(
     tmp_path: Path,
 ) -> None:
-    repo = agent_repo(tmp_path)
+    repo = repo_with_undrafted_module(tmp_path)
     repo.write("app/other/keys.py", 'KEY = "AKIAABCDEFGHIJKLMNOP"\n')
-    packet = kb_draft_module(repo.root, "other", FakeClient(), {}, NOW, no_sleep)
+    packet = kb_draft_module(repo.root, "other")
 
     kb_update(repo.root, "module/other", "## Purpose\n\nRuns.\n", packet["source_hash_now"], NOW)
 
@@ -597,20 +526,11 @@ def test_kb_update_when_agent_creates_note_and_a_file_was_withheld_then_notice_i
     assert "Files withheld" in body and "`app/other/keys.py`" in body
 
 
-def test_kb_draft_module_when_mode_agent_and_note_exists_then_conflict(tmp_path: Path) -> None:
-    repo = agent_repo(tmp_path)
-
-    with pytest.raises(KbToolError) as error:
-        kb_draft_module(repo.root, "billing", FakeClient(), {}, NOW, no_sleep)
-
-    assert error.value.code == "CONFLICT"
-
-
-def test_kb_update_when_mode_agent_and_declared_module_has_no_note_then_creates_draft_l2(
+def test_kb_update_when_declared_module_has_no_note_then_creates_draft_l2(
     tmp_path: Path,
 ) -> None:
-    repo = agent_repo(tmp_path)
-    packet = kb_draft_module(repo.root, "other", FakeClient(), {}, NOW, no_sleep)
+    repo = repo_with_undrafted_module(tmp_path)
+    packet = kb_draft_module(repo.root, "other")
 
     kb_update(
         repo.root, "module/other", "## Purpose\n\nRuns things.\n", packet["source_hash_now"], NOW
@@ -624,8 +544,8 @@ def test_kb_update_when_mode_agent_and_declared_module_has_no_note_then_creates_
     assert kb_check(repo.root)["ok"] is True
 
 
-def test_kb_update_when_mode_agent_and_module_not_declared_then_rejects(tmp_path: Path) -> None:
-    repo = agent_repo(tmp_path)
+def test_kb_update_when_module_not_declared_then_rejects(tmp_path: Path) -> None:
+    repo = repo_with_undrafted_module(tmp_path)
 
     with pytest.raises(KbToolError) as error:
         kb_update(repo.root, "module/undeclared", "## Purpose\n\nx\n", "h", NOW)
@@ -633,9 +553,9 @@ def test_kb_update_when_mode_agent_and_module_not_declared_then_rejects(tmp_path
     assert error.value.code == "NOT_FOUND"
 
 
-def test_kb_update_when_mode_agent_and_stale_read_hash_then_stale_read(tmp_path: Path) -> None:
-    repo = agent_repo(tmp_path)
-    packet = kb_draft_module(repo.root, "other", FakeClient(), {}, NOW, no_sleep)
+def test_kb_update_when_stale_read_hash_then_stale_read(tmp_path: Path) -> None:
+    repo = repo_with_undrafted_module(tmp_path)
+    packet = kb_draft_module(repo.root, "other")
     repo.write("app/other/x.py", "def run():\n    return 2\n")
 
     with pytest.raises(KbToolError) as error:
@@ -660,18 +580,14 @@ def test_kb_update_when_body_contains_a_credential_then_rejected(tmp_path: Path)
     assert "AKIAABCDEFGHIJKLMNOP" not in error.value.message
 
 
-def test_kb_update_when_agent_mode_and_sources_truncated_then_notice_added_automatically(
+def test_kb_update_when_sources_truncated_then_notice_added_automatically(
     tmp_path: Path,
 ) -> None:
-    repo = agent_repo(tmp_path)
-    text = (
-        (repo.root / "milepost.toml")
-        .read_text()
-        .replace('[draft]\nmode = "agent"', '[draft]\nmode = "agent"\nmax_source_bytes = 20')
-    )
-    (repo.root / "milepost.toml").write_text(text)
+    repo = repo_with_undrafted_module(tmp_path)
+    text = (repo.root / "milepost.toml").read_text()
+    (repo.root / "milepost.toml").write_text(text + "\n[draft]\nmax_source_bytes = 20\n")
     repo.write("app/other/y.py", "def second():\n    return 2\n" * 5)
-    packet = kb_draft_module(repo.root, "other", FakeClient(), {}, NOW, no_sleep)
+    packet = kb_draft_module(repo.root, "other")
 
     kb_update(repo.root, "module/other", "## Purpose\n\nRuns.\n", packet["source_hash_now"], NOW)
 
@@ -808,9 +724,9 @@ def test_cached_embedders_when_extra_missing_first_then_picked_up_without_restar
 def test_kb_update_when_agent_kept_one_notice_heading_then_only_the_missing_block_is_added(
     tmp_path: Path,
 ) -> None:
-    repo = agent_repo(tmp_path)
+    repo = repo_with_undrafted_module(tmp_path)
     repo.write("app/other/keys.py", 'KEY = "AKIAABCDEFGHIJKLMNOP"\n')
-    packet = kb_draft_module(repo.root, "other", FakeClient(), {}, NOW, no_sleep)
+    packet = kb_draft_module(repo.root, "other")
     body = "> **Files withheld.** reworded by the agent.\n\n## Purpose\n\nRuns.\n"
 
     kb_update(repo.root, "module/other", body, packet["source_hash_now"], NOW)

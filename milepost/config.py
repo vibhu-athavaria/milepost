@@ -3,7 +3,6 @@
 import os
 import re
 import tomllib
-from collections.abc import Mapping
 from pathlib import Path
 from typing import Annotated, Literal
 
@@ -20,7 +19,7 @@ from pydantic import (
     model_validator,
 )
 
-from milepost.errors import ConfigNotFound, EnvironmentProblem, InvalidConfig
+from milepost.errors import ConfigNotFound, InvalidConfig
 
 ModuleId = Annotated[str, StringConstraints(pattern=r"^[a-z0-9][a-z0-9_-]*$")]
 
@@ -74,13 +73,24 @@ class Index(_Model):
     embedding_dim: PositiveInt = 384
 
 
+LEGACY_DRAFT_KEYS = ("mode", "provider_model")
+
+
 class Draft(_Model):
-    mode: Literal["model", "agent"] = "agent"
-    provider_model: str = "${MILEPOST_MODEL}"
     max_source_bytes: PositiveInt = 200000
     exclude: list[str] = ["**/.env*", "**/*secret*", "**/*.pem", "**/*.key", "**/credentials*"]
     # Files the credential scan would withhold from drafting but a person has checked are safe.
     secret_scan_allow: list[str] = []
+
+    @model_validator(mode="before")
+    @classmethod
+    def _legacy_keys(cls, data: object) -> object:
+        """Configs written by earlier versions carry `mode` and `provider_model`; they are
+        accepted and ignored (drafting with a separate model was removed), so an upgrade never
+        locks a repository out of its own commands. `milepost doctor` points at them."""
+        if not isinstance(data, dict):
+            return data
+        return {k: v for k, v in data.items() if k not in LEGACY_DRAFT_KEYS}
 
 
 class Check(_Model):
@@ -152,18 +162,3 @@ def load_config_or_default(path: Path) -> Config:
     if path.exists() or path.is_symlink():
         return load_config(path)
     return Config(project=Project(name=path.resolve().parent.name))
-
-
-_ENV_REFERENCE = re.compile(r"\$\{(\w+)\}")
-
-
-def resolve_model(config: Config, env: Mapping[str, str]) -> str:
-    def substitute(match: re.Match[str]) -> str:
-        name = match.group(1)
-        if not env.get(name):
-            raise EnvironmentProblem(
-                f"environment variable {name} is not set (set it in the shell or in .env)"
-            )
-        return env[name]
-
-    return _ENV_REFERENCE.sub(substitute, config.draft.provider_model)

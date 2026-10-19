@@ -11,7 +11,6 @@ EXPECTED_COMMANDS = [
     "init",
     "check",
     "index",
-    "draft",
     "review",
     "search",
     "overview",

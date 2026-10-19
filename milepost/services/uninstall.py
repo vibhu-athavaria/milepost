@@ -22,10 +22,11 @@ from milepost.services.hooks import (
     uninstall_hooks,
     unset_merge_driver,
 )
-from milepost.services.init import GITIGNORE_LINES, WORKFLOW_PATH, WORKFLOW_TEMPLATE
+from milepost.services.init import WORKFLOW_PATH, WORKFLOW_TEMPLATE
 
 SNIPPET_HEADING = "## Codebase knowledge base (milepost)"
-KB_GITIGNORE_LINES = [line for line in GITIGNORE_LINES if line.startswith("kb/")]
+# Keep in step with init.GITIGNORE_LINES; the second line was written by older versions.
+KB_GITIGNORE_LINES = ["kb/.index/", "kb/.progress.json"]
 OWNERS_FILES = [".github/CODEOWNERS", "CODEOWNERS", "docs/CODEOWNERS"]
 _VERSION = re.compile(r"milepost==[\w.]+")
 

@@ -1,45 +1,16 @@
-import json
 from pathlib import Path
 
 import pytest
 from support.kb_repo import KbRepo
 
 from milepost.config import Config, load_config
-from milepost.core.notes import read_note
-from milepost.errors import ProviderError, UsageError
-from milepost.llm.client import complete_with_retries
+from milepost.errors import UsageError
 from milepost.services.draft import (
     PROMPT_PATH,
     build_draft_packet,
     collect_sources,
-    draft_modules,
     scan_for_secrets,
 )
-
-BODY = "## Purpose\n\nBills customers.\n\n## Entry points\n\n- app/billing/api.py\n"
-NOW = "2026-10-10T09:00:00Z"
-
-
-class FakeClient:
-    """Fails `failures` times, then returns `reply`. Records every call."""
-
-    def __init__(self, reply: str = BODY, failures: int = 0, fail_for: str | None = None) -> None:
-        self.reply = reply
-        self.failures = failures
-        self.fail_for = fail_for
-        self.calls: list[tuple[str, str, str]] = []
-
-    def complete(self, model: str, system: str, user: str) -> str:
-        self.calls.append((model, system, user))
-        if self.fail_for is not None and self.fail_for in user:
-            raise RuntimeError("provider down")
-        if len(self.calls) <= self.failures:
-            raise RuntimeError("provider down")
-        return self.reply
-
-
-def no_sleep(seconds: float) -> None:
-    pass
 
 
 def make_repo(tmp_path: Path, extra: str = "") -> tuple[KbRepo, Config]:
@@ -113,22 +84,20 @@ def test_scan_for_secrets_when_ordinary_code_then_none() -> None:
     assert scan_for_secrets({"f.py": "password = get_password()\ntoken_count = 3\n"}) is None
 
 
-def test_secret_scan_when_one_file_looks_like_a_key_then_only_that_file_is_withheld(
+def test_packet_when_one_file_looks_like_a_key_then_only_that_file_is_withheld(
     tmp_path: Path,
 ) -> None:
     repo, config = make_repo(tmp_path)
     repo.write("app/billing/pay.py", 'KEY = "AKIAABCDEFGHIJKLMNOP"\n')
-    client = FakeClient()
 
-    done = draft_modules(repo.root, config, ["billing"], client, "m", False, NOW, no_sleep)
+    packet = build_draft_packet(repo.root, config, "billing")
 
-    assert done == ["billing"]
-    sent = client.calls[0][2]
-    assert "AKIAABCDEFGHIJKLMNOP" not in sent and "app/billing/pay.py" not in sent
-    assert "def charge" in sent  # the other files are still drafted from
-    body = read_note(repo.root / "kb/modules/billing.md").body
-    assert "Files withheld" in body and "`app/billing/pay.py`" in body
-    assert "AKIAABCDEFGHIJKLMNOP" not in body
+    assert packet.withheld == ["app/billing/pay.py"]
+    assert "AKIAABCDEFGHIJKLMNOP" not in packet.sources_text
+    assert "app/billing/pay.py" not in packet.sent_files
+    assert "def charge" in packet.sources_text  # the other files are still included
+    assert "Files withheld" in packet.truncation_notice
+    assert "`app/billing/pay.py`" in packet.truncation_notice
 
 
 def test_secret_scan_when_file_is_in_secret_scan_allow_then_it_is_sent(tmp_path: Path) -> None:
@@ -159,109 +128,29 @@ def test_secret_scan_when_every_file_is_withheld_then_usage_error_names_the_conf
     assert "AKIAABCDEFGHIJKLMNOP" not in str(error.value)
 
 
-def test_draft_when_provider_fails_twice_then_retries_and_succeeds(tmp_path: Path) -> None:
-    client = FakeClient(failures=2)
-    sleeps: list[float] = []
-
-    reply = complete_with_retries(client, "m", "s", "u", sleep=sleeps.append)
-
-    assert reply == BODY
-    assert len(client.calls) == 3
-    assert sleeps == sorted(sleeps) and len(sleeps) == 2
-
-
-def test_draft_when_provider_fails_three_times_then_exit_four_and_progress_saved(
-    tmp_path: Path,
-) -> None:
-    repo, _ = make_repo(tmp_path)
-    repo.add_module("accounts", ["app/accounts/**/*.py"], {"app/accounts/m.py": "x = 1\n"}, False)
-    config = load_config(repo.root / "milepost.toml")
-    client = FakeClient(fail_for="app/accounts/m.py")
-
-    with pytest.raises(ProviderError) as error:
-        draft_modules(repo.root, config, ["billing", "accounts"], client, "m", False, NOW, no_sleep)
-
-    assert error.value.exit_code == 4
-    assert "accounts" in str(error.value)
-    assert (repo.root / "kb/modules/billing.md").is_file()
-    assert not (repo.root / "kb/modules/accounts.md").exists()
-    progress = json.loads((repo.root / "kb/.progress.json").read_text())
-    assert progress["completed"] == ["billing"]
-
-
-def test_draft_when_note_reviewed_and_no_force_then_refuses(tmp_path: Path) -> None:
-    repo, _ = make_repo(tmp_path)
-    repo.write_note_file("kb/modules/billing.md", "module/billing", ["app/billing/**"])
-    config = load_config(repo.root / "milepost.toml")
-    client = FakeClient()
-
-    with pytest.raises(UsageError, match="reviewed"):
-        draft_modules(repo.root, config, ["billing"], client, "m", False, NOW, no_sleep)
-
-    assert client.calls == []
-    assert read_note(repo.root / "kb/modules/billing.md").meta["status"] == "reviewed"
-
-
-def test_draft_when_note_reviewed_and_force_then_overwritten_as_draft(tmp_path: Path) -> None:
-    repo, _ = make_repo(tmp_path)
-    repo.write_note_file("kb/modules/billing.md", "module/billing", "L2", ["app/billing/**"])
-    config = load_config(repo.root / "milepost.toml")
-
-    draft_modules(repo.root, config, ["billing"], FakeClient(), "m", True, NOW, no_sleep)
-
-    assert read_note(repo.root / "kb/modules/billing.md").meta["status"] == "draft"
-
-
-def test_draft_when_run_then_frontmatter_written_by_milepost_not_model(tmp_path: Path) -> None:
-    repo, config = make_repo(tmp_path)
-    reply = "---\nstatus: reviewed\nsource_hash: sha256:fake\nwritten_by: human\n---\n" + BODY
-    client = FakeClient(reply=reply)
-
-    draft_modules(repo.root, config, ["billing"], client, "m", False, NOW, no_sleep)
-
-    note = read_note(repo.root / "kb/modules/billing.md")
-    assert note.meta["status"] == "draft"
-    assert note.meta["written_by"] == "draft-command"
-    assert note.meta["written_at"] == NOW
-    assert note.meta["id"] == "module/billing"
-    assert note.meta["sources"] == ["app/billing/**"]
-    assert "source_hash" not in note.meta  # the model's claim is ignored, and nothing is stored
-    assert "Bills customers" in note.body
-    assert "sha256:fake" not in note.body
-
-
-def test_draft_when_sources_truncated_then_notice_is_first_and_names_outline_only_files(
+def test_packet_when_sources_exceed_budget_then_notice_names_outline_only_files(
     tmp_path: Path,
 ) -> None:
     repo, _ = make_repo(tmp_path, extra="\n[draft]\nmax_source_bytes = 30\n")
     repo.write("app/billing/b.py", "def second():\n    return 2\n" * 5)
     config = load_config(repo.root / "milepost.toml")
 
-    draft_modules(repo.root, config, ["billing"], FakeClient(), "m", False, NOW, no_sleep)
+    packet = build_draft_packet(repo.root, config, "billing")
 
-    body = read_note(repo.root / "kb/modules/billing.md").body.strip()
-    assert body.startswith("> **Truncated draft.**")
-    assert "`app/billing/b.py`" in body.split("\n\n")[0]
-    assert "max_source_bytes" in body.split("\n\n")[0]
+    assert "app/billing/b.py" in packet.outline_only
+    assert packet.truncation_notice.startswith("> **Truncated draft.**")
+    assert "`app/billing/b.py`" in packet.truncation_notice
+    assert "max_source_bytes" in packet.truncation_notice
 
 
-def test_draft_when_model_reply_empty_then_provider_error(tmp_path: Path) -> None:
+def test_packet_when_module_is_unknown_then_key_error_is_not_swallowed(tmp_path: Path) -> None:
     repo, config = make_repo(tmp_path)
 
-    with pytest.raises(ProviderError, match="empty"):
-        draft_modules(
-            repo.root, config, ["billing"], FakeClient(reply="  \n"), "m", False, NOW, no_sleep
-        )
+    with pytest.raises(KeyError):
+        build_draft_packet(repo.root, config, "nope")
 
 
-def test_draft_when_unknown_module_then_error(tmp_path: Path) -> None:
-    repo, config = make_repo(tmp_path)
-
-    with pytest.raises(UsageError, match="nope"):
-        draft_modules(repo.root, config, ["nope"], FakeClient(), "m", False, NOW, no_sleep)
-
-
-def test_draft_when_prompt_built_then_includes_related_and_source_text(tmp_path: Path) -> None:
+def test_packet_when_prompt_built_then_includes_related_and_source_text(tmp_path: Path) -> None:
     repo, _ = make_repo(tmp_path, extra="")
     repo.add_module("accounts", ["app/accounts/**/*.py"], {"app/accounts/m.py": "x = 1\n"}, False)
     text = (
@@ -273,13 +162,11 @@ def test_draft_when_prompt_built_then_includes_related_and_source_text(tmp_path:
     )
     (repo.root / "milepost.toml").write_text(text)
     config = load_config(repo.root / "milepost.toml")
-    client = FakeClient()
 
-    draft_modules(repo.root, config, ["billing"], client, "m", False, NOW, no_sleep)
+    packet = build_draft_packet(repo.root, config, "billing")
 
-    _, system, user = client.calls[0]
-    assert "Related modules" in system and "accounts" in system
-    assert "def charge(card)" in user
+    assert "Related modules" in packet.system_prompt and "accounts" in packet.system_prompt
+    assert "def charge(card)" in packet.sources_text
 
 
 def test_draft_prompt_when_loaded_then_has_l2_sections_in_order_including_file_map() -> None:
@@ -297,15 +184,11 @@ def test_draft_prompt_when_loaded_then_has_l2_sections_in_order_including_file_m
     ]
 
 
-def test_build_draft_packet_when_called_then_matches_what_draft_modules_would_send(
-    tmp_path: Path,
-) -> None:
+def test_packet_when_built_then_carries_the_read_receipt(tmp_path: Path) -> None:
     repo, config = make_repo(tmp_path)
-    client = FakeClient()
 
     packet = build_draft_packet(repo.root, config, "billing")
-    draft_modules(repo.root, config, ["billing"], client, "m", False, NOW, no_sleep)
 
-    _, system, user = client.calls[0]
-    assert (packet.system_prompt, packet.sources_text) == (system, user)
     assert packet.source_hash_now == repo.hash_of(["app/billing/**"])
+    assert "app/billing/api.py" in packet.sent_files
+    assert "STRIPE_KEY" not in packet.sources_text  # draft.exclude keeps .env files out

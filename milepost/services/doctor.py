@@ -3,20 +3,17 @@
 import shutil
 import sqlite3
 import sys
-from collections.abc import Callable, Mapping
+import tomllib
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Literal
 
-from milepost.config import load_config
+from milepost.config import LEGACY_DRAFT_KEYS, load_config
 from milepost.embeddings import semantic_search_available
-from milepost.env import DOTENV_NAME, dotenv_is_ignored
 from milepost.errors import MilepostError
-from milepost.llm.client import model_extra_available
 from milepost.services.coverage import CONFIG_NAME
 from milepost.services.hooks import outdated_hooks
 
-MODEL_VAR = "MILEPOST_MODEL"
 Status = Literal["ok", "warn", "fail"]
 
 
@@ -36,13 +33,6 @@ class DoctorReport:
         return 3 if any(check.status == "fail" for check in self.checks) else 0
 
 
-def litellm_missing_keys(model: str) -> list[str]:
-    import litellm
-
-    result = litellm.validate_environment(model)
-    return [str(key) for key in result.get("missing_keys", [])]
-
-
 def _fts5_available() -> bool:
     try:
         conn = sqlite3.connect(":memory:")
@@ -53,22 +43,28 @@ def _fts5_available() -> bool:
     return True
 
 
-def _draft_mode(root: Path) -> tuple[str, str]:
-    """(mode, config error). The error is empty when milepost.toml is absent or valid."""
-    if not (root / CONFIG_NAME).is_file():
-        return "agent", ""
+def _legacy_draft_keys(root: Path) -> list[str]:
+    """Settings for drafting with a separate model, which no longer exist."""
     try:
-        return load_config(root / CONFIG_NAME).draft.mode, ""
+        raw = tomllib.loads((root / CONFIG_NAME).read_text(encoding="utf-8"))
+    except (OSError, tomllib.TOMLDecodeError):
+        return []
+    draft = raw.get("draft")
+    return [key for key in LEGACY_DRAFT_KEYS if isinstance(draft, dict) and key in draft]
+
+
+def _config_error(root: Path) -> str:
+    """The reason milepost.toml is unusable; empty when it is absent or valid."""
+    if not (root / CONFIG_NAME).is_file():
+        return ""
+    try:
+        load_config(root / CONFIG_NAME)
     except MilepostError as error:
-        return "agent", str(error)
+        return str(error)
+    return ""
 
 
-def run_doctor(
-    root: Path,
-    environ: Mapping[str, str],
-    missing_keys: Callable[[str], list[str]] = litellm_missing_keys,
-) -> DoctorReport:
-    """Environment variables must already include anything loaded from .env (see env.load_env)."""
+def run_doctor(root: Path) -> DoctorReport:
     checks = [
         Check("python", "ok", sys.version.split()[0]),
         Check(
@@ -82,44 +78,19 @@ def run_doctor(
             "available" if _fts5_available() else "this SQLite build has no FTS5",
         ),
     ]
-    model = environ.get(MODEL_VAR, "")
-    mode, config_error = _draft_mode(root)
+    config_error = _config_error(root)
     if config_error:
         checks.append(Check(CONFIG_NAME, "fail", config_error))
-    if mode == "agent":
-        detail = "Claude writes the notes; no separate model or key needed"
-        if model:
-            detail += (
-                f" ({MODEL_VAR} is set but not used; "
-                'set [draft] mode = "model" in milepost.toml to draft with it)'
-            )
-        checks.append(Check("draft-mode", "ok", detail))
-    elif not model_extra_available():
+    legacy = _legacy_draft_keys(root)
+    if legacy:
         checks.append(
             Check(
-                "litellm",
-                "fail",
-                "drafting with a separate model needs the `model` extra: "
-                "pip install 'milepost[model]'",
+                CONFIG_NAME,
+                "warn",
+                f"[draft] {', '.join(legacy)} is ignored: Claude writes the notes now; "
+                "delete the line",
             )
         )
-    elif not model:
-        checks.append(
-            Check(MODEL_VAR, "fail", f"{MODEL_VAR} is not set (set it in the shell or in .env)")
-        )
-    else:
-        checks.append(Check(MODEL_VAR, "ok", model))
-        missing = missing_keys(model)
-        if missing:
-            checks.append(
-                Check(
-                    "provider-key",
-                    "fail",
-                    f"{', '.join(missing)} is not set (set it in the shell or in .env)",
-                )
-            )
-        else:
-            checks.append(Check("provider-key", "ok", "present"))
     if not semantic_search_available():
         checks.append(
             Check(
@@ -136,15 +107,6 @@ def run_doctor(
                 "git-hooks",
                 "warn",
                 f"{', '.join(outdated)} written by an older milepost; run `milepost hooks install`",
-            )
-        )
-    if not dotenv_is_ignored(root):
-        checks.append(
-            Check(
-                DOTENV_NAME,
-                "warn",
-                f"{DOTENV_NAME} exists but git does not ignore it; add it to .gitignore "
-                "so keys are not committed",
             )
         )
     return DoctorReport(checks)

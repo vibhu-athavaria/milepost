@@ -2,8 +2,8 @@ from pathlib import Path
 
 import pytest
 
-from milepost.config import Config, load_config, resolve_model
-from milepost.errors import ConfigNotFound, EnvironmentProblem, InvalidConfig
+from milepost.config import load_config
+from milepost.errors import ConfigNotFound, InvalidConfig
 
 FIXTURES = Path(__file__).parent.parent / "fixtures" / "config"
 
@@ -39,7 +39,6 @@ def test_load_config_when_minimal_file_then_defaults_applied(tmp_path: Path) -> 
 
     assert config.project.kb_dir == "kb"
     assert config.index.path == "kb/.index/index.sqlite"
-    assert config.draft.provider_model == "${MILEPOST_MODEL}"
     assert config.check.fail_on == "stale"
     assert config.structure.languages == ["python"]
 
@@ -147,21 +146,6 @@ def test_load_config_when_missing_file_then_raises_config_not_found(tmp_path: Pa
         load_config(tmp_path / "milepost.toml")
 
 
-def test_resolve_model_when_env_unset_then_raises_with_variable_name(tmp_path: Path) -> None:
-    config: Config = load_config(write_config(tmp_path, MINIMAL))
-
-    with pytest.raises(EnvironmentProblem) as error:
-        resolve_model(config, {})
-
-    assert "MILEPOST_MODEL" in str(error.value)
-
-
-def test_resolve_model_when_env_set_then_returns_value(tmp_path: Path) -> None:
-    config = load_config(write_config(tmp_path, MINIMAL))
-
-    assert resolve_model(config, {"MILEPOST_MODEL": "some-model"}) == "some-model"
-
-
 def test_config_when_module_verify_list_then_parsed(tmp_path: Path) -> None:
     text = MINIMAL + 'verify = ["pytest app/tests/services", "ruff check app/services"]\n'
 
@@ -177,18 +161,21 @@ def test_config_when_no_verify_then_empty_list(tmp_path: Path) -> None:
     assert load_config(write_config(tmp_path, MINIMAL)).modules["services"].verify == []
 
 
-def test_config_when_draft_mode_invalid_then_exit_two(tmp_path: Path) -> None:
-    with pytest.raises(InvalidConfig) as error:
-        load_config(write_config(tmp_path, MINIMAL + '\n[draft]\nmode = "robot"\n'))
+def test_config_when_draft_mode_is_the_removed_model_value_then_still_loads(
+    tmp_path: Path,
+) -> None:
+    config = load_config(write_config(tmp_path, MINIMAL + '\n[draft]\nmode = "model"\n'))
 
-    assert error.value.exit_code == 2 and error.value.field_path == "draft.mode"
+    assert config.draft.max_source_bytes == 200000
 
 
-def test_config_when_draft_mode_is_set_then_accepted_and_default_is_agent(tmp_path: Path) -> None:
-    model = load_config(write_config(tmp_path, MINIMAL + '\n[draft]\nmode = "model"\n'))
-    default = load_config(write_config(tmp_path, MINIMAL))
+def test_config_when_old_draft_keys_present_then_accepted_and_ignored(tmp_path: Path) -> None:
+    text = MINIMAL + '\n[draft]\nmode = "agent"\nprovider_model = "${MILEPOST_MODEL}"\n'
 
-    assert model.draft.mode == "model" and default.draft.mode == "agent"
+    config = load_config(write_config(tmp_path, text))
+
+    assert config.draft.max_source_bytes == 200000
+    assert not hasattr(config.draft, "mode") and not hasattr(config.draft, "provider_model")
 
 
 @pytest.mark.parametrize("spelling", ["kb/", "./kb", "kb", "kb//"])

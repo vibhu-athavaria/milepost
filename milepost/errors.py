@@ -50,12 +50,6 @@ class EnvironmentProblem(MilepostError):
     exit_code = 3
 
 
-class ProviderError(MilepostError):
-    """The LLM provider failed, or drafting cannot safely proceed (exit 4)."""
-
-    exit_code = 4
-
-
 class NotFoundError(MilepostError):
     """A path or id the caller named does not exist (exit 2)."""
 

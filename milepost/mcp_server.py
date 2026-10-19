@@ -1,7 +1,5 @@
 """The MCP server (SPEC section 11): tools registered over the logic in services/kb.py."""
 
-import os
-import time
 from collections.abc import Callable
 from datetime import UTC, datetime
 from pathlib import Path
@@ -14,7 +12,6 @@ from pydantic import Field
 from milepost.config import Config
 from milepost.embeddings import Embedder, default_embedder
 from milepost.env import is_disabled
-from milepost.llm.client import LiteLlmClient, LlmClient
 from milepost.services import kb
 
 INSTRUCTIONS = (
@@ -60,12 +57,10 @@ def _guard(call: Callable[[], dict[str, Any]]) -> dict[str, Any]:
 def build_server(
     root: Path,
     embedder_for: Callable[[Config], Embedder | None] | None = None,
-    client: LlmClient | None = None,
 ) -> MCPServer:
     if is_disabled():
         return MCPServer("milepost", instructions=PAUSED_INSTRUCTIONS)
     server = MCPServer("milepost", instructions=INSTRUCTIONS)
-    llm = client or LiteLlmClient()
     embedders = embedder_for or _CachedEmbedders()
 
     @server.tool()
@@ -97,8 +92,7 @@ def build_server(
     def kb_update(id: str, body: str, read_hash: str | None = None) -> dict[str, Any]:
         """Save a module's note (id `module/<id>`). Pass read_hash=source_hash_now from
         kb_module. Also creates the note of a declared module that has none. The note is saved
-        as a draft until a person runs `milepost review`. (If the project drafts with a separate
-        model, new notes come from kb_draft_module instead.) Bodies that look like they contain a
+        as a draft until a person runs `milepost review`. Bodies that look like they contain a
         credential are rejected."""
         return _guard(lambda: kb.kb_update(root, id, body, read_hash, _now()))
 
@@ -112,9 +106,8 @@ def build_server(
         """Get what you need to write the note for a module declared in milepost.toml: the
         instructions and the module's source files (minus excluded or credential-like files).
         Writes nothing. Write the note yourself, then save it with kb_update using
-        read_hash=source_hash_now. If the project is set to draft with a separate model, this
-        writes the note with that model instead."""
-        return _guard(lambda: kb.kb_draft_module(root, id, llm, os.environ, _now(), time.sleep))
+        read_hash=source_hash_now."""
+        return _guard(lambda: kb.kb_draft_module(root, id))
 
     @server.tool()
     def kb_outline(path: str) -> dict[str, Any]:
