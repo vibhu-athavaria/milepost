@@ -197,8 +197,14 @@ def kb_overview(root: Path) -> dict[str, Any]:
     }
 
 
+def _bare_module_id(value: str) -> str:
+    """Accept `core` and `module/core` alike: tools disagree on which form they take."""
+    return value.removeprefix("module/")
+
+
 @_tool
 def kb_module(root: Path, module_id: str) -> dict[str, Any]:
+    module_id = _bare_module_id(module_id)
     config = _config(root)
     module = config.modules.get(module_id)
     note_path = root / config.project.kb_dir / "modules" / f"{module_id}.md"
@@ -433,6 +439,7 @@ def kb_update(
 
 @_tool
 def kb_draft_module(root: Path, module_id: str) -> dict[str, Any]:
+    module_id = _bare_module_id(module_id)
     config = _config(root)
     if module_id not in config.modules:
         raise KbToolError(
