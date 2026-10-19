@@ -70,7 +70,9 @@ def build_server(
 
     @server.tool()
     def kb_module(
-        id: Annotated[str, Field(description="Module id, e.g. 'services'")],
+        id: Annotated[
+            str, Field(description="Module id, e.g. 'services' ('module/services' also works)")
+        ],
     ) -> dict[str, Any]:
         """A module's note with source_hash_now, verify commands and related modules."""
         return _guard(lambda: kb.kb_module(root, id))
@@ -83,13 +85,22 @@ def build_server(
         return _guard(lambda: kb.kb_file(root, path))
 
     @server.tool()
-    def kb_search(query: str, limit: int = 5) -> dict[str, Any]:
+    def kb_search(
+        query: Annotated[str, Field(description="Words describing what you are looking for")],
+        limit: Annotated[int, Field(description="Most results to return (at most 10)")] = 5,
+    ) -> dict[str, Any]:
         """Search the notes (keyword and meaning). At most 10 results. Updates the local
         search index first if notes changed."""
         return _guard(lambda: kb.kb_search(root, embedders, query, limit))
 
     @server.tool()
-    def kb_update(id: str, body: str, read_hash: str | None = None) -> dict[str, Any]:
+    def kb_update(
+        id: Annotated[str, Field(description="Note id with the prefix, e.g. 'module/core'")],
+        body: Annotated[str, Field(description="The note body in markdown, no frontmatter")],
+        read_hash: Annotated[
+            str | None, Field(description="source_hash_now from kb_module or kb_draft_module")
+        ] = None,
+    ) -> dict[str, Any]:
         """Save a module's note (id `module/<id>`). Pass read_hash=source_hash_now from
         kb_module. Also creates the note of a declared module that has none. The note is saved
         as a draft until a person runs `milepost review`. Bodies that look like they contain a
@@ -102,7 +113,9 @@ def build_server(
         return _guard(lambda: kb.kb_check(root))
 
     @server.tool()
-    def kb_draft_module(id: str) -> dict[str, Any]:
+    def kb_draft_module(
+        id: Annotated[str, Field(description="Module id, e.g. 'core' ('module/core' also works)")],
+    ) -> dict[str, Any]:
         """Get what you need to write the note for a module declared in milepost.toml: the
         instructions and the module's source files (minus excluded or credential-like files).
         Writes nothing. Write the note yourself, then save it with kb_update using
@@ -110,17 +123,26 @@ def build_server(
         return _guard(lambda: kb.kb_draft_module(root, id))
 
     @server.tool()
-    def kb_outline(path: str) -> dict[str, Any]:
+    def kb_outline(
+        path: Annotated[str, Field(description="Repo-relative file path")],
+    ) -> dict[str, Any]:
         """Symbols of one file with signatures and line ranges, computed now."""
         return _guard(lambda: kb.kb_outline(root, path))
 
     @server.tool()
-    def kb_impact(path: str) -> dict[str, Any]:
+    def kb_impact(
+        path: Annotated[str, Field(description="Repo-relative file path")],
+    ) -> dict[str, Any]:
         """Who imports a file and which tests likely cover it, computed now."""
         return _guard(lambda: kb.kb_impact(root, path))
 
     @server.tool()
-    def kb_sync(base: str | None = None) -> dict[str, Any]:
+    def kb_sync(
+        base: Annotated[
+            str | None,
+            Field(description="Git ref to compare against; default: uncommitted changes"),
+        ] = None,
+    ) -> dict[str, Any]:
         """Changed files and which notes to update, and how."""
         return _guard(lambda: kb.kb_sync(root, base))
 

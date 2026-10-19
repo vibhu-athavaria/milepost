@@ -732,3 +732,10 @@ def test_kb_update_when_agent_kept_one_notice_heading_then_only_the_missing_bloc
     kb_update(repo.root, "module/other", body, packet["source_hash_now"], NOW)
 
     assert (repo.root / "kb/modules/other.md").read_text().count("Files withheld") == 1
+
+
+def test_kb_module_and_draft_accept_the_module_prefix_too(tmp_path: Path) -> None:
+    repo = repo_with_undrafted_module(tmp_path)
+
+    assert kb_module(repo.root, "module/billing")["id"] == "module/billing"
+    assert kb_draft_module(repo.root, "module/other")["id"] == "module/other"

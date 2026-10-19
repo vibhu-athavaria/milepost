@@ -110,3 +110,19 @@ def test_mcp_stdio_when_milepost_disabled_then_server_offers_no_tools(tmp_path: 
     (names,) = asyncio.run(session_calls(repo.root, [], env={"MILEPOST_DISABLED": "1"}))
 
     assert names == set()
+
+
+def test_mcp_stdio_when_tools_listed_then_every_parameter_has_a_description(tmp_path: Path) -> None:
+    repo = make_repo(tmp_path)
+
+    async def listed() -> list[Any]:
+        params = StdioServerParameters(
+            command=sys.executable, args=["-m", "milepost", "serve", "--repo", str(repo.root)]
+        )
+        async with stdio_client(params) as (read, write), ClientSession(read, write) as session:
+            await session.initialize()
+            return list((await session.list_tools()).tools)
+
+    for tool in asyncio.run(listed()):
+        for name, schema in tool.input_schema.get("properties", {}).items():
+            assert schema.get("description"), (tool.name, name)
