@@ -7,7 +7,8 @@ from typing import Annotated, Any
 
 from mcp.server.mcpserver import MCPServer
 from mcp.server.mcpserver.exceptions import ToolError
-from pydantic import Field
+from mcp.types import ToolAnnotations
+from pydantic import AliasChoices, Field
 
 from milepost.config import Config
 from milepost.embeddings import Embedder, default_embedder
@@ -41,6 +42,27 @@ class _CachedEmbedders:
         return self._by_model[key]
 
 
+# Agents guess parameter names, so each tool accepts the natural spellings. The first alias is
+# the one the schema advertises.
+ModuleArg = Annotated[
+    str,
+    Field(
+        validation_alias=AliasChoices("module", "id", "module_id", "name"),
+        description="Module id, e.g. 'core' ('module/core' also works)",
+    ),
+]
+PathArg = Annotated[
+    str,
+    Field(
+        validation_alias=AliasChoices("path", "file_path", "file", "filename"),
+        description="Repo-relative file path",
+    ),
+]
+_READ_ONLY = ToolAnnotations(read_only_hint=True, open_world_hint=False)
+_WRITES_NOTES = ToolAnnotations(
+    read_only_hint=False, destructive_hint=False, idempotent_hint=True, open_world_hint=False
+)
+
 PAUSED_INSTRUCTIONS = (
     "Milepost is paused (MILEPOST_DISABLED is set). It offers no tools in this session; work "
     "from the code directly."
@@ -63,58 +85,63 @@ def build_server(
     server = MCPServer("milepost", instructions=INSTRUCTIONS)
     embedders = embedder_for or _CachedEmbedders()
 
-    @server.tool()
+    @server.tool(annotations=_READ_ONLY)
     def kb_overview() -> dict[str, Any]:
         """The module index (L1), counts of stale and draft notes, and the branch."""
         return _guard(lambda: kb.kb_overview(root))
 
-    @server.tool()
-    def kb_module(
-        id: Annotated[
-            str, Field(description="Module id, e.g. 'services' ('module/services' also works)")
-        ],
-    ) -> dict[str, Any]:
+    @server.tool(annotations=_READ_ONLY)
+    def kb_module(module: ModuleArg) -> dict[str, Any]:
         """A module's note with source_hash_now, verify commands and related modules."""
-        return _guard(lambda: kb.kb_module(root, id))
+        return _guard(lambda: kb.kb_module(root, module))
 
-    @server.tool()
-    def kb_file(
-        path: Annotated[str, Field(description="Repo-relative file path")],
-    ) -> dict[str, Any]:
+    @server.tool(annotations=_READ_ONLY)
+    def kb_file(path: PathArg) -> dict[str, Any]:
         """The note(s) covering a file, each with a stale flag and source_hash_now."""
         return _guard(lambda: kb.kb_file(root, path))
 
-    @server.tool()
+    @server.tool(annotations=_READ_ONLY)
     def kb_search(
-        query: Annotated[str, Field(description="Words describing what you are looking for")],
+        query: Annotated[
+            str,
+            Field(
+                validation_alias=AliasChoices("query", "q", "text", "search"),
+                description="Words describing what you are looking for",
+            ),
+        ],
         limit: Annotated[int, Field(description="Most results to return (at most 10)")] = 5,
     ) -> dict[str, Any]:
         """Search the notes (keyword and meaning). At most 10 results. Updates the local
         search index first if notes changed."""
         return _guard(lambda: kb.kb_search(root, embedders, query, limit))
 
-    @server.tool()
+    @server.tool(annotations=_WRITES_NOTES)
     def kb_update(
-        id: Annotated[str, Field(description="Note id with the prefix, e.g. 'module/core'")],
+        id: Annotated[
+            str,
+            Field(
+                validation_alias=AliasChoices("id", "note_id", "note", "module"),
+                description="Note id, e.g. 'module/core' (plain 'core' also works)",
+            ),
+        ],
         body: Annotated[str, Field(description="The note body in markdown, no frontmatter")],
         read_hash: Annotated[
             str | None, Field(description="source_hash_now from kb_module or kb_draft_module")
         ] = None,
     ) -> dict[str, Any]:
-        """Save a module's note (id `module/<id>`). Pass read_hash=source_hash_now from
-        kb_module. Also creates the note of a declared module that has none. The note is saved
-        as a draft until a person runs `milepost review`. Bodies that look like they contain a
-        credential are rejected."""
+        """Save a module's note. Pass read_hash=source_hash_now from kb_module. Also creates the
+        note of a declared module that has none. The note is saved as a draft until a person
+        runs `milepost review`. Bodies that look like they contain a credential are rejected."""
         return _guard(lambda: kb.kb_update(root, id, body, read_hash, _now()))
 
-    @server.tool()
+    @server.tool(annotations=_READ_ONLY)
     def kb_check() -> dict[str, Any]:
         """Validate notes and report stale ones, the same as `milepost check`."""
         return _guard(lambda: kb.kb_check(root))
 
-    @server.tool()
+    @server.tool(annotations=_READ_ONLY)
     def kb_draft_module(
-        id: Annotated[str, Field(description="Module id, e.g. 'core' ('module/core' also works)")],
+        module: ModuleArg,
         part: Annotated[
             int,
             Field(ge=1, description="Which part of the sources, from 1; the result says how many"),
@@ -125,27 +152,26 @@ def build_server(
         Large modules come in parts: read every part (part=1, 2, ...) before writing. Writes
         nothing. Write the note yourself, then save it with kb_update using
         read_hash=source_hash_now."""
-        return _guard(lambda: kb.kb_draft_module(root, id, part))
+        return _guard(lambda: kb.kb_draft_module(root, module, part))
 
-    @server.tool()
-    def kb_outline(
-        path: Annotated[str, Field(description="Repo-relative file path")],
-    ) -> dict[str, Any]:
+    @server.tool(annotations=_READ_ONLY)
+    def kb_outline(path: PathArg) -> dict[str, Any]:
         """Symbols of one file with signatures and line ranges, computed now."""
         return _guard(lambda: kb.kb_outline(root, path))
 
-    @server.tool()
-    def kb_impact(
-        path: Annotated[str, Field(description="Repo-relative file path")],
-    ) -> dict[str, Any]:
+    @server.tool(annotations=_READ_ONLY)
+    def kb_impact(path: PathArg) -> dict[str, Any]:
         """Who imports a file and which tests likely cover it, computed now."""
         return _guard(lambda: kb.kb_impact(root, path))
 
-    @server.tool()
+    @server.tool(annotations=_READ_ONLY)
     def kb_sync(
         base: Annotated[
             str | None,
-            Field(description="Git ref to compare against; default: uncommitted changes"),
+            Field(
+                validation_alias=AliasChoices("base", "ref", "since"),
+                description="Git ref to compare against; default: uncommitted changes",
+            ),
         ] = None,
     ) -> dict[str, Any]:
         """Changed files and which notes to update, and how."""

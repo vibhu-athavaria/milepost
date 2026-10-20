@@ -17,7 +17,6 @@ from milepost.config import Config, Index, load_config, load_config_or_default
 from milepost.embeddings import Embedder, default_embedder
 from milepost.env import is_disabled
 from milepost.errors import EnvironmentProblem, MilepostError, UsageError
-from milepost.mcp_server import run_server
 from milepost.services.check import run_check
 from milepost.services.coverage import CONFIG_NAME, undeclared_candidates
 from milepost.services.doctor import run_doctor
@@ -435,6 +434,8 @@ def serve(repo: RepoOption = None) -> None:
     """Run the MCP server on stdio."""
     project_dir = os.environ.get("CLAUDE_PROJECT_DIR")
     root = repo or (Path(project_dir) if project_dir else _repo_root(None))
+    from milepost.mcp_server import run_server  # imports the MCP library, which hooks never need
+
     run_server(root)
 
 

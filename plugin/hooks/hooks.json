@@ -5,8 +5,12 @@
         "hooks": [
           {
             "type": "command",
-            "command": "uv run --quiet --project \"${CLAUDE_PLUGIN_ROOT}/..\" milepost hook session-start",
-            "timeout": 30
+            "command": "${CLAUDE_PLUGIN_ROOT}/scripts/milepost",
+            "timeout": 30,
+            "args": [
+              "hook",
+              "session-start"
+            ]
           }
         ]
       }
@@ -17,8 +21,12 @@
         "hooks": [
           {
             "type": "command",
-            "command": "uv run --quiet --project \"${CLAUDE_PLUGIN_ROOT}/..\" milepost hook post-edit",
-            "timeout": 30
+            "command": "${CLAUDE_PLUGIN_ROOT}/scripts/milepost",
+            "timeout": 30,
+            "args": [
+              "hook",
+              "post-edit"
+            ]
           }
         ]
       }
@@ -28,8 +36,12 @@
         "hooks": [
           {
             "type": "command",
-            "command": "uv run --quiet --project \"${CLAUDE_PLUGIN_ROOT}/..\" milepost hook stop",
-            "timeout": 60
+            "command": "${CLAUDE_PLUGIN_ROOT}/scripts/milepost",
+            "timeout": 60,
+            "args": [
+              "hook",
+              "stop"
+            ]
           }
         ]
       }

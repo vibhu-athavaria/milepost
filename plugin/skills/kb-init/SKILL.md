@@ -1,13 +1,14 @@
 ---
-description: Set up the milepost knowledge base in this repository, or add new modules to it
-allowed-tools: Bash(uv run --quiet --project * milepost doctor*), Bash(uv run --quiet --project * milepost scan*), Bash(uv run --quiet --project * milepost init*), Bash(milepost doctor*), Bash(milepost scan*), Bash(milepost init*), mcp__plugin_milepost_milepost__kb_overview, mcp__plugin_milepost_milepost__kb_module, mcp__plugin_milepost_milepost__kb_file, mcp__plugin_milepost_milepost__kb_search, mcp__plugin_milepost_milepost__kb_outline, mcp__plugin_milepost_milepost__kb_impact, mcp__plugin_milepost_milepost__kb_sync, mcp__plugin_milepost_milepost__kb_check, mcp__plugin_milepost_milepost__kb_draft_module, mcp__plugin_milepost_milepost__kb_update
+name: kb-init
+description: Set up the milepost knowledge base in this repository, or add new modules to it. Use when the user asks to set up, initialise or extend milepost or the knowledge base, or runs /milepost:kb-init.
+allowed-tools: Bash(*/scripts/milepost doctor*), Bash(*/scripts/milepost scan*), Bash(*/scripts/milepost init*), Bash(*/scripts/milepost" doctor*), Bash(*/scripts/milepost" scan*), Bash(*/scripts/milepost" init*), Bash(milepost doctor*), Bash(milepost scan*), Bash(milepost init*), mcp__plugin_milepost_milepost__kb_overview, mcp__plugin_milepost_milepost__kb_module, mcp__plugin_milepost_milepost__kb_file, mcp__plugin_milepost_milepost__kb_search, mcp__plugin_milepost_milepost__kb_outline, mcp__plugin_milepost_milepost__kb_impact, mcp__plugin_milepost_milepost__kb_sync, mcp__plugin_milepost_milepost__kb_check, mcp__plugin_milepost_milepost__kb_draft_module, mcp__plugin_milepost_milepost__kb_update
 ---
 
 Set up milepost in this repository. Follow these steps in order and stop where a step says to.
 
 In this plugin, run milepost like this (call it `MILEPOST` below):
 
-`uv run --quiet --project "${CLAUDE_PLUGIN_ROOT}/.." milepost`
+`"${CLAUDE_PLUGIN_ROOT}/scripts/milepost"`
 
 If a plain `milepost` command is on the PATH, you may use that instead.
 
