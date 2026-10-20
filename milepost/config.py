@@ -77,7 +77,7 @@ LEGACY_DRAFT_KEYS = ("mode", "provider_model")
 
 
 class Draft(_Model):
-    max_source_bytes: PositiveInt = 200000
+    max_source_bytes: PositiveInt = 60000
     exclude: list[str] = ["**/.env*", "**/*secret*", "**/*.pem", "**/*.key", "**/credentials*"]
     # Files the credential scan would withhold from drafting but a person has checked are safe.
     secret_scan_allow: list[str] = []

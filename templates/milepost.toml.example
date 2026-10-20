@@ -30,7 +30,7 @@ embedding_dim = 384
 
 [draft]
 # Claude writes the notes through kb_draft_module and kb_update; there is no model to configure.
-max_source_bytes = 200000
+max_source_bytes = 60000
 exclude = ["**/.env*", "**/*secret*", "**/*.pem", "**/*.key", "**/credentials*"]
 # Files the credential scan withholds (false positives such as token-type constants) that a
 # person has checked and wants included in drafting:

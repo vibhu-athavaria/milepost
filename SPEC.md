@@ -99,7 +99,7 @@ embedding_model = "BAAI/bge-small-en-v1.5"   # fastembed model name; config, not
 embedding_dim = 384                    # must match the model
 
 [draft]
-max_source_bytes = 200000              # per module; larger modules are read as outlines, see 9.3
+max_source_bytes = 60000              # per module; larger modules are read as outlines, see 9.3
 exclude = ["**/.env*", "**/*secret*", "**/*.pem", "**/*.key", "**/credentials*"]
 secret_scan_allow = []   # globs of files the secret scan would withhold but a person has checked
 

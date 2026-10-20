@@ -166,7 +166,7 @@ def test_config_when_draft_mode_is_the_removed_model_value_then_still_loads(
 ) -> None:
     config = load_config(write_config(tmp_path, MINIMAL + '\n[draft]\nmode = "model"\n'))
 
-    assert config.draft.max_source_bytes == 200000
+    assert config.draft.max_source_bytes == 60000
 
 
 def test_config_when_old_draft_keys_present_then_accepted_and_ignored(tmp_path: Path) -> None:
@@ -174,7 +174,7 @@ def test_config_when_old_draft_keys_present_then_accepted_and_ignored(tmp_path: 
 
     config = load_config(write_config(tmp_path, text))
 
-    assert config.draft.max_source_bytes == 200000
+    assert config.draft.max_source_bytes == 60000
     assert not hasattr(config.draft, "mode") and not hasattr(config.draft, "provider_model")
 
 

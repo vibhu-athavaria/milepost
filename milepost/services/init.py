@@ -77,7 +77,7 @@ def _render_config(name: str, active: list[Candidate], suggested: list[Candidate
     )
     parts.append(
         "[draft]\n"
-        "max_source_bytes = 200000\n"
+        "max_source_bytes = 60000\n"
         'exclude = ["**/.env*", "**/*secret*", "**/*.pem", "**/*.key", "**/credentials*"]\n'
     )
     return "\n".join(parts)

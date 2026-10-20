@@ -260,9 +260,11 @@ The git hooks `hooks install` adds are `post-merge` and `post-checkout` (run `in
 | `[modules.<id>]` | One table per module: `sources` (file globs, relative to the repo root), optional `title`, `related`, and `verify` (commands that check the module, shown to agents; write them yourself) |
 | `[structure]` | `languages`, `ignore` globs, and `roots` where module candidates are looked for |
 | `[index]` | Search index location and the embedding model and its dimension (these must agree) |
-| `[draft]` | drafting limits (`max_source_bytes`, default 200000 per module; larger modules are partly read as outlines and the note says so), files that are never read (`**/.env*`, keys, credentials), and `secret_scan_allow` (globs of files the credential scan withheld that you have checked and want included) |
+| `[draft]` | drafting limits (`max_source_bytes`, default 60000 per module, about 15,000 tokens; larger modules are partly read as outlines and the note says so), files that are never read (`**/.env*`, keys, credentials), and `secret_scan_allow` (globs of files the credential scan withheld that you have checked and want included) |
 | `[check]` | `stale` (`warn`, the default, or `fail`: a pull request that edits covered code without touching its note fails) and `fail_on` (`stale`, the default, or `none` for report-only) |
 | `[visibility]` | `agent_trailers` (regexes that mark a commit as agent-authored; default: Claude Code's `Co-Authored-By ... noreply@anthropic.com` trailer and its "Generated with Claude Code" line) and `churn_warn_lines` (default 1000) |
+
+A `milepost.toml` written by an earlier version has `max_source_bytes = 200000` written out; change it to `60000` to read less per module (the notes say which files were read as outlines only).
 
 Module ids are lowercase letters, digits, `_` and `-`. Globs must be relative and must not contain `..`. Invalid configuration is reported with the exact field path and exits with status 2.
 
