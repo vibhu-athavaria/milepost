@@ -240,7 +240,7 @@ def test_init_when_dry_run_and_module_over_budget_then_reports_outline_only_file
     config_text = (
         (repo.root / "milepost.toml")
         .read_text()
-        .replace("max_source_bytes = 200000", "max_source_bytes = 40")
+        .replace("max_source_bytes = 60000", "max_source_bytes = 40")
     )
     repo.write("milepost.toml", config_text)
     repo.write("app/billing/more.py", "def more():\n    return 1\n")
