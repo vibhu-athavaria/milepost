@@ -1,0 +1,8 @@
+#!/bin/sh
+# Starts milepost as quickly as possible for the plugin's hooks and MCP server.
+# `uv run` alone costs seconds per call, and hooks fire on every edit, so prefer, in order:
+# this checkout's virtualenv (same code as the plugin), a milepost on PATH, then uv.
+root="$(cd "$(dirname "$0")/../.." && pwd)"
+if [ -x "$root/.venv/bin/milepost" ]; then exec "$root/.venv/bin/milepost" "$@"; fi
+if command -v milepost >/dev/null 2>&1; then exec milepost "$@"; fi
+exec uv run --quiet --project "$root" milepost "$@"

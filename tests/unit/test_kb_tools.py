@@ -771,3 +771,12 @@ def test_kb_draft_module_when_part_out_of_range_then_invalid_input(tmp_path: Pat
         with pytest.raises(KbToolError) as error:
             kb_draft_module(repo.root, "other", part)
         assert error.value.code == "INVALID_INPUT" and "between 1 and 1" in error.value.message
+
+
+def test_kb_update_when_id_is_blank_then_invalid_input(tmp_path: Path) -> None:
+    repo = make_repo(tmp_path)
+
+    with pytest.raises(KbToolError) as error:
+        kb_update(repo.root, "  ", "## Purpose\n\nx\n", None, NOW)
+
+    assert error.value.code == "INVALID_INPUT"

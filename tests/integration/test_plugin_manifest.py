@@ -1,7 +1,9 @@
 import asyncio
 import json
+import os
 import re
-import shlex
+import subprocess
+import sys
 from importlib.metadata import version
 from pathlib import Path
 
@@ -42,8 +44,8 @@ def test_plugin_mcp_config_when_parsed_then_starts_milepost_serve() -> None:
     config = json.loads((PLUGIN / ".mcp.json").read_text())
 
     server = config["mcpServers"]["milepost"]
-    assert server["args"][-2:] == ["milepost", "serve"]
-    assert "${CLAUDE_PLUGIN_ROOT}" in " ".join(server["args"])
+    assert server["command"] == "${CLAUDE_PLUGIN_ROOT}/scripts/milepost"
+    assert server["args"] == ["serve"]
 
 
 def test_plugin_skill_when_present_then_frontmatter_has_name_and_description() -> None:
@@ -52,15 +54,17 @@ def test_plugin_skill_when_present_then_frontmatter_has_name_and_description() -
     assert meta["name"] == "kb-usage" and meta["description"]
 
 
-def test_plugin_commands_when_listed_then_only_kb_init_present() -> None:
-    assert sorted(p.name for p in (PLUGIN / "commands").iterdir()) == ["kb-init.md"]
+def test_plugin_when_listed_then_skills_are_kb_init_and_kb_usage_and_no_legacy_commands() -> None:
+    assert sorted(p.name for p in (PLUGIN / "skills").iterdir()) == ["kb-init", "kb-usage"]
+    assert not list((PLUGIN / "commands").glob("*.md"))  # new entry points are skills
 
 
 def test_plugin_kb_init_command_when_parsed_then_names_doctor_scan_and_init_steps_in_order() -> (
     None
 ):
-    text = (PLUGIN / "commands/kb-init.md").read_text()
-    assert frontmatter(PLUGIN / "commands/kb-init.md")["description"]
+    text = (PLUGIN / "skills/kb-init/SKILL.md").read_text()
+    meta = frontmatter(PLUGIN / "skills/kb-init/SKILL.md")
+    assert meta["name"] == "kb-init" and "Use when" in meta["description"]
 
     positions = [
         text.index(f"MILEPOST {step}")
@@ -71,7 +75,7 @@ def test_plugin_kb_init_command_when_parsed_then_names_doctor_scan_and_init_step
 
 
 def test_plugin_commands_when_cli_subcommands_referenced_then_each_exists() -> None:
-    text = (PLUGIN / "commands/kb-init.md").read_text()
+    text = (PLUGIN / "skills/kb-init/SKILL.md").read_text()
     for command in set(re.findall(r"MILEPOST ([a-z-]+)", text)):
         result = runner.invoke(app, [command, "--help"])
         assert result.exit_code == 0, command
@@ -90,9 +94,9 @@ def test_plugin_hooks_when_parsed_then_each_command_is_a_real_milepost_hook() ->
     for groups in hooks.values():
         for group in groups:
             for handler in group["hooks"]:
-                words = shlex.split(handler["command"])
-                assert words[-3:-1] == ["milepost", "hook"], handler["command"]
-                assert "${CLAUDE_PLUGIN_ROOT}" in handler["command"]
+                assert handler["command"] == "${CLAUDE_PLUGIN_ROOT}/scripts/milepost"  # exec form
+                words = handler["args"]
+                assert words[0] == "hook" and len(words) == 2, words
                 result = runner.invoke(app, ["hook", words[-1], "--help"])
                 assert result.exit_code == 0, words[-1]
                 seen.add(words[-1])
@@ -105,7 +109,7 @@ def test_playbook_when_skill_names_kb_tools_then_every_name_exists_in_mcp_server
         PLUGIN / "skills/kb-usage/SKILL.md",
         ROOT / "templates/CLAUDE.md.snippet",
         ROOT / "templates/AGENTS.md.snippet",
-        PLUGIN / "commands/kb-init.md",
+        PLUGIN / "skills/kb-init/SKILL.md",
     ):
         named = set(TOOL_NAME.findall(path.read_text())) - {"kb_schema"}  # a frontmatter key
         assert named <= known, f"{path.name}: {sorted(named - known)}"
@@ -148,13 +152,32 @@ def test_agents_snippet_when_present_then_matches_claude_snippet_apart_from_the_
 def test_plugin_pre_approval_covers_milepost_tools_and_setup_commands_but_never_review() -> None:
     prefix = "mcp__plugin_milepost_milepost__"
     root = Path(__file__).resolve().parents[2]
-    bash = re.compile(
-        r"Bash\((uv run --quiet --project \* milepost|milepost) (doctor|scan|init)\*\)"
-    )
-    for path in ("plugin/commands/kb-init.md", "plugin/skills/kb-usage/SKILL.md"):
+    bash = re.compile(r"Bash\((\*/scripts/milepost\"?|milepost) (doctor|scan|init)\*\)")
+    for path in ("plugin/skills/kb-init/SKILL.md", "plugin/skills/kb-usage/SKILL.md"):
         front = (root / path).read_text(encoding="utf-8").split("---\n")[1]
         tools = re.split(r",\s*", yaml.safe_load(front)["allowed-tools"])
         for tool in tools:
             assert tool.startswith(prefix) or bash.fullmatch(tool), (path, tool)
         assert f"{prefix}kb_update" in tools and f"{prefix}kb_draft_module" in tools
         assert not any("review" in tool for tool in tools)
+
+
+def test_plugin_launcher_when_run_then_it_is_executable_and_starts_milepost() -> None:
+    launcher = PLUGIN / "scripts/milepost"
+
+    assert os.access(launcher, os.X_OK)
+    done = subprocess.run([str(launcher), "--version"], capture_output=True, text=True, check=False)
+    assert done.returncode == 0 and version("milepost") in done.stdout
+
+
+def test_plugin_skill_when_it_runs_milepost_then_it_uses_the_launcher_not_uv() -> None:
+    text = (PLUGIN / "skills/kb-init/SKILL.md").read_text()
+
+    assert '"${CLAUDE_PLUGIN_ROOT}/scripts/milepost"' in text
+    assert "uv run" not in text
+
+
+def test_cli_when_imported_then_it_does_not_load_the_mcp_library() -> None:
+    code = "import sys, milepost.cli; sys.exit(1 if 'mcp' in sys.modules else 0)"
+
+    assert subprocess.run([sys.executable, "-c", code], check=False).returncode == 0

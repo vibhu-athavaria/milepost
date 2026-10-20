@@ -294,7 +294,7 @@ Start with `milepost doctor`. It checks Python, git, SQLite, the config file, th
 |---|---|
 | `milepost: command not found` right after `uv tool install` | uv put the command in a folder that is not on your PATH. Run `uv tool update-shell` and open a new terminal (or add the folder uv printed to PATH) |
 | `/mcp` does not list `milepost` | Claude Code was not started with `--plugin-dir ~/milepost/plugin`, or `uv sync` was not run in the milepost checkout. Run `claude plugin validate ~/milepost/plugin` |
-| Hooks seem to do nothing | They fail open on purpose. Run one by hand: `echo '{}' \| uv run --project ~/milepost milepost hook session-start`, and read stderr |
+| Hooks seem to do nothing | They fail open on purpose. Run one by hand: `echo '{}' \| ~/milepost/plugin/scripts/milepost hook session-start`, and read stderr |
 | `config file not found` | You are outside a repository with a `milepost.toml`. Run `/milepost:kb-init` or `milepost init`, or pass `--repo` |
 | `STALE_NOTE` after an ordinary edit | Expected: any commit that touches a covered file after the note was last touched counts, comments included. Re-read the code and touch the note (`kb_update`, or edit it; an unchanged body is fine if it still holds). It only warns unless you set `[check] stale = "fail"` |
 | `milepost review` refuses | The note is stale: update it first (any edit counts as touching it), then review |

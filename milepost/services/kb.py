@@ -357,6 +357,10 @@ def kb_update(
     root: Path, note_id: str, body: str, read_hash: str | None, now: str
 ) -> dict[str, Any]:
     config = _config(root)
+    if not note_id.strip():
+        raise KbToolError("INVALID_INPUT", "id is empty (expected module/<module-id>)")
+    if "/" not in note_id:
+        note_id = f"module/{note_id}"  # `core` and `module/core` mean the same note
     prefix, _, name = note_id.partition("/")
     kb = root / config.project.kb_dir
     path = note_path_for_id(kb, note_id)

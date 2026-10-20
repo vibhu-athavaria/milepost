@@ -22,7 +22,7 @@ Audience: the developer implementing milepost, and reviewers checking it against
 | Structure source v2 | Adapter for codebase-memory-mcp | Added once its query API is verified |
 | Drafting | Claude Code writes the notes itself | Milepost never calls a model and holds no keys; `kb_draft_module` hands Claude the sources and `kb_update` saves the result |
 | MCP server | `mcp` Python SDK (FastMCP), stdio transport | Standard transport for Claude Code |
-| Claude Code integration | Plugin wrapper (see section 12) | Ships the MCP server, a usage skill, slash commands, and hooks |
+| Claude Code integration | Plugin wrapper (see section 12) | Ships the MCP server, two skills (`kb-init`, `kb-usage`), and hooks |
 | Plugin entry point | One user-facing command, `/kb-init`; everything else is called by it, by hooks, or by the agent (section 9.4) | Fewest required steps for a developer |
 | Agent playbook | Scenario-to-tool steps in section 12.5 are normative; the skill and the CLAUDE.md snippet are derived from them | Agents and humans forget; the steps live in one place and enforcement does not rely on memory |
 | Design principle | A note stores only what code cannot tell you: purpose, contracts, invariants, gotchas, intent. Anything derivable from code (symbols, line ranges, importers, tests) is computed live from the working tree by the tools in section 8.3 and is never stored | Stored copies of derivable facts go stale and add review load; computed ones cannot go stale |
@@ -393,7 +393,7 @@ Re-running `init` creates only what is missing. Existing `kb/modules/*.md` files
 
 ### 9.4 Plugin entry point: `/kb-init`
 
-`/kb-init` is the only slash command the plugin ships. A developer runs it once; every other step is called from it, by hooks, or by the agent. `plugin/commands/kb-init.md` instructs the agent to:
+`/milepost:kb-init` is the skill a developer runs once (`plugin/skills/kb-init/SKILL.md`; Claude Code now prefers skills to the older `commands/` format, and a skill runs by name the same way). Every other step is called from it, by hooks, or by the agent. It instructs the agent to:
 
 1. Run `milepost doctor --json`. Read the output and fix or report anything marked `fail`.
 2. Run `milepost scan --json` and `milepost init --dry-run --modules <all candidates>`. Show the candidate modules, the files that would be sent, and the estimated tokens, and ask once which modules to keep.
@@ -514,7 +514,7 @@ Yes. Claude Code plugins can bundle an MCP server, skills, and slash commands. T
 
 Python is the right language. The MCP server is the only code the plugin runs; it needs a Python runtime, and the Python ecosystem already provides the SDK, and fastembed. A TypeScript rewrite would add a second toolchain for no gain. Users run the server with `uvx milepost serve`, so they do not install anything globally first.
 
-The plugin layout (`.claude-plugin/plugin.json`, `.mcp.json`, `skills/`, `commands/`, `hooks/hooks.json`, with `${CLAUDE_PLUGIN_ROOT}` in paths) was verified against the Claude Code plugin documentation in October 2026, and `claude plugin validate ./plugin` passes.
+The plugin layout (`.claude-plugin/plugin.json`, `.mcp.json`, `skills/`, `hooks/hooks.json`, with `${CLAUDE_PLUGIN_ROOT}` in paths) was verified against the Claude Code plugin documentation in October 2026, and `claude plugin validate ./plugin` passes.
 
 ### 12.2 Plugin contents
 
@@ -525,7 +525,7 @@ plugin/
   .claude-plugin/plugin.json      # name, version, description
   .mcp.json                       # starts the server. MVP: `uv run --project ${CLAUDE_PLUGIN_ROOT}/.. milepost serve` (loaded in place with --plugin-dir). Release: `uvx milepost==<version> serve`
   skills/kb-usage/SKILL.md        # read and write discipline for agents
-  commands/kb-init.md             # /kb-init, the only slash command; flow in section 9.4
+  skills/kb-init/SKILL.md         # /milepost:kb-init; flow in section 9.4
   hooks/hooks.json                # SessionStart, PostToolUse and Stop hooks, section 12.4
 ```
 

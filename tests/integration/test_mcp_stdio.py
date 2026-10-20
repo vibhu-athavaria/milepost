@@ -126,3 +126,62 @@ def test_mcp_stdio_when_tools_listed_then_every_parameter_has_a_description(tmp_
     for tool in asyncio.run(listed()):
         for name, schema in tool.input_schema.get("properties", {}).items():
             assert schema.get("description"), (tool.name, name)
+
+
+def test_mcp_stdio_when_an_agent_guesses_natural_argument_names_then_every_call_succeeds(
+    tmp_path: Path,
+) -> None:
+    """Agents guess parameter names (`module`, `file_path`, `q`). Each tool must accept them."""
+    repo = make_repo(tmp_path)
+    repo.add_module(
+        "other", ["app/other/**/*.py"], {"app/other/x.py": "def run():\n    return 1\n"}, False
+    )
+    repo.commit("add other")
+    read_hash = repo.hash_of(["app/billing/**/*.py"])
+    calls: list[tuple[str, dict[str, Any]]] = [
+        ("kb_module", {"module": "billing"}),
+        ("kb_module", {"id": "module/billing"}),
+        ("kb_module", {"module_id": "billing"}),
+        ("kb_draft_module", {"module": "other"}),
+        ("kb_draft_module", {"id": "other"}),
+        ("kb_draft_module", {"module_id": "module/other", "part": 1}),
+        ("kb_file", {"file_path": "app/billing/charge.py"}),
+        ("kb_outline", {"file": "app/billing/charge.py"}),
+        ("kb_impact", {"filename": "app/billing/charge.py"}),
+        ("kb_search", {"q": "billing"}),
+        ("kb_sync", {"ref": "HEAD"}),
+        ("kb_sync", {"since": "HEAD"}),
+        ("kb_sync", {"base": "HEAD"}),
+        ("kb_module", {"name": "billing"}),
+        ("kb_search", {"text": "billing"}),
+        ("kb_search", {"search": "billing"}),
+        ("kb_search", {"query": "billing", "limit": 3}),
+        (
+            "kb_update",
+            {"note_id": "billing", "body": "## Purpose\n\nBills.\n", "read_hash": read_hash},
+        ),
+    ]
+
+    _, *results = asyncio.run(session_calls(repo.root, calls))
+
+    for (name, arguments), result in zip(calls, results, strict=True):
+        assert not result.is_error, f"{name} {arguments}: {result.content}"
+
+
+def test_mcp_stdio_when_listing_tools_then_read_only_ones_say_so(tmp_path: Path) -> None:
+    repo = make_repo(tmp_path)
+
+    async def listed() -> dict[str, Any]:
+        params = StdioServerParameters(
+            command=sys.executable, args=["-m", "milepost", "serve", "--repo", str(repo.root)]
+        )
+        async with stdio_client(params) as (read, write), ClientSession(read, write) as session:
+            await session.initialize()
+            return {t.name: t.annotations for t in (await session.list_tools()).tools}
+
+    annotations = asyncio.run(listed())
+
+    assert annotations["kb_update"].read_only_hint is False
+    assert annotations["kb_update"].destructive_hint is False
+    for name in EXPECTED_TOOLS - {"kb_update"}:
+        assert annotations[name].read_only_hint is True, name
