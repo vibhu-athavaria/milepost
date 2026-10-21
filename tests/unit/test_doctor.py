@@ -26,16 +26,15 @@ def test_doctor_when_config_is_invalid_then_reports_the_config_error(tmp_path: P
     assert report.exit_code == 3
 
 
-def test_doctor_when_config_still_has_the_removed_separate_model_setting_then_warns_to_delete_it(
+def test_doctor_when_config_still_has_the_removed_separate_model_setting_then_says_nothing(
     tmp_path: Path,
 ) -> None:
     (tmp_path / "milepost.toml").write_text('[project]\nname = "x"\n\n[draft]\nmode = "model"\n')
 
     report = run_doctor(tmp_path)
 
-    detail = next(c.detail for c in report.checks if c.name == "milepost.toml")
-    assert "mode is ignored" in detail and "delete the line" in detail
-    assert status_of(report, "milepost.toml") == "warn" and report.exit_code == 0
+    assert report.exit_code == 0
+    assert all(check.name != "milepost.toml" for check in report.checks)  # no chore for a no-op
 
 
 def test_doctor_when_config_has_the_old_agent_setting_then_it_is_fine(tmp_path: Path) -> None:

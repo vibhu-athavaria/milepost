@@ -69,8 +69,8 @@ You need [Claude Code](https://claude.com/claude-code).
    claude --plugin-dir ~/milepost/plugin
    ```
    The plugin is the `plugin/` folder inside the checkout you cloned in the first step (shown here as `~/milepost`; use your own path if you cloned elsewhere). You point Claude Code at it with `--plugin-dir`, so there is nothing to download or install separately.
-2. **Run `/milepost:kb-init`.** It checks your setup, lists candidate modules, shows exactly which files the agent will read to draft the notes and the token estimate, and asks **once**. By default Claude Code itself writes the drafts, so there is no key to set up. (To use a separate cheaper model, see [USAGE.md](USAGE.md).)
-3. **Read the drafts** under `kb/modules/`, fix anything wrong, and approve each with `milepost review module/<id>`. Then commit `milepost.toml`, `kb/`, `.gitignore`, `.gitattributes` and `.github/workflows/milepost.yml`.
+2. **Run `/milepost:kb-init`.** It checks your setup, lists candidate modules, shows exactly which files the agent will read to draft the notes and the token estimate, and asks **once**. Claude Code itself writes the drafts, so there is no key or model to set up.
+3. **Commit, then review before merging.** The notes already work as drafts. Commit `milepost.toml`, `kb/`, `.gitignore`, `.gitattributes` and `.github/workflows/milepost.yml`. Before merging, a person runs `milepost review --all`, which shows each note and asks yes or no.
 4. **Work as usual.** The agent is shown the module index at session start, is told which notes cover each file it edits, and is stopped once if it finishes with a note out of date.
 
 Full steps, what to expect, and troubleshooting are in **[USAGE.md](USAGE.md)**.

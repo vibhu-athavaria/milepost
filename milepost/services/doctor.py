@@ -3,12 +3,11 @@
 import shutil
 import sqlite3
 import sys
-import tomllib
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Literal
 
-from milepost.config import LEGACY_DRAFT_KEYS, load_config
+from milepost.config import load_config
 from milepost.embeddings import semantic_search_available
 from milepost.errors import MilepostError
 from milepost.services.coverage import CONFIG_NAME
@@ -43,16 +42,6 @@ def _fts5_available() -> bool:
     return True
 
 
-def _legacy_draft_keys(root: Path) -> list[str]:
-    """Settings for drafting with a separate model, which no longer exist."""
-    try:
-        raw = tomllib.loads((root / CONFIG_NAME).read_text(encoding="utf-8"))
-    except (OSError, tomllib.TOMLDecodeError):
-        return []
-    draft = raw.get("draft")
-    return [key for key in LEGACY_DRAFT_KEYS if isinstance(draft, dict) and key in draft]
-
-
 def _config_error(root: Path) -> str:
     """The reason milepost.toml is unusable; empty when it is absent or valid."""
     if not (root / CONFIG_NAME).is_file():
@@ -81,16 +70,6 @@ def run_doctor(root: Path) -> DoctorReport:
     config_error = _config_error(root)
     if config_error:
         checks.append(Check(CONFIG_NAME, "fail", config_error))
-    legacy = _legacy_draft_keys(root)
-    if legacy:
-        checks.append(
-            Check(
-                CONFIG_NAME,
-                "warn",
-                f"[draft] {', '.join(legacy)} is ignored: Claude writes the notes now; "
-                "delete the line",
-            )
-        )
     if not semantic_search_available():
         checks.append(
             Check(
