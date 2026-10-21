@@ -14,6 +14,7 @@ from typing import Annotated, Any
 import typer
 
 from milepost.config import Config, Index, load_config, load_config_or_default
+from milepost.core.notes import note_path_for_id, read_note
 from milepost.embeddings import Embedder, default_embedder
 from milepost.env import is_disabled
 from milepost.errors import EnvironmentProblem, MilepostError, UsageError
@@ -32,7 +33,7 @@ from milepost.services.merge_driver import run_merge_driver
 from milepost.services.outline import outline_file
 from milepost.services.render import render_index
 from milepost.services.report import build_report, render_markdown, report_as_dict
-from milepost.services.review import review_note
+from milepost.services.review import draft_note_ids, git_identity, module_states, review_note
 from milepost.services.search import search as run_search
 from milepost.services.status import module_statuses
 from milepost.services.sync import sync as run_sync
@@ -81,6 +82,11 @@ def _embedder_for(root: Path) -> Embedder | None:
     config_path = root / CONFIG_NAME
     index = load_config(config_path).index if config_path.is_file() else Index()
     return default_embedder(index.embedding_model, index.embedding_dim)
+
+
+def _is_interactive() -> bool:
+    """Approving is a human act: both ends must be a terminal, not a pipe or a script."""
+    return sys.stdin.isatty() and sys.stdout.isatty()
 
 
 def _now() -> str:
@@ -186,9 +192,9 @@ def init(
             "this): it calls kb_draft_module for each of: " + ", ".join(report.pending)
         )
         typer.echo(
-            "Next: when Claude has written them, read each draft and run `milepost review <id>` "
-            "for each one that is right, then commit milepost.toml, kb/, .gitignore, "
-            ".gitattributes and the CI workflow."
+            "Next: once Claude has written them, commit milepost.toml, kb/, .gitignore, "
+            ".gitattributes and the CI workflow. Notes stay `draft` until a person reads them: "
+            "run `milepost review --all` before merging."
         )
     elif not report.declared:
         typer.echo(
@@ -266,15 +272,56 @@ def index(
 @app.command()
 @handle_errors
 def review(
-    note_id: Annotated[str, typer.Argument(help="Note id, for example module/services.")],
+    note_id: Annotated[
+        str | None, typer.Argument(help="Note id, for example module/services.")
+    ] = None,
     repo: RepoOption = None,
+    all_notes: Annotated[
+        bool, typer.Option("--all", help="Go through every draft note and ask about each.")
+    ] = False,
 ) -> None:
     """Mark a note as reviewed by you, after you have read it."""
+    if all_notes == (note_id is not None):
+        raise UsageError("give a note id, or --all to go through every draft")
     root = _repo_root(repo)
     config = load_config(root / CONFIG_NAME)
-    review_note(root, config, note_id, _now())
-    typer.echo(f"{note_id} marked reviewed")
-    typer.echo("Next: commit the note.")
+    if note_id is not None:
+        review_note(root, config, note_id, _now())
+        typer.echo(f"{note_id} marked reviewed")
+        typer.echo("Next: commit the note.")
+        return
+    if not _is_interactive():
+        raise UsageError("--all asks about each note, so it needs an interactive terminal")
+    drafts = draft_note_ids(root, config)
+    if not drafts:
+        typer.echo("No draft notes: nothing waiting for review.")
+        return
+    git_identity(root)  # fail once, up front, if approvals could not be recorded
+    states = module_states(root, config)
+    reviewed = 0
+    try:
+        for position, draft_id in enumerate(drafts, 1):
+            state = states.get(draft_id.partition("/")[2])
+            typer.echo(f"\n=== {draft_id} ({position} of {len(drafts)}) ===")
+            if state is not None and state.stale:
+                typer.echo(f"Stale ({state.reason}): update it first, then review. Skipped.")
+                continue
+            path = note_path_for_id(root / config.project.kb_dir, draft_id)
+            assert path is not None
+            typer.echo(read_note(path).body.strip())
+            answer = ""
+            while answer not in {"y", "n", "q"}:
+                answer = typer.prompt("Is this right? [y]es / [n]o, skip / [q]uit")[:1].lower()
+            if answer == "q":
+                break
+            if answer == "y":
+                review_note(root, config, draft_id, _now(), states=states)
+                reviewed += 1
+    except (typer.Abort, EOFError):
+        typer.echo("\nStopped.")
+    typer.echo(f"\n{reviewed} of {len(drafts)} marked reviewed.")
+    if reviewed:
+        typer.echo("Next: commit the reviewed notes.")
 
 
 @app.command()

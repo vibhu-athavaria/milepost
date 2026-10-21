@@ -57,15 +57,16 @@ Run **`/milepost:kb-init`**. It will:
 
 Claude Code may ask your permission to run the `milepost` commands and tools; approve them. Nothing is written before you answer the one question in step 3. Notes stay `draft` until you review them.
 
-### 4. Review
+### 4. Commit, then review before merging
 
-Read each note under `kb/modules/`. Fix what is wrong, then approve it:
+The notes work as drafts straight away, so you can start working. Commit `milepost.toml`, `kb/`, `.gitignore`, `.gitattributes` and `.github/workflows/milepost.yml`. Before merging, a person goes through the drafts:
 
 ```bash
-milepost review module/<id>
+milepost review --all          # shows each note, asks yes / no / quit
+milepost review module/<id>    # or approve one note you have already read
 ```
 
-(If you skipped `uv tool install`, use `uv run --project ~/milepost milepost review module/<id>`.) Then commit `milepost.toml`, `kb/`, `.gitignore`, `.gitattributes` and `.github/workflows/milepost.yml`.
+(If you skipped `uv tool install`, use `uv run --project ~/milepost milepost review --all`.) `--all` needs an interactive terminal on purpose: approving is a human act, so there is no `--yes`.
 
 ### 5. Work
 
@@ -176,7 +177,7 @@ Each tool's answer ends with `next_steps`: follow them.
 
 ### If you are the developer
 
-- **Once:** review each module note, then `milepost review module/<id>`.
+- **Once:** go through the drafts with `milepost review --all`.
 - **In pull requests:** read the note diff first. It should state invariants and gotchas, not restate the code. A note that flipped from `reviewed` to `draft` needs a person.
 - **When CI fails on a stale note:** update the note. Use a waiver (below) only when the note is still accurate, and say why.
 - **When a merge conflicts in a note:** resolve the markers in the prose like any other file. (Notes store no hash, so two pull requests touching different files of one module merge cleanly.)
@@ -204,7 +205,7 @@ KB-Waive: dir:app/payments scratch code, a module comes later
 | `milepost init [--dry-run] [--modules ID,...] [--yes] [--force-config] [--no-hooks]` | Scaffold the knowledge base, declare the named modules, install the git hooks, build the index, and list the modules Claude should write notes for. Writes nothing with `--dry-run` |
 | `milepost scan [--json]` | List candidate modules no declared module covers. Read-only |
 | `milepost check [--ci --base REF] [--format text\|json] [--no-churn]` | Validate notes and detect staleness. Exit 1 on failures. `--no-churn` skips the slower unreviewed-churn warning |
-| `milepost review NOTE_ID` | Mark a note reviewed by you (records your git identity and the time). Refuses a stale note |
+| `milepost review NOTE_ID` or `milepost review --all` | Mark a note reviewed by you (records your git identity and the time). `--all` shows each draft note and asks yes, no or quit; it needs an interactive terminal. Refuses a stale note |
 | `milepost overview` | Print the module index (one line per module), built from the notes |
 | `milepost index [--rebuild]` | Build or update the local search index |
 | `milepost search QUERY [--k N] [--json]` | Search the notes: keyword, plus meaning-based when the `search` extra is installed |
